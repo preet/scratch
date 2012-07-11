@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+
+<qnx>
+   <id>com.example.template_gles2</id>
+   <name>GLES2 Template</name>
+   <versionNumber>1.0.0</versionNumber>
+   <description>GLES2 Template</description>
+
+   <initialWindow>
+      <systemChrome>none</systemChrome>
+      <transparent>false</transparent>
+      <autoOrients>true</autoOrients>
+      <aspectRatio>landscape</aspectRatio>
+   </initialWindow>
+
+   <arg>-platform</arg>
+   <arg>blackberry</arg>
+   <author>canurabus</author>
+
+   <!-- request permission to run native code,
+        required for all native applications -->
+   <action system="true">run_native</action>
+
+   <category>core.media</category>
+   <asset entry="true" path="template_gles2" type="Qnx/Elf">template_gles2</asset>
+</qnx>

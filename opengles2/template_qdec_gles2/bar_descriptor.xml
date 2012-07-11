@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+
+<qnx>
+   <id>org.demo.template_qdec_gles2</id>
+   <name>OpenGL/ES2 Demo</name>
+   <versionNumber>1.0.0</versionNumber>
+   <description>Demo displaying an OpenGL viewport in QML</description>
+
+   <initialWindow>
+      <systemChrome>none</systemChrome>
+      <transparent>false</transparent>
+      <autoOrients>true</autoOrients>
+      <aspectRatio>landscape</aspectRatio>
+   </initialWindow>
+
+   <env var="QT_PLUGIN_PATH" value="app/native/plugins"/>
+   <env var="LD_LIBRARY_PATH" value="app/native/lib"/>
+<!--   <env var="QBB_USE_OPENGL" value="1" />-->
+
+   <arg>-platform</arg>
+   <arg>blackberry</arg>
+   <author>canurabus</author>
+   <action system="true">run_native</action>
+   <category>core.media</category>
+
+   <asset entry="true" path="template_qdec_gles2" type="Qnx/Elf">template_qdec_gles2</asset>
+   <asset path="deploy/lib">lib</asset>
+   <asset path="deploy/plugins">plugins</asset>
+   <asset path="ui">ui</asset>
+   <asset path="shaders">shaders</asset>
+   <asset path="models">models</asset>
+   <asset path="textures">textures</asset>
+</qnx>
