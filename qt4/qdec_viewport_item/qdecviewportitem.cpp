@@ -1,21 +1,20 @@
 #include "qdecviewportitem.h"
 
 QDecViewportItem::QDecViewportItem(QDeclarativeItem *parent) :
-    QDeclarativeItem(parent), m_initViewport(false)
+    QDeclarativeItem(parent),
+    m_initViewport(false),
+    m_initFailed(false),
+    m_refreshRate(0)
 {
-    m_useFrameBuffer = true;
     setFlag(QGraphicsItem::ItemHasNoContents, false);
-}
 
-QString QDecViewportItem::getMode()
-{   return m_useFrameBuffer ? QString("framebuffer") : QString("direct");   }
+    #ifdef DEV_PC
+    m_resPrefix = "";
+    #endif
 
-void QDecViewportItem::setMode(const QString &myMode)
-{
-    if(myMode == "direct")
-    {   m_useFrameBuffer = false;   }
-    else if(myMode == "framebuffer")
-    {   m_useFrameBuffer = true;   }
+    #ifdef DEV_PLAYBOOK
+    m_resPrefix = "app/native/";
+    #endif
 }
 
 void QDecViewportItem::paint(QPainter *qPainter,
@@ -26,135 +25,109 @@ void QDecViewportItem::paint(QPainter *qPainter,
     Q_UNUSED(qWidget);
 
     if(!m_initViewport)
-    {   this->initViewport();   }
-
-    if (m_useFrameBuffer)
     {
-        QRectF localBounds = boundingRect();
-        QRectF sceneBounds = mapRectToScene(localBounds);
-
-        // draw fbo contents to qdeclarative item
-
-        // notes:
-        // for some reason, this doesn't work unless
-        // we draw the texture to the fbo first, and
-        // *then* paint the fbo itself; so we're behind by
-        // a frame (but this isn't a big deal).
-
-        // if we do it the other way around, the context's
-        // paint engine gets disabled/null for some reason,
-        // even if qPainter->paintEngine()->isActive() returns
-        // true, and QGL::Context will give us an error
-        if(qPainter->paintEngine()->type() == QPaintEngine::OpenGL2 &&
-                qPainter->paintEngine()->isActive())
+        if(!m_initFailed)
         {
-            m_frameBufferObj->drawTexture(localBounds,
-                m_frameBufferObj->texture());
-        }
+            // create the fbo
+            m_frameBufferObj =
+                    new QGLFramebufferObject(width(),height(),
+                        QGLFramebufferObject::CombinedDepthStencil, // play with this value?
+                                             GL_TEXTURE_2D,
+                                             GL_RGBA);
 
-        // draw viewport contents to fbo
-        QPainter fboPainter(m_frameBufferObj);
-        fboPainter.beginNativePainting();
-        m_frameBufferObj->bind();
-        this->drawViewport();
-        m_frameBufferObj->release();
-        fboPainter.endNativePainting();
-        fboPainter.end();
+            // run the implemented init method
+            this->initViewport();
+
+            if(m_initFailed)
+            {   return;   }
+
+            // connect the timer
+            connect(&m_updateTimer,SIGNAL(timeout()),
+                    this, SLOT(updateViewport()));
+
+            // start the timer if refreshRate is valid
+            if(m_refreshRate > 0)   {
+                m_updateTimer.setInterval(m_refreshRate);
+                m_updateTimer.start();
+            }
+            emit refreshRateChanged();
+
+            m_initViewport = true;
+        }
+        else
+        {   return;   }
     }
-    else
+
+    QRectF localBounds = boundingRect();
+    QRectF sceneBounds = mapRectToScene(localBounds);
+
+    // notes:
+    // for some reason, this doesn't work unless
+    // we draw the texture to the fbo first, and
+    // *then* paint the fbo itself; so we're behind by
+    // a frame (but this isn't a big deal)
+
+    // if we do it the other way around, the context's
+    // paint engine gets disabled/null even if
+    // qPainter->paintEngine()->isActive() returns
+    // true, and QGL::Context will give us an error
+
+    // also, keep in mind that using an fbo like this
+    // every frame is pretty expensive, especially for
+    // a mobile target, so we may get slow downs
+    if(qPainter->paintEngine()->type() == QPaintEngine::OpenGL2 &&
+            qPainter->paintEngine()->isActive())
     {
-        // draw viewport contents to item
-        qPainter->beginNativePainting();
-        this->drawViewport();
-        qPainter->endNativePainting();
+        m_frameBufferObj->drawTexture(localBounds,
+            m_frameBufferObj->texture());
     }
+
+    // beginNativePainting
+
+    // flushes the painting pipeline and prepares for the
+    // user issuing commands directly to the underlying
+    // graphics context:
+
+    // * blending is disabled
+
+    // * depth, stencil and scissor tests are disabled
+
+    // * active texture unit is reset to 0
+
+    // * depth mask, depth function and the clear depth
+    //   are reset to their default values
+
+    // * stencil mask, stencil operation and stencil
+    //   function are reset to their default values
+
+    // * current color is reset to solid white
+
+    // draw scene contents to the fbo
+    qPainter->beginNativePainting();
+    m_frameBufferObj->bind();
+
+    this->drawViewport();
+
+    m_frameBufferObj->release();
+    qPainter->endNativePainting();
+}
+
+qint32 QDecViewportItem::refreshRate()
+{   return m_refreshRate;   }
+
+void QDecViewportItem::setRefreshRate(qint32 refreshRate)
+{
+    m_updateTimer.stop();
+
+    if(refreshRate > 0)   {
+        m_updateTimer.setInterval(refreshRate);
+        m_updateTimer.start();
+    }
+    m_refreshRate = refreshRate;
+    emit refreshRateChanged();
 }
 
 void QDecViewportItem::updateViewport()
 {   this->update();   }
 
-void QDecViewportItem::initViewport()
-{
-    // create the frambuffer object
-    m_frameBufferObj =
-            new QGLFramebufferObject(width(),height(),
-                QGLFramebufferObject::CombinedDepthStencil,
-                                     GL_TEXTURE_2D,
-                                     GL_RGBA8);
-
-
-
-    program.addShaderFromSourceCode(QGLShader::Vertex,
-        "attribute highp vec4 vertex;\n"
-        "uniform highp mat4 matrix;\n"
-        "void main(void)\n"
-        "{\n"
-        "   gl_Position = vertex;\n"
-        "}");
-    program.addShaderFromSourceCode(QGLShader::Fragment,
-        "uniform mediump vec4 color;\n"
-        "void main(void)\n"
-        "{\n"
-        "   gl_FragColor = vec4(1.0,0.5,0.0,1.0);\n"
-        "}");
-    program.link();
-    program.bind();
-    m_vertexLocation = program.attributeLocation("vertex");
-    m_matrixLocation = program.uniformLocation("matrix");
-    m_colorLocation = program.uniformLocation("color");
-    qDebug() << program.log();
-    program.release();
-
-//    osg::ref_ptr<osg::ShapeDrawable> shapeCube = new osg::ShapeDrawable;
-//    shapeCube->setShape(new osg::Box(osg::Vec3(0,0,0),8));
-
-//    osg::ref_ptr<osg::Geode> geodeCube = new osg::Geode;
-//    geodeCube->addDrawable(shapeCube.get());
-
-//    osg::ref_ptr<osg::MatrixTransform> nodeXform = new osg::MatrixTransform;
-//    nodeXform->addChild(geodeCube.get());
-//    nodeXform->addUpdateCallback(new osg::AnimationPathCallback(osg::Vec3(0,0,0),
-//                                                                osg::Z_AXIS,
-//                                                                osg::inDegrees(30.0)));
-//    osg::ref_ptr<osg::Group> groupRoot = new osg::Group;
-//    groupRoot->addChild(nodeXform.get());
-
-//    osg::ref_ptr<osgViewer::GraphicsWindowEmbedded> osgWindow =
-//            new osgViewer::GraphicsWindowEmbedded(0,0,width(),height());
-//    m_osg_viewer.getCamera()->setViewport(0,0,width(),height());
-//    m_osg_viewer.getCamera()->setGraphicsContext(osgWindow.get());
-//    m_osg_viewer.setThreadingModel(osgViewer::Viewer::SingleThreaded);
-//    m_osg_viewer.setSceneData(groupRoot.get());
-//    m_osg_viewer.getCamera()->setViewMatrixAsLookAt(osg::Vec3d(-20.0, 15.0, 10.0),
-//                                                    osg::Vec3d(0.0, 0.0, 0.0),
-//                                                    osg::Vec3d(0.0, 0.0, 1.0));
-
-    // connect the timer
-    connect(&m_updateTimer,SIGNAL(timeout()),
-            this, SLOT(updateViewport()));
-
-    m_updateTimer.setInterval(1000);
-    m_updateTimer.start();
-    m_initViewport = true;
-}
-
-void QDecViewportItem::drawViewport()
-{
-//    m_osg_viewer.frame();
-
-    program.bind();
-    GLfloat const triangleVertices[] = {
-        0.0f,  0.0f,  0.0f,
-        0.0f, 1.0f, 0.0f,
-        1.0f,  0.0f, 0.0f
-    };
-
-    program.enableAttributeArray(m_vertexLocation);
-    program.setAttributeArray(m_vertexLocation, triangleVertices, 3);
-
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
-    program.disableAttributeArray(m_vertexLocation);
-    program.release();
-}
 

@@ -1,36 +1,59 @@
 ##########################
-# START CONFIG FOR QT
+# START PROJECT CONFIG
 
-CONFIG += qt3d
+# qt
 QT += declarative opengl
 
-# END CONFIG FOR QT
-##########################
+#openscenegraph
+OSGDIR = /home/preet/Documents/openscenegraph
+OSGLIBDIR = /home/preet/Documents/openscenegraph/lib64
+INCLUDEPATH += $${OSGDIR}/include
 
-##########################
-# START PROJECT CONFIG
-CONFIG += link_pkgconfig
-PKGCONFIG += openthreads openscenegraph
-TARGET = qdec_viewport_item
+LIBS += -L$${OSGLIBDIR}/osgdb_freetype.so
+LIBS += -L$${OSGLIBDIR}/osgdb_jpeg.so
+LIBS += -L$${OSGLIBDIR}/osgdb_png.so
 
-INCLUDEPATH += /home/preet/Downloads/Packages/glm
+LIBS += -L$${OSGLIBDIR} -losgViewer
+LIBS += -L$${OSGLIBDIR} -losgText
+LIBS += -L$${OSGLIBDIR} -losgGA
+LIBS += -L$${OSGLIBDIR} -losgUtil
+LIBS += -L$${OSGLIBDIR} -losgDB
+LIBS += -L$${OSGLIBDIR} -losg
+LIBS += -L$${OSGLIBDIR} -lOpenThreads
 
 SOURCES += \
     main.cpp \
-    qdecviewportitem.cpp
+    qdectoucharea.cpp \
+    qdecviewportitem.cpp \
+    qdecviewportosg.cpp
+
 
 HEADERS += \
-    qdecviewportitem.h
+    qdectoucharea.h \
+    qdecviewportitem.h \
+    qdecviewportosg.h
 
 OTHER_FILES += \
-    ui/main.qml
+    ui/main.qml \
+    bar_descriptor.xml
+
+# bar descriptor, icon, splashscreen
+pkg_files.path = $${OUT_PWD}
+pkg_files.files += \
+    bar_descriptor.xml \
+    icon.png \
+    splashscreen.png
 
 # define other resources and install path
 res_local.path = $${OUT_PWD}
-res_local.files += \
-   ui
+res_local.files += *.ttf \
+    ui \
+    shaders \
+    models \
+    textures
 
-INSTALLS += res_local
+INSTALLS += pkg_files res_local
 
 # END PROJECT CONFIG
 ##########################
+
