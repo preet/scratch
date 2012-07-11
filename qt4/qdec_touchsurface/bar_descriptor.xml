@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+
+<qnx>
+   <id>com.example.qdec_touchsurface</id>
+   <name>Qt Touch Surface</name>
+   <versionNumber>1.0.0</versionNumber>
+   <description>QDeclarative Touch Surface</description>
+
+   <initialWindow>
+      <systemChrome>none</systemChrome>
+      <transparent>false</transparent>
+      <autoOrients>true</autoOrients>
+      <aspectRatio>landscape</aspectRatio>
+   </initialWindow>
+
+   <env var="QT_PLUGIN_PATH" value="app/native/plugins"/>
+   <env var="LD_LIBRARY_PATH" value="app/native/lib"/>
+
+   <arg>-platform</arg>
+   <arg>blackberry</arg>
+   <author>canurabus</author>
+
+   <!-- request permission to run native code,
+        required for all native applications -->
+   <action system="true">run_native</action>
+
+   <category>core.media</category>
+   <asset entry="true" path="qdec_touchsurface" type="Qnx/Elf">qdec_touchsurface</asset>
+   <asset path="deploy/lib">lib</asset>
+   <asset path="deploy/plugins">plugins</asset>
+<!--<asset path="wallpaper.jpg">wallpaper.jpg</asset>-->
+   <asset path="deploy/ui">ui</asset>
+</qnx>
