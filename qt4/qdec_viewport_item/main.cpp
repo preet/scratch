@@ -3,19 +3,25 @@
 #include <QtDeclarative/QtDeclarative>
 #include <QtDeclarative/QDeclarativeView>
 
-#include "qdecviewportitem.h"
+#include "qdectoucharea.h"
+#include "qdecviewportosg.h"
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc,argv);
-    qmlRegisterType<QDecViewportItem>("ViewportItems",1,0,"ViewportItem");
+    qmlRegisterType<QDecTouchPoint>("TouchItems",1,0,"TouchPoint");
+    qmlRegisterType<QDecTouchArea>("TouchItems",1,0,"TouchArea");
+    qmlRegisterType<QDecViewportOSG>("ViewportItems",1,0,"ViewportItem");
 
     QDeclarativeView mainView;
     mainView.setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
 
     QGLWidget *glWidget = new QGLWidget;
+    qDebug() << "Current Context:" << glWidget->context()->format();
+
+    QString resPrefix;
     mainView.setViewport(glWidget);
-    mainView.setSource(QString("ui/main.qml"));
+    mainView.setSource(resPrefix + "ui/main.qml");
     mainView.show();
 
     return app.exec();
