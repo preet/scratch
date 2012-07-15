@@ -57,22 +57,25 @@ device|simulator {
     !simulator {
         DEFINES += DEV_PC
 
+CONFIG += link_pkgconfig
+PKGCONFIG += openthreads openscenegraph
+
         #openscenegraph
-        OSGDIR = /home/preet/Documents/openscenegraph
-        OSGLIBDIR = /home/preet/Documents/openscenegraph/lib64
-        INCLUDEPATH += $${OSGDIR}/include
+#        OSGDIR = /home/preet/Documents/openscenegraph
+#        OSGLIBDIR = /home/preet/Documents/openscenegraph/lib64
+#        INCLUDEPATH += $${OSGDIR}/include
 
-        LIBS += -L$${OSGLIBDIR}/osgdb_freetype.so
-        LIBS += -L$${OSGLIBDIR}/osgdb_jpeg.so
-        LIBS += -L$${OSGLIBDIR}/osgdb_png.so
+#        LIBS += -L$${OSGLIBDIR}/osgdb_freetype.so
+#        LIBS += -L$${OSGLIBDIR}/osgdb_jpeg.so
+#        LIBS += -L$${OSGLIBDIR}/osgdb_png.so
 
-        LIBS += -L$${OSGLIBDIR} -losgViewer
-        LIBS += -L$${OSGLIBDIR} -losgText
-        LIBS += -L$${OSGLIBDIR} -losgGA
-        LIBS += -L$${OSGLIBDIR} -losgUtil
-        LIBS += -L$${OSGLIBDIR} -losgDB
-        LIBS += -L$${OSGLIBDIR} -losg
-        LIBS += -L$${OSGLIBDIR} -lOpenThreads
+#        LIBS += -L$${OSGLIBDIR} -losgViewer
+#        LIBS += -L$${OSGLIBDIR} -losgText
+#        LIBS += -L$${OSGLIBDIR} -losgGA
+#        LIBS += -L$${OSGLIBDIR} -losgUtil
+#        LIBS += -L$${OSGLIBDIR} -losgDB
+#        LIBS += -L$${OSGLIBDIR} -losg
+#        LIBS += -L$${OSGLIBDIR} -lOpenThreads
     }
 }
 
