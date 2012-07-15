@@ -269,11 +269,13 @@ namespace osmscout
     }
 }
 
+bool g_enforceSimpleRelArea = true;
+
 // example of how to use with libosmscout
 int main()
 {
     // get area data from libosmscout
-    std::string dataPath("/home/preet/Documents/maps/toronto_render");
+    std::string dataPath("/home/preet/Documents/maps/toronto_osmscout");
     osmscout::DatabaseParameter databaseParam;
     osmscout::Database database(databaseParam);
     if(database.Open(dataPath))
@@ -376,14 +378,85 @@ int main()
                 }
                 listDirectChildren.push_back(directChildren);
             }
-            std::vector<unsigned int> lastParent;
-            listDirectChildren.push_back(lastParent);
+            std::vector<unsigned int> lastChild;
+            listDirectChildren.push_back(lastChild);
+
+
+            // CREATE AREA RENDER DATA
+
+            // create new area for each ring and its direct children
+            for(int i=0; i < listRingHierarchy.size(); i++)
+            {
+                // dont bother creating any geometry for parents with
+                // typeIgnore roles, only exception is when ring == 0
+                if(listRingHierarchy[i] > 0)
+                {
+                    if(areaRel->roles[i].GetType() == osmscout::typeIgnore)
+                    {   continue;   }
+                }
+
+                std::vector<osmscout::Vec2>                 listOuterPts;
+                std::vector<std::vector<osmscout::Vec2> >   listListInnerPts;
+
+                // save outer ring nodes
+                for(int v=0; v < areaRel->roles[i].nodes.size(); v++)
+                {
+                    osmscout::Vec2 myPt(areaRel->roles[i].nodes[v].GetLon(),
+                                        areaRel->roles[i].nodes[v].GetLat());
+
+                    listOuterPts.push_back(myPt);
+                }
+
+                // save inner ring nodes
+                for(int j=0; j < listDirectChildren[i].size(); j++)
+                {
+                    std::vector<osmscout::Vec2> listInnerPts;
+                    unsigned int chIdx = listDirectChildren[i][j];
+                    for(int v=0; v < areaRel->roles[chIdx].nodes.size(); v++)
+                    {
+                        osmscout::Vec2 myPt(areaRel->roles[chIdx].nodes[v].GetLon(),
+                                            areaRel->roles[chIdx].nodes[v].GetLat());
+
+                        listInnerPts.push_back(myPt);
+                    }
+                    listListInnerPts.push_back(listInnerPts);
+                }
+
+                // we can optionally do a safety check here to ensure that
+                // the polygon defined by listOuterPts and listListInnerPts
+                // is simple if the triangulation method used requires it
+                if(g_enforceSimpleRelArea)
+                {
+                    if(!osmscout::calcAreaIsValid(listOuterPts,listListInnerPts))
+                    {
+                        std::cerr << "ERROR: Relation Area " <<  areaRel->GetId()
+                                  << " is complex!" << std::endl;
+
+                        // there are different ways we can handle a complex
+                        // relation area:
+
+                        // * call 'continue': ignore this specific parent-child
+                        //   relationship but try to draw any others -- note that this
+                        //   is expensive as calcAreaIsValid is called multiple times
+
+                        // * return false: discard this entire relation area
+
+                        // (todo)
+                        // * partial draw: just save areas for the parent geometries
+                        //   where listRingHierarchy == 0 and ignore holes/clippings
+
+                        break;
+                    }
+                }
+                else
+                {
+                    // we need to set point orders... (CW/CCW)
+                }
+            }
 
 
 
-
-
-            // debug multipolyong ring hierarchy
+//            // debug multipolyon ring hierarchy
 //            std::cerr << "Area ID: " << areaRel->GetId() << std::endl;
 //            std::cerr << "Ring Hierarchy: ";
 //            for(int i=0; i < listRingHierarchy.size(); i++)
@@ -396,72 +469,6 @@ int main()
 //                std::cerr << std::endl;
 //            }
         }
-
-        // RELATION AREAS
-//        std::vector<osmscout::RelationRef>::iterator relIt;
-//        for(relIt = listRelAreaRefs.begin();
-//            relIt != listRelAreaRefs.end(); ++relIt)
-//        {
-//            std::vector<osmscout::Vec2>                 listOuterPts;
-//            std::vector<std::vector<osmscout::Vec2> >   listListInnerPts;
-
-//            osmscout::RelationRef &areaRel = (*relIt);
-//            for(int i=0; i < areaRel->roles.size(); i++)
-//            {
-//                // look for outerRing
-//                if(areaRel->roles[i].ring%2 == 0 &&
-//                   areaRel->roles[i].GetType() != osmscout::typeIgnore)
-//                {
-//                    // save outerRing nodes
-//                    for(int r=0; r < areaRel->roles[i].nodes.size(); r++)
-//                    {
-//                        osmscout::Vec2 myPt(areaRel->roles[i].nodes[r].GetLon(),
-//                                            areaRel->roles[i].nodes[r].GetLat());
-
-//                        listOuterPts.push_back(myPt);
-//                    }
-
-//                    i++;
-
-//                    // see if there are any innerRings
-//                    // that belong to the outerRing
-//                    while(i < areaRel->roles.size())
-//                    {
-//                        // keep iterating until we finish saving
-//                        // all innerRing data
-//                        if(areaRel->roles[i].ring%2 == 1)
-//                        {
-//                            // save innerRing nodes
-//                            std::vector<osmscout::Vec2> listInnerPts;
-//                            for(int r=0; r < areaRel->roles[i].nodes.size(); r++)
-//                            {
-//                                osmscout::Vec2 myPt(areaRel->roles[i].nodes[r].GetLon(),
-//                                                    areaRel->roles[i].nodes[r].GetLat());
-
-//                                listInnerPts.push_back(myPt);
-//                            }
-//                            listListInnerPts.push_back(listInnerPts);
-
-//                            i++;
-//                        }
-//                        else    // means ringId is outerRing
-//                        {
-//                            i--;
-//                            break;
-//                        }
-//                    }
-
-//                    if(osmscout::calcAreaIsValid(listOuterPts,listListInnerPts))
-//                    {
-//                        // area isn't complex! yay!
-//                    }
-//                    else   {
-//                        std::cerr << "ERROR: Relation Area " <<  areaRel->GetId()
-//                                  << " is complex!" << std::endl;
-//                    }
-//                }
-//            }
-//        }
     }
 
 
