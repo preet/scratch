@@ -3,8 +3,8 @@ SOURCES += main.cpp
 TEMPLATE = app
 
 #openscenegraph
-OSGDIR = /home/preet/Documents/openscenegraph
-OSGLIBDIR = /home/preet/Documents/openscenegraph/lib64
+OSGDIR = /home/preet/Documents/osg-modern
+OSGLIBDIR = /home/preet/Documents/osg-modern/lib64
     INCLUDEPATH += $${OSGDIR}/include
     LIBS += -L$${OSGLIBDIR} -losgViewer
     LIBS += -L$${OSGLIBDIR} -losgText
@@ -47,3 +47,6 @@ res_local.files += \
    models
 
 INSTALLS += res_local
+
+#
+#QMAKE_CXXFLAGS = -std=c++0x

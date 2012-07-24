@@ -128,14 +128,11 @@ int main(int argc, char *argv[])
     QString fShader = readFileAsQString("shaders/model_frag.glsl");
     shProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT,fShader.toStdString()));
 
+    //
+
     // enable shader program
-    osg::StateSet *ss = geodeMesh->getOrCreateStateSet();
+    osg::StateSet *ss = groupRoot->getOrCreateStateSet();
     ss->setAttributeAndModes(shProgram,osg::StateAttribute::ON);
-    ss->setMode(GL_BLEND, osg::StateAttribute::ON);
-    ss->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-    osg::ref_ptr<osg::CullFace> cullFace = new osg::CullFace();
-    cullFace->setMode(osg::CullFace::FRONT_AND_BACK);
-    ss->setAttributeAndModes(cullFace,osg::StateAttribute::OFF);
 
     // model bounds
     osg::BoundingBox modelBounds(minX,minY,minZ,maxX,maxY,maxZ);
