@@ -15,7 +15,6 @@
 
    <env var="QT_PLUGIN_PATH" value="app/native/plugins"/>
    <env var="LD_LIBRARY_PATH" value="app/native/lib"/>
-   <env var="QML_IMPORT_PATH" value="app/native/imports"/>
 
    <arg>-platform</arg>
    <arg>blackberry</arg>
@@ -30,5 +29,5 @@
    <asset path="deploy/lib">lib</asset>
    <asset path="deploy/plugins">plugins</asset>
    <asset path="deploy/ui">ui</asset>
-   <asset path="deploy/imports">imports</asset>
+   <asset path="deploy/maps">maps</asset>
 </qnx>

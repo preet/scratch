@@ -13,4 +13,4 @@ SOURCES += main.cpp
             LIBS += -L$${OSGLIBDIR} -losg
             LIBS += -L$${OSGLIBDIR} -lOpenThreads
 
-#QMAKE_CXXFLAGS += -std=c++0x
+

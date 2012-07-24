@@ -14,7 +14,7 @@ SOURCES += main.cpp
             LIBS += -L$${OSGLIBDIR} -lOpenThreads
 
 moreFiles.path = $$OUT_PWD
-moreFiles.files += *.ttf \
+moreFiles.files += \
     shaders
 
 INSTALLS += moreFiles
