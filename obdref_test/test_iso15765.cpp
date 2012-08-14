@@ -24,10 +24,10 @@
 #include <sys/time.h>
 #include <obdref/parser.h>
 
-void GetTypeAResponseFromTarget(obdref::MessageFrame &myMsg);
-void GetTypeBResponseFromTarget(obdref::MessageFrame &myMsg);
-void GetTypeCResponseFromTarget(obdref::MessageFrame &myMsg);
-void GetTypeDResponseFromTarget(obdref::MessageFrame &myMsg);
+void GetSFResponseFromTarget(obdref::MessageFrame &myMsg);
+void GetSFResponseFromRandom(obdref::MessageFrame &myMsg);
+void GetMFResponseFromTarget(obdref::MessageFrame &myMsg);
+void GetMFResponseFromRandom(obdref::MessageFrame &myMsg);
 
 void PrintErrors(obdref::Parser &myParser);
 void PrintData(QList<obdref::Data> &listData);
@@ -56,33 +56,33 @@ int main(int argc, char* argv[])
     // get a list of default parameters
     QStringList myParamList
         = myParser.GetParameterNames("SAEJ1979",
-                                     "ISO 14230-4",
+                                     "ISO 15765-4 Standard",
                                      "Default");
 
-    for(int i=0; i < myParamList.size(); i++)
+    for(size_t i=0; i < myParamList.size(); i++)
     {
         QList<obdref::Data> listData;
 
         // create message frame
         obdref::MessageFrame myMsg;
         myMsg.spec = "SAEJ1979";
-        myMsg.protocol = "ISO 14230-4";
+        myMsg.protocol = "ISO 15765-4 Standard";
         myMsg.address = "Default";
         myMsg.name = myParamList.at(i);
 
         // build a message frame
         opOk = myParser.BuildMessageFrame(myMsg);
         if(!opOk)   {
-            qDebug() << "BuildMessageFrame for"
-                     << myParamList.at(i)
-                     << "Failed! Exiting...";
             PrintErrors(myParser);
             return -1;
         }
 
         // simulate vehicle response
-        GetTypeDResponseFromTarget(myMsg);
-        GetTypeBResponseFromTarget(myMsg);
+        GetMFResponseFromRandom(myMsg);
+//        GetSFResponseFromTarget(myMsg);
+        GetSFResponseFromRandom(myMsg);
+        GetMFResponseFromTarget(myMsg);
+        PrintReqResp(myMsg);
 
         // parse message frame
         opOk = myParser.ParseMessageFrame(myMsg,listData);
@@ -92,113 +92,165 @@ int main(int argc, char* argv[])
         }
 
         // print out data
-        PrintData(listData);
+//        PrintData(listData);
     }
 
     return 0;
 }
 
-void GetTypeAResponseFromTarget(obdref::MessageFrame &myMsg)
+void GetSFResponseFromTarget(obdref::MessageFrame &myMsg)
 {
-    // header: A [format]
-    // data: 1-63 bytes
     for(size_t i=0; i < myMsg.listMessageData.size(); i++)
     {
-        obdref::ByteList dataBytes;
-        dataBytes << myMsg.listMessageData[i].expDataPrefix;
+        // build header
+        obdref::ByteList headerBytes;
 
-        // we set a min of 4 bytes, max of 63 bytes
-        obdref::ubyte numAddBytes = (rand() % 59 + 4) - dataBytes.size();
-        for(size_t j=0; j < numAddBytes; j++)   {
-            dataBytes << obdref::ubyte(rand() % 256);
+        if(myMsg.listMessageData[i].expHeaderBytes.size() > 0)
+        {   headerBytes << myMsg.listMessageData[i].expHeaderBytes;   }
+        else
+        {
+            if(myMsg.protocol == "ISO 15765-4 Standard")
+            {   headerBytes << 0x07 << 0xE8;   }
+            else if(myMsg.protocol == "ISO 15765-4 Extended")
+            {   headerBytes << 0x18 << 0xDA << 0xF1 << 0x10;   }
         }
 
-        obdref::ByteList headerBytes;
-        headerBytes << 0x80 + dataBytes.size();   // format byte 0b10000000
+        // build data bytes
+        obdref::ByteList dataBytes;
+        dataBytes << 0x07;          // single frame pci byte
+        dataBytes << myMsg.listMessageData[i].expDataPrefix;
 
-        obdref::ByteList allBytes;
-        allBytes << headerBytes << dataBytes;
-        myMsg.listMessageData[i].listRawDataFrames << allBytes;
+        size_t addDataBytes = 8 - dataBytes.size();
+        for(size_t j=0; j < addDataBytes; j++)   {
+            obdref::ubyte myDataByte = obdref::ubyte(rand() % 256);
+            dataBytes << myDataByte;
+        }
+
+        // save to message data
+        obdref::ByteList rawData;
+        rawData << headerBytes << dataBytes;
+        myMsg.listMessageData[i].listRawDataFrames << rawData;
     }
 }
 
-void GetTypeBResponseFromTarget(obdref::MessageFrame &myMsg)
+void GetSFResponseFromRandom(obdref::MessageFrame &myMsg)
 {
-    // B [format] [target] [source]
-    // data 1-63 bytes
     for(size_t i=0; i < myMsg.listMessageData.size(); i++)
     {
-        obdref::ByteList dataBytes;
-        dataBytes << myMsg.listMessageData[i].expDataPrefix;
+        for(size_t j=0; j < 3; j++)
+        {   // responses from three separate addresses
 
-        // we set a min of 4 bytes, max of 63 bytes
-        obdref::ubyte numAddBytes = (rand() % 59 + 4) - dataBytes.size();
-        for(size_t j=0; j < numAddBytes; j++)   {
-            dataBytes << obdref::ubyte(rand() % 256);
+            // build header
+            obdref::ByteList headerBytes;
+
+            if(myMsg.protocol == "ISO 15765-4 Standard")
+            {   headerBytes << 0x07 << 0xE8+j;   }
+
+            else if(myMsg.protocol == "ISO 15765-4 Extended")
+            {   headerBytes << 0x18 << 0xDA << 0xF1 << 0x10+j;    }
+
+            // build data bytes
+            obdref::ByteList dataBytes;
+            dataBytes << 0x07;          // single frame pci byte
+            dataBytes << myMsg.listMessageData[i].expDataPrefix;
+
+            size_t addDataBytes = 8 - dataBytes.size();
+            for(size_t k=0; k < addDataBytes; k++)   {
+                obdref::ubyte myDataByte = obdref::ubyte(rand() % 256);
+                dataBytes << myDataByte;
+            }
+
+            // save to message data
+            obdref::ByteList rawData;
+            rawData << headerBytes << dataBytes;
+            myMsg.listMessageData[i].listRawDataFrames << rawData;
         }
-
-        obdref::ByteList headerBytes;
-        headerBytes << 0x80 + dataBytes.size();                    // format byte 0b10000000
-        headerBytes << myMsg.listMessageData[i].expHeaderBytes[1]; // target byte
-        headerBytes << myMsg.listMessageData[i].expHeaderBytes[2]; // source byte
-
-        obdref::ByteList allBytes;
-        allBytes << headerBytes << dataBytes;
-        myMsg.listMessageData[i].listRawDataFrames << allBytes;
     }
 }
 
-void GetTypeCResponseFromTarget(obdref::MessageFrame &myMsg)
+void GetMFResponseFromTarget(obdref::MessageFrame &myMsg)
 {
-    // C [format] [length]
-    // data 1-255 bytes
     for(size_t i=0; i < myMsg.listMessageData.size(); i++)
     {
-        obdref::ByteList dataBytes;
-        dataBytes << myMsg.listMessageData[i].expDataPrefix;
-
-        // we set a min of 4 bytes, max of 255 bytes
-        obdref::ubyte numAddBytes = (rand() % 251 + 4) - dataBytes.size();
-
-        for(size_t j=0; j < numAddBytes; j++)   {
-            dataBytes << obdref::ubyte(rand() % 256);
+        // build header
+        obdref::ByteList headerBytes;
+        if(myMsg.listMessageData[i].expHeaderBytes.size() > 0)   {
+            headerBytes << myMsg.listMessageData[i].expHeaderBytes;
+        }
+        else   {
+            if(myMsg.protocol == "ISO 15765-4 Standard")
+            {   headerBytes << 0x07 << 0xE8;   }
+            else if(myMsg.protocol == "ISO 15765-4 Extended")
+            {   headerBytes << 0x18 << 0xDA << 0xF1 << 0x10;   }
         }
 
-        obdref::ByteList headerBytes;
-        headerBytes << 0x80;           // format byte 0b10000000
-        headerBytes << dataBytes.size();    // length byte
+        // build first frame
+        obdref::ByteList ffDataBytes;
+        ffDataBytes << 0x15 << 0x05;        // first frame pci bytes
+        ffDataBytes << myMsg.listMessageData[i].expDataPrefix;
 
-        obdref::ByteList allBytes;
-        allBytes << headerBytes << dataBytes;
-        myMsg.listMessageData[i].listRawDataFrames << allBytes;
+        size_t addDataBytes = 8 - ffDataBytes.size();
+        for(size_t j=0; j < addDataBytes; j++)   {
+            obdref::ubyte myDataByte = obdref::ubyte(rand() % 256);
+            ffDataBytes << myDataByte;
+        }
+
+        obdref::ByteList ffRaw;
+        ffRaw << headerBytes << ffDataBytes;
+        myMsg.listMessageData[i].listRawDataFrames << ffRaw;
+
+        // build consecutive frames
+        for(size_t j=0; j < 4; j++)
+        {
+            obdref::ByteList cfDataBytes;
+            cfDataBytes << (0x21 + j);      // consecutive frame pci bytes
+            cfDataBytes << myMsg.listMessageData[i].expDataPrefix;
+
+            addDataBytes = 8 - cfDataBytes.size();
+            for(size_t k=0; k < addDataBytes; k++)   {
+                obdref::ubyte myDataByte = obdref::ubyte(rand() % 256);
+                cfDataBytes << myDataByte;
+            }
+
+            obdref::ByteList cfRaw;
+            cfRaw << headerBytes << cfDataBytes;
+            myMsg.listMessageData[i].listRawDataFrames << cfRaw;
+        }
+
+        // test: mess the order up a little bit
+        myMsg.listMessageData[i].listRawDataFrames.move(0,2);
+        myMsg.listMessageData[i].listRawDataFrames.move(1,3);
     }
 }
 
-void GetTypeDResponseFromTarget(obdref::MessageFrame &myMsg)
+void GetMFResponseFromRandom(obdref::MessageFrame &myMsg)
 {
-    // D [format] [source] [target] [length]
-    // data 1-255 bytes
+    // get response from target first
+    GetMFResponseFromTarget(myMsg);
+
     for(size_t i=0; i < myMsg.listMessageData.size(); i++)
     {
-        obdref::ByteList dataBytes;
-        dataBytes << myMsg.listMessageData[i].expDataPrefix;
+        QList<obdref::ByteList> &listRawData =
+            myMsg.listMessageData[i].listRawDataFrames;
 
-        // we set a min of 4 bytes, max of 255 bytes
-        obdref::ubyte numAddBytes = (rand() % 251 + 4) - dataBytes.size();
-
-        for(size_t j=0; j < numAddBytes; j++)   {
-            dataBytes << obdref::ubyte(rand() % 256);
+        // modify headers to random sources
+        obdref::ByteList rHeaderBytes;
+        if(myMsg.protocol.contains("Extended"))   {
+            rHeaderBytes << 0x18 << 0xDA << 0xF1 << obdref::ubyte(rand() % 256);
+            for(size_t j=0; j < listRawData.size(); j++)   {
+                listRawData[j][0] = rHeaderBytes[0];
+                listRawData[j][1] = rHeaderBytes[1];
+                listRawData[j][2] = rHeaderBytes[2];
+                listRawData[j][3] = rHeaderBytes[3];
+            }
         }
-
-        obdref::ByteList headerBytes;
-        headerBytes << 0x80;                                       // format byte 0b10000000
-        headerBytes << myMsg.listMessageData[i].expHeaderBytes[1]; // target byte
-        headerBytes << myMsg.listMessageData[i].expHeaderBytes[2] + 1; // source byte
-        headerBytes << dataBytes.size();                             // length byte
-
-        obdref::ByteList allBytes;
-        allBytes << headerBytes << dataBytes;
-        myMsg.listMessageData[i].listRawDataFrames << allBytes;
+        else   {
+            rHeaderBytes << 0x07 << obdref::ubyte(rand() % 256);
+            for(size_t j=0; j < listRawData.size(); j++)   {
+                listRawData[j][0] = rHeaderBytes[0];
+                listRawData[j][1] = rHeaderBytes[1];
+            }
+        }
     }
 }
 
