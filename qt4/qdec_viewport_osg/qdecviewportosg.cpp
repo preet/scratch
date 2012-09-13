@@ -131,8 +131,9 @@ void QDecViewportOSG::initViewport()
 //    m_osg_viewer->getCamera()->getGraphicsContext()->getState()->setCheckForGLErrors(osg::State::ONCE_PER_ATTRIBUTE);
 
     // setup camera
-//    m_osg_viewer->getCamera()->setClearColor(osg::Vec4(0,0,0,0));
-    m_osg_viewer->getCamera()->setClearMask(GL_DEPTH_BUFFER_BIT);
+    m_osg_viewer->getCamera()->setClearColor(osg::Vec4(0,0,0,0));
+    m_osg_viewer->getCamera()->setClearMask(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
 
 
 }

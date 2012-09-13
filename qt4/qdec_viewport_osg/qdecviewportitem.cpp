@@ -31,11 +31,11 @@ void QDecViewportItem::paint(QPainter *qPainter,
         if(!m_initFailed)
         {
             // create the fbo
-//            m_frameBufferObj =
-//                    new QGLFramebufferObject(width(),height(),
-//                        QGLFramebufferObject::CombinedDepthStencil, // play with this value?
-//                                             GL_TEXTURE_2D,
-//                                             GL_RGBA);
+            m_frameBufferObj =
+                    new QGLFramebufferObject(width(),height(),
+                        QGLFramebufferObject::CombinedDepthStencil, // play with this value?
+                                             GL_TEXTURE_2D,
+                                             GL_RGBA);
 
             // run the implemented init method
 //            std::cout << "=================================================================\n";
@@ -82,12 +82,12 @@ void QDecViewportItem::paint(QPainter *qPainter,
     // also, keep in mind that using an fbo like this
     // every frame is pretty expensive, especially for
     // a mobile target, so we may get slow downs
-//    if(qPainter->paintEngine()->type() == QPaintEngine::OpenGL2 &&
-//            qPainter->paintEngine()->isActive())
-//    {
-//        m_frameBufferObj->drawTexture(localBounds,
-//            m_frameBufferObj->texture());
-//    }
+    if(qPainter->paintEngine()->type() == QPaintEngine::OpenGL2 &&
+            qPainter->paintEngine()->isActive())
+    {
+        m_frameBufferObj->drawTexture(localBounds,
+            m_frameBufferObj->texture());
+    }
 
     // beginNativePainting
 
@@ -117,7 +117,7 @@ void QDecViewportItem::paint(QPainter *qPainter,
 //    std::cout << "=================================================================\n";
 
     qPainter->beginNativePainting();
-//    m_frameBufferObj->bind();
+    m_frameBufferObj->bind();
 //    std::cout << "=================================================================\n";
 //    std::cout << "DRAW VIEWPORT START\n";
 //    std::cout << "=================================================================\n";
@@ -125,7 +125,7 @@ void QDecViewportItem::paint(QPainter *qPainter,
 //    std::cout << "=================================================================\n";
 //    std::cout << "DRAW VIEWPORT END\n";
 //    std::cout << "=================================================================\n";
-//    m_frameBufferObj->release();
+    m_frameBufferObj->release();
     qPainter->endNativePainting();
 //    std::cout << "=================================================================\n";
 //    std::cout << "=================================================================\n";

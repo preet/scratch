@@ -26,6 +26,8 @@
 
 void GetResponseFromTarget(obdref::MessageFrame &myMsg);
 void GetResponseFromRandom(obdref::MessageFrame &myMsg);
+void GetResponseWithHeader(obdref::MessageFrame &myMsg,
+                           obdref::ByteList headerBytes);
 
 void PrintErrors(obdref::Parser &myParser);
 void PrintData(QList<obdref::Data> &listData);
@@ -33,29 +35,26 @@ void PrintReqResp(const obdref::MessageFrame &msgFrame);
 
 int main(int argc, char* argv[])
 {
-    // we expect a single argument that's the path
-    // to the definitions file
-    bool opOk = false;
+    // expect argument: path to definitions file
     QString filePath(argv[1]);
     if(filePath.isEmpty())   {
-       qDebug() << "Pass the definitions file in as an argument!";   
+       qDebug() << "OBDREF: Error: Pass in the definitions "
+                   "file as an argument";
        return -1;
     }
 
-    // read in xml definitions file and globals js
+
+    // read in definitions file
+    bool opOk = false;
     obdref::Parser myParser(filePath,opOk);
-    if(!opOk)   {
-        qDebug() << "Reading in XML and JS Failed! Exiting...";
-        PrintErrors(myParser);
-        return -1;
-    }
-    qDebug() << "OBDREF: Successfully read in XML Defs and JS globals!";
+    if(!opOk)   {   PrintErrors(myParser);   return -1;   }
+    qDebug() << "OBDREF: Info: Successfully read definitions";
+
 
     // get a list of default parameters
     QStringList myParamList
-        = myParser.GetParameterNames("SAEJ1979",
-                                     "ISO 9141-2",
-                                     "Default");
+        = myParser.GetParameterNames("SAEJ1979","ISO 9141-2","Default");
+
 
     for(size_t i=0; i < myParamList.size(); i++)
     {
@@ -70,26 +69,17 @@ int main(int argc, char* argv[])
 
         // build a message frame
         opOk = myParser.BuildMessageFrame(myMsg);
-        if(!opOk)   {
-            PrintErrors(myParser);
-            return -1;
-        }
+        if(!opOk)   {   PrintErrors(myParser);   return -1;   }
 
         // simulate vehicle response
-        GetResponseFromRandom(myMsg);
         GetResponseFromTarget(myMsg);
-        GetResponseFromTarget(myMsg);
-        PrintReqResp(myMsg);
 
         // parse message frame
         opOk = myParser.ParseMessageFrame(myMsg,listData);
-        if(!opOk)   {
-            PrintErrors(myParser);
-            return -1;
-        }
+        if(!opOk)   {   PrintErrors(myParser);   return -1;   }
 
         // print out data
-//        PrintData(listData);
+        PrintData(listData);
     }
 
     return 0;
@@ -105,9 +95,6 @@ void GetResponseFromTarget(obdref::MessageFrame &myMsg)
         if(myMsg.listMessageData[i].expHeaderBytes.size() > 0)   {
             headerBytes[1] = myMsg.listMessageData[i].expHeaderBytes[1];
         }
-
-        qDebug() << "Exp Header Bytes" <<
-                    myMsg.listMessageData[i].expHeaderBytes;
 
         // build databytes
         obdref::ByteList dataBytes;
@@ -132,6 +119,19 @@ void GetResponseFromRandom(obdref::MessageFrame &myMsg)
         for(size_t j=0; j < myMsg.listMessageData[i].listRawDataFrames.size(); j++)   {
             obdref::ubyte randomByte = obdref::ubyte(rand() % 256);
             myMsg.listMessageData[i].listRawDataFrames[j][2] = randomByte;
+        }
+    }
+}
+
+void GetResponseWithHeader(obdref::MessageFrame &myMsg,
+                           obdref::ByteList headerBytes)
+{
+    GetResponseFromTarget(myMsg);
+    for(size_t i=0; i < myMsg.listMessageData.size(); i++)   {
+        for(size_t j=0; j < myMsg.listMessageData[i].listRawDataFrames.size(); j++)   {
+            myMsg.listMessageData[i].listRawDataFrames[j][0] = headerBytes[0];
+            myMsg.listMessageData[i].listRawDataFrames[j][1] = headerBytes[1];
+            myMsg.listMessageData[i].listRawDataFrames[j][2] = headerBytes[2];
         }
     }
 }

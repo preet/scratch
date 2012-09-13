@@ -79,10 +79,9 @@ int main(int argc, char* argv[])
 
         // simulate vehicle response
         GetMFResponseFromRandom(myMsg);
-//        GetSFResponseFromTarget(myMsg);
         GetSFResponseFromRandom(myMsg);
         GetMFResponseFromTarget(myMsg);
-        PrintReqResp(myMsg);
+//        PrintReqResp(myMsg);
 
         // parse message frame
         opOk = myParser.ParseMessageFrame(myMsg,listData);
@@ -92,7 +91,7 @@ int main(int argc, char* argv[])
         }
 
         // print out data
-//        PrintData(listData);
+        PrintData(listData);
     }
 
     return 0;

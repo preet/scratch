@@ -57,25 +57,25 @@ device|simulator {
     !simulator {
         DEFINES += DEV_PC
 
-CONFIG += link_pkgconfig
-PKGCONFIG += openthreads openscenegraph
+#CONFIG += link_pkgconfig
+#PKGCONFIG += openthreads openscenegraph
 
-        #openscenegraph
-#        OSGDIR = /home/preet/Documents/openscenegraph
-#        OSGLIBDIR = /home/preet/Documents/openscenegraph/lib64
-#        INCLUDEPATH += $${OSGDIR}/include
-
-#        LIBS += -L$${OSGLIBDIR}/osgdb_freetype.so
-#        LIBS += -L$${OSGLIBDIR}/osgdb_jpeg.so
-#        LIBS += -L$${OSGLIBDIR}/osgdb_png.so
-
-#        LIBS += -L$${OSGLIBDIR} -losgViewer
-#        LIBS += -L$${OSGLIBDIR} -losgText
-#        LIBS += -L$${OSGLIBDIR} -losgGA
-#        LIBS += -L$${OSGLIBDIR} -losgUtil
-#        LIBS += -L$${OSGLIBDIR} -losgDB
-#        LIBS += -L$${OSGLIBDIR} -losg
-#        LIBS += -L$${OSGLIBDIR} -lOpenThreads
+#openscenegraph
+    # mobile version for OpenGL ES 2
+    DEFINES += GL_MOBILE
+    OSGDIR = /home/preet/Dev/env/sys/osg-modern
+    OSGLIBDIR = /home/preet/Dev/env/sys/osg-modern/lib64
+    INCLUDEPATH += $${OSGDIR}/include
+    LIBS += -L$${OSGLIBDIR}/osgdb_freetyperd.so
+    LIBS += -L$${OSGLIBDIR}/osgdb_jpegrd.so
+    LIBS += -L$${OSGLIBDIR}/osgdb_pngrd.so
+    LIBS += -L$${OSGLIBDIR} -losgViewerrd
+    LIBS += -L$${OSGLIBDIR} -losgTextrd
+    LIBS += -L$${OSGLIBDIR} -losgGArd
+    LIBS += -L$${OSGLIBDIR} -losgUtilrd
+    LIBS += -L$${OSGLIBDIR} -losgDBrd
+    LIBS += -L$${OSGLIBDIR} -losgrd
+    LIBS += -L$${OSGLIBDIR} -lOpenThreadsrd
     }
 }
 
