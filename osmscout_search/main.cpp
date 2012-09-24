@@ -10,11 +10,9 @@ int main()
 {
     // open up database
     bool opOk = false;
-    std::string dataPath("/home/preet/Documents/maps/germany_default");
-    osmscout::DatabaseParameter databaseParam;
-    databaseParam.SetNodeIndexCacheSize(2000);
-    databaseParam.SetWayIndexCacheSize(8000);
 
+    std::string dataPath("/home/preet/Documents/maps/toronto");
+    osmscout::DatabaseParameter databaseParam;
     osmscout::Database database(databaseParam);
 
     opOk = database.Open(dataPath);
