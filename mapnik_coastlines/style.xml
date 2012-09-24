@@ -6,29 +6,23 @@
     </Rule>
   </Style>
 
+
   <Layer name="world" srs="+proj=merc +lon_0=0 +k=1 +x_0=0 +y_0=0 +a=6378137 +b=6378137 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs">
     <StyleName>My Style</StyleName>
     <Datasource>
       <Parameter name="type">shape</Parameter>
-      <Parameter name="file">/home/preet/Documents/Maps/coastline/shoreline/shoreline_300.shp</Parameter>
+      <Parameter name="file">/home/preet/Documents/maps/admin1/ne_10m_admin_1_states_provinces_shp.shp</Parameter>
     </Datasource>
   </Layer>
 
-  <Layer name="southpole" srs="+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs">
+
+<!--
+  <Layer name="curious" srs="+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs">
     <StyleName>My Style</StyleName>
     <Datasource>
       <Parameter name="type">shape</Parameter>
-      <Parameter name="file">/home/preet/Documents/Maps/coastline/10m_land/southpole.shp</Parameter>
+      <Parameter name="file">/home/preet/Documents/maps/admin1/ne_10m_admin_1_states_provinces_shp.shp</Parameter>
     </Datasource>
   </Layer>
-<!--
-  <Layer name="curious" srs="+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs">
-    <StyleName>Another Style</StyleName>
-    <Datasource>
-      <Parameter name="type">shape</Parameter>
-      <Parameter name="file">/home/preet/Documents/Maps/coastline/10m_land/10m_land.shp</Parameter>
-    </Datasource>
-  </Layer>
-  -->
-
+-->
 </Map>

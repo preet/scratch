@@ -11,11 +11,13 @@ longlat = mapnik.Projection('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 
 # remember that all osm data has lat extents of +/- 85 degrees
 
-stylesheet = 'style.xml'
+stylesheet = 'style2.xml'
 image = 'world_outline.png'
 m = mapnik.Map(1024,1024)
 mapnik.load_map(m, stylesheet)
-bbox = mapnik.Envelope(-80,39.2,-77,42.2)
-m.zoom_to_box(bbox)
+#bbox = mapnik.Envelope(-80,39.2,-77,42.2)
+#bbox = mapnik.Envelope(-80,39.2,-77,42.2)
+#m.zoom_to_box(bbox)
+m.zoom_all()
 mapnik.render_to_file(m, image)
 print "rendered image to '%s'" % image
