@@ -1,11 +1,29 @@
 QT       += core
 #QT       -= gui
 
-TARGET = paint_shapefile
+TARGET = dbf2sqlite
 CONFIG   += console
 CONFIG   -= app_bundle
-
 TEMPLATE = app
+
+# avoid linking in dl since we dont use it
+DEFINES += SQLITE_OMIT_LOAD_EXTENSION
+
+# statically include kompex
+HEADERS += \
+    kompex/sqlite3.h \
+    kompex/KompexSQLiteStreamRedirection.h \
+    kompex/KompexSQLiteStatement.h \
+    kompex/KompexSQLitePrerequisites.h \
+    kompex/KompexSQLiteException.h \
+    kompex/KompexSQLiteDatabase.h \
+    kompex/KompexSQLiteBlob.h
+
+SOURCES += \
+    kompex/sqlite3.c \
+    kompex/KompexSQLiteStatement.cpp \
+    kompex/KompexSQLiteDatabase.cpp \
+    kompex/KompexSQLiteBlob.cpp
 
 # statically include shapelib
 HEADERS += \
@@ -18,4 +36,4 @@ SOURCES += \
     shapelib/safileio.c
 
 # main
-SOURCES += main.cpp
+SOURCES += sh_dbf2sqlite.cpp
