@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
     for(size_t i=0; i < nRecords; i++)   {
         QString strColor = QString::number((i+1),16);
         while(strColor.length() < 6)   {    // pad with zeros
-            strColor.append("0");
+            strColor.prepend("0");
         }
         strColor.prepend("#");
         listColors.push_back(strColor);
@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
     SHPClose(hSHP);
 
     qDebug() << "Info: Rendering shape file to images...";
-    int kSzMult=20;
+    int kSzMult=100;
 
     QImage shImage1(180*kSzMult,180*kSzMult,
                    QImage::Format_RGB888);

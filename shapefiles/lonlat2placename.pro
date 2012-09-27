@@ -1,7 +1,7 @@
 QT       += core
 #QT       -= gui
 
-TARGET = dbf2sqlite
+TARGET = lonlat2placename
 CONFIG   += console
 CONFIG   -= app_bundle
 TEMPLATE = app
@@ -36,4 +36,4 @@ SOURCES += \
     shapelib/safileio.c
 
 # main
-SOURCES += sh_dbf2sqlite.cpp
+SOURCES += lonlat2placename.cpp
