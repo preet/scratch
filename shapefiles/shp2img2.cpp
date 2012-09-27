@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
     SHPClose(hSHP);
 
     qDebug() << "Info: Rendering shape file to images...";
-    int kSzMult=100;
+    int kSzMult=20;
 
     QImage shImage1(180*kSzMult,180*kSzMult,
                    QImage::Format_RGB888);
