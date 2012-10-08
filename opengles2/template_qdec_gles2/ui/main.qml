@@ -11,42 +11,22 @@ Rectangle
         GradientStop { position: 1.0; color: "#405091" }
     }
 
-    Rectangle
-    {
-        width: parent.width*0.8;
-        height: parent.height*0.8;
-
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: "#666666" }
-            GradientStop { position: 1.0; color: "#222222" }
-        }
-
-        anchors.verticalCenter: parent.verticalCenter;
-        anchors.horizontalCenter: parent.horizontalCenter;
-    }
-
-    Rectangle
-    {
-        width: parent.width*0.5;
-        height: parent.height*0.5;
-        opacity: 0.5;
-
-        gradient: Gradient {
-            GradientStop { position: 0.0; color: "#000000" }
-            GradientStop { position: 1.0; color: "#222222" }
-        }
-
-        anchors.bottom: parent.bottom;
-    }
-
     ViewportItem
     {
         id: viewportItem;
         height: parent.height*0.5;
         width: parent.width*0.5;
-        anchors.bottom: parent.bottom;
+        anchors.fill: parent;
     }
 
+    MouseArea
+    {
+        height:viewportItem;
+        width:viewportItem;
+        anchors.fill: parent;
+    }
+
+/*
     TouchArea {
         id: touchArea;
         height: parent.height*0.5;
@@ -94,4 +74,5 @@ Rectangle
             }
         }
     }
+        */
 }

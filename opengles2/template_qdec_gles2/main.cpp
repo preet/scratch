@@ -4,14 +4,14 @@
 #include <QtDeclarative/QDeclarativeView>
 
 #include "qdectoucharea.h"
-#include "demotexture.h"
+#include "democube.h"
 
 int main(int argc, char *argv[])
 {
     QApplication app(argc,argv);
     qmlRegisterType<QDecTouchPoint>("TouchItems",1,0,"TouchPoint");
     qmlRegisterType<QDecTouchArea>("TouchItems",1,0,"TouchArea");
-    qmlRegisterType<DemoTexture>("ViewportItems",1,0,"ViewportItem");
+    qmlRegisterType<DemoCube>("ViewportItems",1,0,"ViewportItem");
 
 
     QDeclarativeView mainView;

@@ -36,17 +36,8 @@ void QDecViewportItem::paint(QPainter *qPainter,
                                              GL_RGBA);
 
             // run the implemented init method
-            std::cout << "=================================================================\n";
-            std::cout << "=================================================================\n";
-            std::cout << "INITIALIZATION START\n";
-            std::cout << "=================================================================\n";
-            std::cout << "=================================================================\n";
             this->initViewport();
-            std::cout << "=================================================================\n";
-            std::cout << "=================================================================\n";
-            std::cout << "INITIALIZATION END\n";
-            std::cout << "=================================================================\n";
-            std::cout << "=================================================================\n";
+
 
             if(m_initFailed)
             {   return;   }
@@ -55,7 +46,7 @@ void QDecViewportItem::paint(QPainter *qPainter,
             connect(&m_updateTimer,SIGNAL(timeout()),
                     this, SLOT(updateViewport()));
 
-            m_updateTimer.setInterval(10000);
+            m_updateTimer.setInterval(33);
             m_updateTimer.start();
             m_initViewport = true;
         }
@@ -108,31 +99,19 @@ void QDecViewportItem::paint(QPainter *qPainter,
     // * current color is reset to solid white
 
     // draw scene contents to the fbo
-    std::cout << "=================================================================\n";
-    std::cout << "=================================================================\n";
-    std::cout << "BEGINNATIVEPAINTING START\n";
-    std::cout << "=================================================================\n";
-    std::cout << "=================================================================\n";
+
     qPainter->beginNativePainting();
 //    m_frameBufferObj->bind();
 
-    std::cout << "=================================================================\n";
-    std::cout << "DRAW VIEWPORT START\n";
-    std::cout << "=================================================================\n";
+
 
     this->drawViewport();
 
-    std::cout << "=================================================================\n";
-    std::cout << "DRAW VIEWPORT END\n";
-    std::cout << "=================================================================\n";
+
 
     //    m_frameBufferObj->release();
     qPainter->endNativePainting();
-    std::cout << "=================================================================\n";
-    std::cout << "=================================================================\n";
-    std::cout << "BEGINNATIVEPAINTING END\n";
-    std::cout << "=================================================================\n";
-    std::cout << "=================================================================\n";
+
 
 
 
