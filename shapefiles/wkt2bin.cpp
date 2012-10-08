@@ -142,7 +142,7 @@ int main(int argc, const char *argv[])
             OGRLinearRing *outerRing = singlePoly->getExteriorRing();
 
             // (0,0,0) signals a new ring (inner or outer)
-//            myVx.x = 0; myVx.y = 0; myVx.z = 0; listVx.push_back(myVx);
+            myVx.x = 0; myVx.y = 0; myVx.z = 0; listVx.push_back(myVx);
             for(size_t i=0; i < outerRing->getNumPoints(); i++)   {
                 PointLLA pointLLA(outerRing->getY(i),outerRing->getX(i));
                 myVx = ConvLLAToECEF(pointLLA);
@@ -153,7 +153,7 @@ int main(int argc, const char *argv[])
             for(size_t n=0; n < singlePoly->getNumInteriorRings(); n++)   {
                 OGRLinearRing * innerRing = singlePoly->getInteriorRing(n);
 
-//                myVx.x = 0; myVx.y = 0; myVx.z = 0; listVx.push_back(myVx);
+                myVx.x = 0; myVx.y = 0; myVx.z = 0; listVx.push_back(myVx);
                 for(size_t i=0; i < innerRing->getNumPoints(); i++)    {
                     PointLLA pointLLA(innerRing->getY(i),innerRing->getX(i));
                     myVx = ConvLLAToECEF(pointLLA); listVx.push_back(myVx);
