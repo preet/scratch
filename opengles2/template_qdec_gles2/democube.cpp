@@ -268,7 +268,7 @@ void DemoCube::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 
     m_lk_cursorVec = c_cursorVec;
 
-//    qDebug() << angleDiffRads;
+    qDebug() << angleDegs;
 }
 
 GLuint DemoCube::loadShader(GLenum type, const char *shaderSrc)

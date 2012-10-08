@@ -43,16 +43,15 @@ device|simulator {
     }
 }
 
-INCLUDEPATH += /home/preet/Downloads/Packages/glm
+INCLUDEPATH += /home/preet/Dev/env/sys/glm-0.9.3.4
 
 SOURCES += \
     main.cpp \
     qdectoucharea.cpp \
     qdecviewportitem.cpp \
-    demotexture.cpp
-
+    democube.cpp
+#    demotexture.cpp
 #    demohellotri.cpp \
-#    demomvp.cpp \
 #    democube.cpp \
 #    demomodel.cpp \
 #    modelviewer.cpp \
@@ -62,10 +61,9 @@ SOURCES += \
 HEADERS += \
     qdectoucharea.h \
     qdecviewportitem.h \
-    demotexture.h
-
+    democube.h
+#    demotexture.h
 #    demohellotri.h \
-#    demomvp.h \
 #    democube.h \
 #    demomodel.h \
 #    modelviewer.h \
