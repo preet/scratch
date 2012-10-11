@@ -1,0 +1,3 @@
+* remember to use python2 with this script!
+* rendering at low resolutions results in artifacts
+... render at a high res first, then shrink

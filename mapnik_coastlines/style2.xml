@@ -1,0 +1,16 @@
+
+<Map background-color="steelblue" srs="+init=epsg:4326">
+   <Style name="MyStyle">
+      <Rule>
+         <PolygonSymbolizer fill="#f2eff9" />
+      </Rule>
+   </Style>
+
+   <Layer name="world" srs="+init=epsg:4326">
+      <StyleName>MyStyle</StyleName>
+      <Datasource>
+         <Parameter name="type">shape</Parameter>
+         <Parameter name="file">/home/preet/Documents/maps/admin1/ne_10m_admin_1_states_provinces_shp.shp</Parameter>
+      </Datasource>
+   </Layer>
+</Map>
