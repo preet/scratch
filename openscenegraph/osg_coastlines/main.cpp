@@ -50,7 +50,7 @@ int main(int argc, const char *argv[])
     else
     {   std::cout << "Error: Could not read input file\n"; return -1;   }
 
-    std::cout << "Read in " << ctmVxCount << " vertices";
+    std::cout << "Read in " << ctmVxCount << " vertices\n";
     ctmFreeContext(ctmContext);
 
     osg::ref_ptr<osg::DrawElementsUInt> listIx =
