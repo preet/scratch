@@ -14,6 +14,10 @@
 // pugixml
 #include <pugixml.hpp>
 
+int g_node_id = 0;
+pugi::xml_document osm_file;
+pugi::xml_node osm_meta;
+
 struct xml_string_writer: pugi::xml_writer
 {
     std::string result;
@@ -142,19 +146,27 @@ bool WriteOSMData(QList<Vec2d> const &listAdminCoords,
                   QString const &tagNameKey,
                   QString &outputStr)
 {
-    pugi::xml_document osm_file;
     for(size_t i=0; i < listAdminCoords.size(); i++)
-    {   //  <node id="" lat="" lon ="">
+    {   //<osm version="0.6">
+        //  <node id="" lat="" lon ="">
         //      <tag k="tagNameKey" v=""/>
+        //      <tag k="name" v="" />
         //  </node>
-        pugi::xml_node osm_node = osm_file.append_child("node");
-        osm_node.append_attribute("id") = int(i);
+        //</osm>
+        pugi::xml_node osm_node = osm_meta.append_child("node");
+        osm_node.append_attribute("id") = g_node_id;
         osm_node.append_attribute("lat") = listAdminCoords[i].y;
         osm_node.append_attribute("lon") = listAdminCoords[i].x;
 
-        pugi::xml_node osm_tag = osm_node.append_child("tag");
-        osm_tag.append_attribute("k") = tagNameKey.toLocal8Bit().data();
-        osm_tag.append_attribute("v") = listAdminNames[i].toLocal8Bit().data();
+        pugi::xml_node osm_mma_tag = osm_node.append_child("tag");
+        osm_mma_tag.append_attribute("k") = tagNameKey.toLocal8Bit().data();
+        osm_mma_tag.append_attribute("v") = "-";
+
+        pugi::xml_node osm_name_tag = osm_node.append_child("tag");
+        osm_name_tag.append_attribute("k") = "name";
+        osm_name_tag.append_attribute("v") = listAdminNames[i].toLocal8Bit().data();
+
+        g_node_id++;
     }
 
     xml_string_writer osm_writer;
@@ -224,6 +236,10 @@ int main(int argc, char *argv[])
     QList<Vec2d> listAdmin1Coords;
     if(!BuildCoordList(adm1fileShp,listAdmin1Coords))
     {   return -1;   }
+
+    // enclose the xml file with osm tags
+    osm_meta = osm_file.append_child("osm");
+    osm_meta.append_attribute("version") = 0.6;
 
     QString osmAdm0Data;
     WriteOSMData(listAdmin0Coords,
