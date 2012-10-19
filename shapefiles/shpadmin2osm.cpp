@@ -168,10 +168,6 @@ bool WriteOSMData(QList<Vec2d> const &listAdminCoords,
 
         g_node_id++;
     }
-
-    xml_string_writer osm_writer;
-    osm_file.print(osm_writer);
-    outputStr = QString::fromStdString(osm_writer.result);
 }
 
 int main(int argc, char *argv[])
@@ -253,9 +249,9 @@ int main(int argc, char *argv[])
                  QString("mapmix_adm1"),
                  osmAdm1Data);
 
-    QString writeOutStr =   osmAdm0Data +
-                            QString("\n") +
-                            osmAdm1Data;
+    xml_string_writer osm_writer;
+    osm_file.print(osm_writer);
+    QString writeOutStr = QString::fromStdString(osm_writer.result);
 
     QFile outFile(inputArgs[3]);
     if(!outFile.open(QIODevice::ReadWrite))
