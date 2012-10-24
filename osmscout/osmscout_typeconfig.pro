@@ -4,8 +4,8 @@ CONFIG -= qt
 SOURCES += osmscout_typeconfig.cpp
 
 #libosmscout
-INCLUDEPATH += /home/preet/Documents/libosmscout/include
-LIBS += -L/home/preet/Documents/libosmscout/lib -losmscout
+INCLUDEPATH += /home/preet/Dev/env/sys/libosmscout/include
+LIBS += -L/home/preet/Dev/env/sys/libosmscout/lib -losmscout
 
 QMAKE_CXXFLAGS += -std=c++0x
 
