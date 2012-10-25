@@ -143,8 +143,7 @@ bool BuildCoordList(QString const &fileShp,
 
 bool WriteOSMData(QList<Vec2d> const &listAdminCoords,
                   QStringList const &listAdminNames,
-                  QString const &tagNameKey,
-                  QString &outputStr)
+                  QString const &tagNameKey)
 {
     for(size_t i=0; i < listAdminCoords.size(); i++)
     {   //<osm version="0.6">
@@ -159,12 +158,14 @@ bool WriteOSMData(QList<Vec2d> const &listAdminCoords,
         osm_node.append_attribute("lon") = listAdminCoords[i].x;
 
         pugi::xml_node osm_mma_tag = osm_node.append_child("tag");
-        osm_mma_tag.append_attribute("k") = tagNameKey.toLocal8Bit().data();
+        osm_mma_tag.append_attribute("k") = tagNameKey.toUtf8().data();
         osm_mma_tag.append_attribute("v") = "-";
+
+        std::cout << std::string(listAdminNames[i].toUtf8().data()) << std::endl;
 
         pugi::xml_node osm_name_tag = osm_node.append_child("tag");
         osm_name_tag.append_attribute("k") = "name";
-        osm_name_tag.append_attribute("v") = listAdminNames[i].toLocal8Bit().data();
+        osm_name_tag.append_attribute("v") = listAdminNames[i].toUtf8().data();
 
         g_node_id++;
     }
@@ -237,29 +238,16 @@ int main(int argc, char *argv[])
     osm_meta = osm_file.append_child("osm");
     osm_meta.append_attribute("version") = 0.6;
 
-    QString osmAdm0Data;
     WriteOSMData(listAdmin0Coords,
                  listAdmin0Names,
-                 QString("mapmix_adm0"),
-                 osmAdm0Data);
+                 QString("mapmix_adm0"));
 
-    QString osmAdm1Data;
     WriteOSMData(listAdmin1Coords,
                  listAdmin1Names,
-                 QString("mapmix_adm1"),
-                 osmAdm1Data);
+                 QString("mapmix_adm1"));
 
     xml_string_writer osm_writer;
-    osm_file.print(osm_writer);
-    QString writeOutStr = QString::fromStdString(osm_writer.result);
-
-    QFile outFile(inputArgs[3]);
-    if(!outFile.open(QIODevice::ReadWrite))
-    {   qDebug() << "Could not open output file!"; return -1;   }
-
-    QTextStream outXml(&outFile);
-    outXml << writeOutStr;
-    outFile.close();
+    osm_file.save_file(inputArgs[3].toUtf8().data());
 
     return 0;
 }
