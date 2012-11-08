@@ -1,0 +1,10 @@
+OST
+
+TYPES
+  TYPE "custom_type" = WAY ("a"=="b")
+  TYPE "custom_type1" = NODE ("a"=="b")
+  TYPE "custom_type2" = NODE ("a"=="b")
+  TYPE "custom_type3" = NODE ("a"=="b")
+  TYPE "custom_type4" = WAY ("a"=="b")
+  TYPE "custom_type5" = AREA ("a"=="b")
+END

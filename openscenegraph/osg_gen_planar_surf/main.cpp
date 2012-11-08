@@ -153,7 +153,7 @@ void buildEarthSurfGeom(double minLon,double minLat,
                         unsigned int latSegments,
                         std::vector<Vec3> &vertexArray,
                         std::vector<Vec2> &texCoords,
-                        std::vector<unsigned int> &triIdx)
+                        std::vector<size_t> &triIdx)
 {
     double lonStep = (maxLon-minLon)/lonSegments;
     double latStep = (maxLat-minLat)/latSegments;
@@ -401,25 +401,25 @@ int main()
 
     // front face
 
-    buildPlaneGeometry(Vec3(50,0,0),
-                       Vec3(1,0,0),
-                       Vec3(0,0,1),
-                       100,
-                       100,
-                       8,8,
-                       surfVertexArray,
-                       surfTexCoords,
-                       surfTriIdxs);
+//    buildPlaneGeometry(Vec3(50,0,0),
+//                       Vec3(1,0,0),
+//                       Vec3(0,0,1),
+//                       100,
+//                       100,
+//                       8,8,
+//                       surfVertexArray,
+//                       surfTexCoords,
+//                       surfTriIdxs);
 
 //    buildEarthSurfGeom(-90,-45,0,45,8,8,
 //                       surfVertexArray,
 //                       surfTexCoords,
 //                       surfTriIdxs);
 
-//    buildEarthSurfGeom(-180,45,180,80,8,8,
-//                       surfVertexArray,
-//                       surfTexCoords,
-//                       surfTriIdxs);
+    buildEarthSurfGeom(-180,-35,180,35,8,8,
+                       surfVertexArray,
+                       surfTexCoords,
+                       surfTriIdxs);
 
     osg::ref_ptr<osg::Vec3Array> geomPxVertexArray =
             new osg::Vec3Array(surfVertexArray.size());
@@ -455,7 +455,7 @@ int main()
 //    geomPx->setColorBinding(osg::Geometry::BIND_OVERALL);
     geomPx->addPrimitiveSet(geomPxTriIdx.get());
 
-    osg::ref_ptr<osg::Image> imgPx = osgDB::readImageFile("textures/p_x.jpg");
+    osg::ref_ptr<osg::Image> imgPx = osgDB::readImageFile("textures/mdred.png");
     osg::ref_ptr<osg::Texture2D> texPx = new osg::Texture2D;
     texPx->setImage(imgPx.get());
 //    texPx->setFilter(osg::Texture::MAG_FILTER,osg::Texture::NEAREST);
@@ -478,7 +478,7 @@ int main()
 
     osg::ref_ptr<osg::MatrixTransform> nodeXform = new osg::MatrixTransform;
     nodeXform->setMatrix(osg::Matrix::scale(1.01,1.01,1.01));
-//    nodeXform->addChild(geodeOverlay.get());
+    nodeXform->addChild(geodeOverlay.get());
 
     osg::ref_ptr<osg::PolygonMode> polygonMode = new osg::PolygonMode;
     polygonMode->setMode(osg::PolygonMode::FRONT_AND_BACK,
@@ -487,12 +487,12 @@ int main()
     osg::ref_ptr<osg::Material> meshMaterial = new osg::Material;
     meshMaterial->setColorMode(osg::Material::OFF);
     meshMaterial->setDiffuse(osg::Material::FRONT_AND_BACK,
-                             osg::Vec4(1,1,1,0.25));
+                             osg::Vec4(0.0,1,1,1.0));
 
     geodeOverlay->getOrCreateStateSet()->setAttribute(polygonMode.get());
     geodeOverlay->getOrCreateStateSet()->setAttribute(meshMaterial.get());
 
-    nodeRoot->getOrCreateStateSet()->setMode(GL_BLEND,osg::StateAttribute::ON);
+//    nodeRoot->getOrCreateStateSet()->setMode(GL_BLEND,osg::StateAttribute::ON);
     nodeRoot->addChild(geodeCube.get());
     nodeRoot->addChild(nodeXform.get());
 

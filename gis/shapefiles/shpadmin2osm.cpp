@@ -161,8 +161,6 @@ bool WriteOSMData(QList<Vec2d> const &listAdminCoords,
         osm_mma_tag.append_attribute("k") = tagNameKey.toUtf8().data();
         osm_mma_tag.append_attribute("v") = "-";
 
-        std::cout << std::string(listAdminNames[i].toUtf8().data()) << std::endl;
-
         pugi::xml_node osm_name_tag = osm_node.append_child("tag");
         osm_name_tag.append_attribute("k") = "name";
         osm_name_tag.append_attribute("v") = listAdminNames[i].toUtf8().data();
