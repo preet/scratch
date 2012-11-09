@@ -1,7 +1,8 @@
 TEMPLATE = app
-CONFIG += console debug
+CONFIG += console debug link_pkgconfig
 CONFIG -= qt
-SOURCES += main.cpp
+SOURCES += osmscout_coast.cpp
+PKGCONFIG += openthreads openscenegraph
 #DEFINES += "USE_BOOST=1"
 
 #libosmscout
