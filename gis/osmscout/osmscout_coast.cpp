@@ -54,9 +54,7 @@ size_t genCellId(size_t xAbs, size_t yAbs,
     //    magDetail    =       2*2*2*1024, // 13
 
     // we build a unique tile id as follows:
-    // [Z][XXXX][YYYY]
-    // Z = 1 digit to represent zoom (5-13)
-    //     stored as an offset (0-8)
+    // [XXXX][YYYY]
     // XXXX = 4 digits for abs x cell (max 8192)
     // YYYY = 4 digits for abs y cell (max 8192)
 
@@ -64,9 +62,7 @@ size_t genCellId(size_t xAbs, size_t yAbs,
     // 4,294,967,295
 
     // zoom
-    size_t zoom = (viewMag-5);      // why have magnification at all? we
-    size_t tileId = zoom*100000000; // we're fixing zoom level anyway
-    tileId += xAbs*10000 + yAbs;
+    size_t tileId = xAbs*10000 + yAbs;
     return tileId;
 }
 
@@ -121,40 +117,8 @@ int main()
     opOk = database.GetGroundTiles(minLon-1.3,minLat-1.3,maxLon+1.3,maxLat+1.3,mapMag,listTiles);
     if(!opOk)  {   std::cerr << "ERROR: Could not get ground tiles\n"; return -1;   }
 
-//    std::cerr << "INFO: Found " << listTiles.size()
-//              << " tiles" << std::endl;
-
-//    // dump all tile data as dots
-//    double kMinLat,kMaxLat,kMinLon,kMaxLon;
-//    osg::ref_ptr<osg::Vec3Array> listVx = new osg::Vec3Array;
-//    std::list<osmscout::GroundTile>::iterator tileIt;
-//    for(tileIt = listTiles.begin();
-//        tileIt != listTiles.end(); ++tileIt)
-//    {
-//        osmscout::GroundTile * tilePtr = &(*tileIt);
-//        kMinLat = tilePtr->yAbs*tilePtr->cellHeight-90.0;
-//        kMaxLat = kMinLat + tilePtr->cellHeight;
-//        kMinLon = tilePtr->xAbs*tilePtr->cellWidth-180.0;
-//        kMaxLon = kMinLon + tilePtr->cellWidth;
-
-//        for(size_t n=0; n < tilePtr->coords.size(); n++)
-//        {
-//            double lon = kMinLon+tilePtr->coords[n].x*tilePtr->cellWidth/
-//                    osmscout::GroundTile::Coord::CELL_MAX;
-
-//            double lat = kMinLat+tilePtr->coords[n].y*tilePtr->cellHeight/
-//                    osmscout::GroundTile::Coord::CELL_MAX;
-
-//            osg::Vec3 vx(lon,lat,0);
-//            listVx->push_back(vx);
-//        }
-//    }
-
-//    osg::ref_ptr<osg::Geometry> gmCoast = new osg::Geometry;
-//    gmCoast->setVertexArray(listVx);
-//    gmCoast->addPrimitiveSet(new osg::DrawArrays(GL_POINTS,0,listVx->size()));
-
-//    gdCoast->addDrawable(gmCoast);
+    std::cerr << "INFO: Found " << listTiles.size()
+              << " tiles" << std::endl;
 
     // note:
     // there can be 100s of tiles for each cell (xAbs,yAbs) and this
@@ -191,7 +155,9 @@ int main()
     osg::ref_ptr<osg::Vec4Array> listTileCx = new osg::Vec4Array;
     listTileCx->push_back(tileColor);
 
+    // vars to randomize color
     size_t k=0; size_t p=90000000;
+
     double kMinLat,kMaxLat,kMinLon,kMaxLon;
     for(cellIt = listTilesByCell.begin();
         cellIt != listTilesByCell.end(); ++cellIt)
@@ -210,11 +176,13 @@ int main()
             kMinLon = tilePtr->xAbs*tilePtr->cellWidth-180.0;
             kMaxLon = kMinLon + tilePtr->cellWidth;
 
+            // BUILD CELL BORDERS
             osg::ref_ptr<osg::Vec3dArray> gmTileVx = new osg::Vec3dArray;
             gmTileVx->push_back(osg::Vec3d(kMinLon,kMinLat,0));
             gmTileVx->push_back(osg::Vec3d(kMaxLon,kMinLat,0));
             gmTileVx->push_back(osg::Vec3d(kMaxLon,kMaxLat,0));
             gmTileVx->push_back(osg::Vec3d(kMinLon,kMaxLat,0));
+
             osg::ref_ptr<osg::Geometry> gmTile = new osg::Geometry;
             gmTile->setVertexArray(gmTileVx);
             gmTile->setColorArray(listTileCx);
@@ -222,6 +190,7 @@ int main()
             gmTile->addPrimitiveSet(new osg::DrawArrays(GL_LINE_LOOP,0,gmTileVx->size()));
             gdCoast->addDrawable(gmTile);
 
+            // BUILD TILE COORDS
             size_t lineStart = 0;
             size_t lineEnd;
 
@@ -308,3 +277,36 @@ int main()
 
     return 0;
 }
+
+
+//    // dump all tile data as dots
+//    double kMinLat,kMaxLat,kMinLon,kMaxLon;
+//    osg::ref_ptr<osg::Vec3Array> listVx = new osg::Vec3Array;
+//    std::list<osmscout::GroundTile>::iterator tileIt;
+//    for(tileIt = listTiles.begin();
+//        tileIt != listTiles.end(); ++tileIt)
+//    {
+//        osmscout::GroundTile * tilePtr = &(*tileIt);
+//        kMinLat = tilePtr->yAbs*tilePtr->cellHeight-90.0;
+//        kMaxLat = kMinLat + tilePtr->cellHeight;
+//        kMinLon = tilePtr->xAbs*tilePtr->cellWidth-180.0;
+//        kMaxLon = kMinLon + tilePtr->cellWidth;
+
+//        for(size_t n=0; n < tilePtr->coords.size(); n++)
+//        {
+//            double lon = kMinLon+tilePtr->coords[n].x*tilePtr->cellWidth/
+//                    osmscout::GroundTile::Coord::CELL_MAX;
+
+//            double lat = kMinLat+tilePtr->coords[n].y*tilePtr->cellHeight/
+//                    osmscout::GroundTile::Coord::CELL_MAX;
+
+//            osg::Vec3 vx(lon,lat,0);
+//            listVx->push_back(vx);
+//        }
+//    }
+
+//    osg::ref_ptr<osg::Geometry> gmCoast = new osg::Geometry;
+//    gmCoast->setVertexArray(listVx);
+//    gmCoast->addPrimitiveSet(new osg::DrawArrays(GL_POINTS,0,listVx->size()));
+
+//    gdCoast->addDrawable(gmCoast);
