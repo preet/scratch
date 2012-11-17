@@ -13,12 +13,12 @@ device|simulator {
     OSGDIR = temp
 
     device   {
-       QTDIR = /home/preet/Documents/qnx/qt-4.8-arm
-       OSGDIR = /home/preet/Documents/qnx/osg-arm-rel
+       QTDIR = /home/preet/Dev/env/qnx/qt4-arm
+       OSGDIR = /home/preet/Dev/env/qnx/osg-arm
     }
     simulator {
-       QTDIR = /home/preet/Documents/qnx/qt-4.8-x86
-       OSGDIR = /home/preet/Documents/qnx/osg-x86-rel
+       QTDIR = MISSING
+       OSGDIR = MISSING
     }
 
     # define qt lib files and install path
@@ -44,13 +44,13 @@ device|simulator {
     LIBS += -L$${OSGDIR}/lib/osgdb_jpeg.so
     LIBS += -L$${OSGDIR}/lib/osgdb_png.so
 
-    LIBS += -L$${OSGDIR}/lib -losgViewer
-    LIBS += -L$${OSGDIR}/lib -losgText
-    LIBS += -L$${OSGDIR}/lib -losgGA
-    LIBS += -L$${OSGDIR}/lib -losgUtil
-    LIBS += -L$${OSGDIR}/lib -losgDB
-    LIBS += -L$${OSGDIR}/lib -losg
-    LIBS += -L$${OSGDIR}/lib -lOpenThreads
+    LIBS += -L$${OSGDIR}/lib -losgViewerd
+    LIBS += -L$${OSGDIR}/lib -losgTextd
+    LIBS += -L$${OSGDIR}/lib -losgGAd
+    LIBS += -L$${OSGDIR}/lib -losgUtild
+    LIBS += -L$${OSGDIR}/lib -losgDBd
+    LIBS += -L$${OSGDIR}/lib -losgd
+    LIBS += -L$${OSGDIR}/lib -lOpenThreadsd
 }
 
 !device {

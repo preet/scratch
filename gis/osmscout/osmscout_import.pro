@@ -11,6 +11,7 @@ TARGET = import_json
 LIBS += -ljansson
 
 #libosmscout
+INCLUDEPATH += /home/preet/Dev/env/sys/boost-1.50
 INCLUDEPATH += $${LIBOSMSCOUT_PATH}/include
 LIBS += -L$${LIBOSMSCOUT_PATH}/lib -losmscout
 
