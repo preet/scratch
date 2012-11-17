@@ -76,12 +76,12 @@ double randomIntensity(size_t seed)
 
 int main(int argc, char *argv[])
 {
-    if(argc != 2)   {
-            std::cerr << "ERROR: Invalid number of arguments:" << std::endl;
-            std::cerr << "Pass the osmscout map data dir as an argument:" << std::endl;
-            std::cerr << "./osmscout_coast /my/mapdata" << std::endl;
-            return -1;
-        }
+    if(argc != 3)   {
+        std::cerr << "ERROR: Invalid number of arguments:" << std::endl;
+        std::cerr << "Pass the osmscout data dir and zoom as an argument:" << std::endl;
+        std::cerr << "./osmscout_coast /my/mapdata 4" << std::endl;
+        return -1;
+    }
 
     osg::ref_ptr<osg::Geode> gdCoast = new osg::Geode;
     osg::ref_ptr<osg::Group> groupRoot = new osg::Group;
@@ -117,7 +117,9 @@ int main(int argc, char *argv[])
     //    magClose     =     2*2*2*2*1024, // 14
     //    magVeryClose =   2*2*2*2*2*1024, // 15
     //    magBlock     = 2*2*2*2*2*2*1024  // 16
-    osmscout::Mag mapMag = osmscout::magRegion;
+
+    int mapZoom = atoi(argv[2]);
+    osmscout::Mag mapMag = osmscout::Mag(size_t(pow(2,mapZoom)));
 
     // get tiles
     std::list<osmscout::GroundTile> listTiles;
