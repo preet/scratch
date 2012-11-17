@@ -74,8 +74,15 @@ double randomIntensity(size_t seed)
     return myNum;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+    if(argc != 2)   {
+            std::cerr << "ERROR: Invalid number of arguments:" << std::endl;
+            std::cerr << "Pass the osmscout map data dir as an argument:" << std::endl;
+            std::cerr << "./osmscout_coast /my/mapdata" << std::endl;
+            return -1;
+        }
+
     osg::ref_ptr<osg::Geode> gdCoast = new osg::Geode;
     osg::ref_ptr<osg::Group> groupRoot = new osg::Group;
     groupRoot->addChild(gdCoast);
@@ -83,7 +90,7 @@ int main()
     // open up database
     bool opOk = false;
 
-    std::string dataPath("/home/preet/Documents/maps/openstreetmap/toronto");
+    std::string dataPath(argv[1]);
     osmscout::DatabaseParameter databaseParam;
     osmscout::Database database(databaseParam);
 
