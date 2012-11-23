@@ -1,9 +1,10 @@
 #version 120
 
 // color varying for fragment shader
-varying vec4 v_color;
+varying vec2 TexCoord1;
 
 void main()
 {
-   gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+    TexCoord1 = gl_MultiTexCoord1.xy;
+    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
 }

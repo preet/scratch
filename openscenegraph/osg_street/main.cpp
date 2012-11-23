@@ -228,7 +228,6 @@ int main(int argc, char *argv[])
     // set debug severity
 //    osg::setNotifyLevel(osg::DEBUG_INFO);
 
-    /*
     // add shaders to openscenegraph
     osg::ref_ptr<osg::Program> shProgram = new osg::Program;
     shProgram->setName("DefaultProgram");
@@ -240,23 +239,22 @@ int main(int argc, char *argv[])
     // fragment shader
     QString fShader = readFileAsQString("shaders/model_frag.glsl");
     shProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT,fShader.toStdString()));
-    */
 
     // [geometry]
-
     std::vector<Vec3> vxArray,vxTriStrip;
     std::vector<Vec2> txTriStrip;
     GetStreetVx(vxArray);
-    buildPolylineAsTriStrip(vxArray,10,vxTriStrip,txTriStrip);
+    buildPolylineAsTriStrip(vxArray,2,vxTriStrip,txTriStrip);
 
     osg::ref_ptr<osg::Vec3Array> listVx = new osg::Vec3Array(vxTriStrip.size());
-    osg::ref_ptr<osg::Vec4Array> listCx = new osg::Vec4Array(txTriStrip.size());
+    osg::ref_ptr<osg::Vec2Array> listTx = new osg::Vec2Array(txTriStrip.size());
     for(size_t i=0; i < listVx->size(); i++)   {
         listVx->at(i).x() = vxTriStrip[i].x - vxTriStrip[0].x;
         listVx->at(i).y() = vxTriStrip[i].y - vxTriStrip[0].y;
         listVx->at(i).z() = vxTriStrip[i].z - vxTriStrip[0].z;
 
-        listCx->at(i) = osg::Vec4(0.0,1.0,txTriStrip[i].y,1.0);
+        listTx->at(i).x() = txTriStrip[i].x;
+        listTx->at(i).y() = txTriStrip[i].y;
     }
 
     osg::ref_ptr<osg::DrawElementsUInt> listIx = new osg::DrawElementsUInt(GL_TRIANGLE_STRIP);
@@ -268,14 +266,13 @@ int main(int argc, char *argv[])
     gmStreet->setVertexArray(listVx);
     gmStreet->setNormalArray(listVx);
     gmStreet->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
-    gmStreet->setColorArray(listCx);
-    gmStreet->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+    gmStreet->setTexCoordArray(1,listTx);
     gmStreet->addPrimitiveSet(listIx);
 
     // [geode]
     osg::ref_ptr<osg::Geode> gdStreet = new osg::Geode;
     osg::StateSet *ss = gdStreet->getOrCreateStateSet();
-//    ss->setAttributeAndModes(shProgram,osg::StateAttribute::ON);
+    ss->setAttributeAndModes(shProgram,osg::StateAttribute::ON);
     gdStreet->addDrawable(gmStreet);
 
     // [root]
@@ -289,14 +286,15 @@ int main(int argc, char *argv[])
     viewer.setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
     viewer.setUpViewInWindow(100,100,800,480);
     viewer.setSceneData(groupRoot.get());
+    viewer.getCamera()->setClearColor(osg::Vec4(0,0,0,1));
 
-//    osgViewer::Viewer::Windows windows;
-//    viewer.getWindows(windows);
-//    for(osgViewer::Viewer::Windows::iterator itr = windows.begin();
-//        itr != windows.end(); ++itr)   {
-//        (*itr)->getState()->setUseModelViewAndProjectionUniforms(true);
-//        (*itr)->getState()->setUseVertexAttributeAliasing(true);
-//    }
+    osgViewer::Viewer::Windows windows;
+    viewer.getWindows(windows);
+    for(osgViewer::Viewer::Windows::iterator itr = windows.begin();
+        itr != windows.end(); ++itr)   {
+        (*itr)->getState()->setUseModelViewAndProjectionUniforms(true);
+        (*itr)->getState()->setUseVertexAttributeAliasing(true);
+    }
 
     return viewer.run();
 }

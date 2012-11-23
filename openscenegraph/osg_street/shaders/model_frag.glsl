@@ -1,9 +1,15 @@
 //precision mediump float;
 
 // varying to define color
-varying vec4 v_color;
+varying vec2 TexCoord1;
 
 void main()
 {
-   gl_FragColor = vec4(0,1,0.5,1);
+    float cVal = fract(TexCoord1.y*80.0); //sin(TexCoord1.y*16.0);
+    if(cVal > 0.5)
+    {   cVal = 1.0;   }
+    else
+    {   cVal = 0.0;   }
+
+    gl_FragColor = vec4(cVal,cVal,cVal,1.0);
 }
