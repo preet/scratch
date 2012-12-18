@@ -11,6 +11,8 @@
 #include <osg/Uniform>
 #include <osg/CullFace>
 
+#include <osmscout/Database.h>
+
 #include <vector>
 
 #include "Vec2.hpp"
@@ -88,7 +90,9 @@ enum OutlineType
 };
 
 void GetStreetVx(std::vector<Vec3> &listVx);
+void GetStreetVx(osmscout::Id,std::vector<Vec3> &listVx);
 
+/*
 void buildPolylineAsTriStrip(std::vector<Vec3> const &listPolylineVx,
                              double const polylineWidth,
                              std::vector<Vec3> &listVx,
@@ -182,11 +186,13 @@ void buildPolylineAsTriStrip(std::vector<Vec3> const &listPolylineVx,
             Vec3 edgeNext = (listPolylineVx[i+1]-listPolylineVx[i]).Normalized();
             Vec3 edgeBisect = edgePrev+edgeNext;
             double edgeBisectLength = edgeBisect.Magnitude();
+//            std::cout << "edgeBisectLength: " << edgeBisectLength << "\n";
 
             // special case: collinear edges
-            if(edgeBisectLength < K_EPS)   {
-                listOffsetPtsL[idx+1] = listOffsetPtsR[idx+1];
-                listOffsetPtsL[idx+2] = listOffsetPtsR[idx+2];
+            if(edgeBisectLength < 0.001)   {    // 1mm
+                //wtf
+                listOffsetPtsL[idx+1] = listOffsetPtsL[idx+2];//listOffsetPtsR[idx+1];
+                listOffsetPtsR[idx+1] = listOffsetPtsR[idx+2];//listOffsetPtsR[idx+2];
                 continue;
             }
 
@@ -231,6 +237,184 @@ void buildPolylineAsTriStrip(std::vector<Vec3> const &listPolylineVx,
         listTx.push_back(listOffsetTxR[i]);
     }
 }
+*/
+
+void buildPolylineAsLineStrip(std::vector<Vec3> const &listPolylineVx,
+                              std::vector<Vec3> &listVx,
+                              std::vector<Vec2> &listTx)
+{
+    size_t numPts = listPolylineVx.size();
+    double totalLength = 0;
+    std::vector<double> listEdgeDists(numPts,0);
+
+    for(size_t i=1; i < numPts; i++)   {
+        // edge length and total polyline length
+        double edgeLength = (listPolylineVx[i]-listPolylineVx[i-1]).Magnitude();
+        listEdgeDists[i] = listEdgeDists[i-1]+edgeLength;
+        totalLength += edgeLength;
+    }
+
+    listVx = listPolylineVx;
+    size_t k=0;
+    for(size_t i=0; i < numPts; i++)   {
+        // offset texture coordinates
+        listTx.push_back(Vec2(0.0,listEdgeDists[i]/totalLength));
+    }
+}
+
+void buildPolylineAsTriStrip(std::vector<Vec3> const &listPolylineVx,
+                             double const polylineWidth,
+                             std::vector<Vec3> &listVx,
+                             std::vector<Vec2> &listTx,
+                             double &polylineLength)
+{
+    size_t numPts = listPolylineVx.size();
+    size_t numOffsets = (numPts-1)*2;   // 2 for each edge
+    std::vector<Vec3> listOffsetPtsL(numOffsets);
+    std::vector<Vec3> listOffsetPtsR(numOffsets);
+    std::vector<Vec2> listOffsetTxL(numOffsets);
+    std::vector<Vec2> listOffsetTxR(numOffsets);
+
+    Vec3 vecNormal;                     // vector originating at the center of the earth
+                                        // (0,0,0) to a vertex on the way
+
+    Vec3 vecDirn;                       // vector along a given segment on the way
+
+    Vec3 vecOffset;                     // vector normal to both vecPlaneNormal and
+                                        // vecAlongSegment (used to create offset)
+
+    Vec3 vecOffsetL,vecOffsetR;         // offsets from way center
+
+    // keep track of edge distances and total length
+    double totalLength = 0;
+    std::vector<double> listEdgeDists(numPts,0);
+
+    // we offset the polyline on both sides of the
+    // centerline and stitch the resulting shape together
+
+    // to account for self intersections or gaps that occur in
+    // the 'inner' or 'outer' offsets, we use the perpendicular
+    // bisector of the adjoining edges to find the inner edge
+    // intersection and straight lines to fill outer edge gaps
+    // (this provides a bevel/boxed joint effect)
+
+    // in the resulting triangle strip, each 'joint' created
+    // from adjacent edges in the original polyline contains
+    // one degenerate triangle
+
+    // [TODO: in MapRenderer, discard duplicate adjacent vertex data]
+
+    // for each segment, create dirn and offset vecs
+    size_t k=0;
+    double offsetLength = polylineWidth/2;
+    for(size_t i=1; i < numPts; i++)   {
+        // offset vertex coordinates
+        vecNormal = listPolylineVx[i];
+        vecDirn   = listPolylineVx[i]-listPolylineVx[i-1];
+        vecOffset = vecDirn.Cross(vecNormal).Normalized();
+
+        vecOffsetL = vecOffset.ScaledBy(offsetLength);
+        vecOffsetR = vecOffsetL.ScaledBy(-1.0);
+
+        listOffsetPtsL[k] = listPolylineVx[i-1]+vecOffsetL;
+        listOffsetPtsR[k] = listPolylineVx[i-1]+vecOffsetR; k++;
+
+        listOffsetPtsL[k] = listPolylineVx[i]+vecOffsetL;
+        listOffsetPtsR[k] = listPolylineVx[i]+vecOffsetR;   k++;
+
+        // edge length and total polyline length
+        double edgeLength = vecDirn.Magnitude();
+        listEdgeDists[i] = listEdgeDists[i-1]+edgeLength;
+        totalLength += edgeLength;
+    }
+
+    k=0;
+    for(size_t i=1; i < numPts; i++)   {
+        // offset texture coordinates
+        listOffsetTxL[k].x = 0.0;
+        listOffsetTxR[k].x = 1.0;
+        listOffsetTxL[k].y = listEdgeDists[i-1]/totalLength;
+        listOffsetTxR[k].y = listOffsetTxL[k].y;  k++;
+
+        listOffsetTxL[k].x = 0.0;
+        listOffsetTxR[k].x = 1.0;
+        listOffsetTxL[k].y = listEdgeDists[i]/totalLength;
+        listOffsetTxR[k].y = listOffsetTxL[k].y;  k++;
+    }
+
+    if(numPts > 2)   {
+        // we only adjust the join vertices
+        // if there's more than one edge
+        for(size_t i=1; i < numPts-1; i++)
+        {
+//            continue;
+            size_t idx = (i*2)-2;   // first idx for prev edge offset
+
+            // determine the angle between two adjacent edges
+            Vec3 edgePrev = (listPolylineVx[i-1]-listPolylineVx[i]).Normalized();
+            Vec3 edgeNext = (listPolylineVx[i+1]-listPolylineVx[i]).Normalized();
+            Vec3 edgeBisect = edgePrev+edgeNext;
+            double edgeBisectLength = edgeBisect.Magnitude();
+            std::cout << "edgeBisectLength:" << edgeBisect.Magnitude() << ", ";
+
+            // special case: collinear edges
+            if(edgeBisectLength < 0.001)   {
+                listOffsetPtsL[idx+1] = listOffsetPtsL[idx+2];//listOffsetPtsR[idx+1];
+                listOffsetPtsR[idx+1] = listOffsetPtsR[idx+2];//listOffsetPtsR[idx+2];
+                continue;
+            }
+
+            // |AxB| = |A|*|B|*sinTheta
+            double sinTheta = (edgePrev.Cross(edgeBisect)).Magnitude()/
+                    (edgePrev.Magnitude()*edgeBisectLength);
+
+            std::cout << "sinTheta:" << sinTheta << ", ";
+
+            // special case:
+            // * extreme angle between segments
+            // * edge doubles back on itself [bad data]
+            if(sinTheta < 0.33)   {
+                listOffsetPtsL[idx+1] = listOffsetPtsR[idx+2];
+                listOffsetPtsL[idx+2] = listOffsetPtsR[idx+1];
+                continue;
+            }
+
+            // get the vertex coincident with the xsec of adjacent inside edges
+            Vec3 vecBisect = edgeBisect.Normalized().ScaledBy(offsetLength/sinTheta);
+            std::cout << "vecBisect:" << vecBisect.Magnitude() << std::endl;
+            vecBisect = listPolylineVx[i]+vecBisect;
+
+
+            // determine which side (left or right) corresponds
+            // to the inner and outer offsets and move vertices
+            double distToXsecL = listOffsetPtsL[idx+1].Distance2To(vecBisect);
+            double distToXsecR = listOffsetPtsR[idx+1].Distance2To(vecBisect);
+            if(distToXsecL < distToXsecR)   {       // left is the inner offset
+                listOffsetPtsL[idx+1] = vecBisect;
+                listOffsetPtsL[idx+2] = vecBisect;
+            }
+            else   {                                // right is the inner offset
+                listOffsetPtsR[idx+1] = vecBisect;
+                listOffsetPtsR[idx+2] = vecBisect;
+            }
+        }
+    }
+
+    // save vertex data
+    listVx.resize(listOffsetPtsL.size()*2);
+    listTx.resize(listVx.size()); k=0;
+    for(size_t i=0; i < listOffsetPtsL.size(); i++)
+    {   // left
+        listVx[k] = listOffsetPtsL[i];
+        listTx[k] = listOffsetTxL[i];   k++;
+        // right
+        listVx[k] = listOffsetPtsR[i];
+        listTx[k] = listOffsetTxR[i];   k++;
+    }
+
+    // save length
+    polylineLength = totalLength;
+}
 
 void printVector(Vec3 const &myVector)
 {
@@ -257,10 +441,12 @@ int main(int argc, char *argv[])
     shProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT,fShader.toStdString()));
 
     // [geometry]
+    double polylineLength;
     std::vector<Vec3> vxArray,vxTriStrip;
     std::vector<Vec2> txTriStrip;
-    GetStreetVx(vxArray);
-    buildPolylineAsTriStrip(vxArray,2,vxTriStrip,txTriStrip);
+    GetStreetVx(8127449,vxArray);
+    buildPolylineAsTriStrip(vxArray,120,vxTriStrip,txTriStrip,polylineLength);
+//    buildPolylineAsLineStrip(vxArray,vxTriStrip,txTriStrip);
 
     for(size_t i=0; i < vxTriStrip.size(); i++)
     {
@@ -278,7 +464,7 @@ int main(int argc, char *argv[])
         listTx->at(i).y() = txTriStrip[i].y;
     }
 
-    osg::ref_ptr<osg::DrawElementsUInt> listIx = new osg::DrawElementsUInt(GL_TRIANGLE_STRIP);
+    osg::ref_ptr<osg::DrawElementsUInt> listIx = new osg::DrawElementsUInt(GL_LINE_STRIP);
     for(size_t i=0; i < listVx->size(); i++)   {
         listIx->push_back(i);
     }
@@ -318,6 +504,30 @@ int main(int argc, char *argv[])
     }
 
     return viewer.run();
+}
+
+void GetStreetVx(osmscout::Id wayId,
+                 std::vector<Vec3> &listVx)
+{
+    bool opOk = false;
+    osmscout::DatabaseParameter databaseParam;
+    osmscout::Database database(databaseParam);
+
+    opOk = database.Open("/home/preet/Documents/maps/openstreetmap/london_render");
+    if(!opOk)   {   std::cout << "ERROR Opening database\n";   return; }
+
+    osmscout::WayRef wayRef;
+    opOk = database.GetWay(wayId,wayRef);
+    if(!opOk)   {   std::cout << "ERROR Finding way " << size_t(wayId) <<"\n";   return; }
+
+    listVx.clear();
+    for(size_t i=0; i < wayRef->nodes.size(); i++)   {
+        PointLLA pointLLA(wayRef->nodes[i].GetLat(),
+                          wayRef->nodes[i].GetLon());
+        listVx.push_back(convLLAToECEF(pointLLA));
+    }
+
+    database.Close();
 }
 
 void GetStreetVx(std::vector<Vec3> &listVx)
