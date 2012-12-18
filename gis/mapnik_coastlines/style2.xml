@@ -1,8 +1,8 @@
 
-<Map background-color="steelblue" srs="+init=epsg:4326">
+<Map background-color="white" srs="+init=epsg:4326">
    <Style name="MyStyle">
       <Rule>
-         <PolygonSymbolizer fill="#f2eff9" />
+         <PolygonSymbolizer fill="#000000" />
       </Rule>
    </Style>
 
@@ -10,7 +10,7 @@
       <StyleName>MyStyle</StyleName>
       <Datasource>
          <Parameter name="type">shape</Parameter>
-         <Parameter name="file">/home/preet/Documents/maps/admin1/ne_10m_admin_1_states_provinces_shp.shp</Parameter>
+         <Parameter name="file">/home/preet/Documents/maps/shapefiles/coastline/ned_coast/ne_50m_coastline.shp</Parameter>
       </Datasource>
    </Layer>
 </Map>

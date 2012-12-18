@@ -1,7 +1,7 @@
 {
    "IMPORTCONFIG":
    {
-      "mapfile":"/home/preet/Documents/maps/openstreetmap/ontario.osm.pbf",
+      "mapfile":"/home/preet/Documents/maps/openstreetmap/toronto.osm.pbf",
       "typefile":"/home/preet/Dev/env/sys/libosmscout/map.ost",
       
       "startStep":1,

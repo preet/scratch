@@ -13,7 +13,7 @@ longlat = mapnik.Projection('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
 
 stylesheet = 'style2.xml'
 image = 'world_outline.png'
-m = mapnik.Map(1024,1024)
+m = mapnik.Map(3600,1800)
 mapnik.load_map(m, stylesheet)
 #bbox = mapnik.Envelope(-80,39.2,-77,42.2)
 #bbox = mapnik.Envelope(-80,39.2,-77,42.2)

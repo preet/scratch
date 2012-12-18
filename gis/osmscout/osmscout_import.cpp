@@ -306,7 +306,7 @@ int main(int argc, char *argv[])
     parameter.SetAssumeLand(assumeLand);
 
     std::cout << "========================================" << std::endl;
-    std::cout << "Starting Import...";
+    std::cout << "Starting Import..." << std::endl;
     std::cout << "========================================" << std::endl;
 
     if (osmscout::Import(parameter,progress))

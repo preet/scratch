@@ -174,7 +174,7 @@ int main(int argc, char *argv[])
 
         k++; p--;
         osg::ref_ptr<osg::Vec3dArray> gmCoastVx = new osg::Vec3dArray;
-        gmCoastVx->push_back(osg::Vec3d(0,0,0));
+//        gmCoastVx->push_back(osg::Vec3d(0,0,0));
         osg::ref_ptr<osg::Vec4Array> gmCoastCx = new osg::Vec4Array;
         ListTiles &listT = cellIt->second;
         for(size_t i=0; i < listT.size(); i++)
@@ -237,6 +237,7 @@ int main(int argc, char *argv[])
                 lineStart = lineEnd+1;
             }
         }
+        gmCoastVx->pop_back();
 
         // random color
         osg::Vec4 color(randomIntensity(gmCoastVx->size()),
@@ -244,27 +245,41 @@ int main(int argc, char *argv[])
                         randomIntensity(p),1.0);
         gmCoastCx->push_back(color);
 
-        if(gmCoastVx->size() > 2)   {
+        if(gmCoastVx->size() > 0)   {
+
             osg::ref_ptr<osg::DrawElementsUInt> gmCoastIx =
                     new osg::DrawElementsUInt(GL_LINES);
 
-            for(size_t i=1; i < gmCoastVx->size()-1; i++)
+//            for(size_t i=0; i < gmCoastVx->size(); i++)
+//            {
+//                osg::Vec3d vx = gmCoastVx->at(i);
+//                if((vx.x() == 0) && (vx.y() == 0) && (vx.z() == 0))
+//                {   std::cout << i << "isNewSegment" << std::endl;
+//                    continue;   }
+//                gmCoastIx->push_back(i);
+//            }
+
+            bool newSegment = false;
+            for(size_t i=0; i < gmCoastVx->size(); i++)
             {
                 osg::Vec3d vx = gmCoastVx->at(i);
                 if((vx.x() == 0) && (vx.y() == 0) && (vx.z() == 0))
-                {   continue;   }
+                {   std::cout << i << "isNewSegment" << std::endl;
+                    newSegment = true; continue;   }
 
-                gmCoastIx->push_back(i);
-                gmCoastIx->push_back(i);
-
-                vx = gmCoastVx->at(i-1);
-                if((vx.x() == 0) && (vx.y() == 0) && (vx.z() == 0))
-                {   gmCoastIx->pop_back();   continue;   }
-
-                vx = gmCoastVx->at(i+1);
-                if((vx.x() == 0) && (vx.y() == 0) && (vx.z() == 0))
-                {   gmCoastIx->pop_back();   continue;   }
+                if(newSegment)   {
+                    gmCoastIx->pop_back();
+                    gmCoastIx->push_back(i);
+                    newSegment = false;
+                }
+                else   {
+                    gmCoastIx->push_back(i);
+                    gmCoastIx->push_back(i);
+                }
             }
+
+            gmCoastIx->erase(gmCoastIx->begin());
+            gmCoastIx->pop_back();
 
             osg::ref_ptr<osg::Geometry> gmCoastTile = new osg::Geometry;
             gmCoastTile->setVertexArray(gmCoastVx);

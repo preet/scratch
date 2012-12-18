@@ -2,7 +2,7 @@ TEMPLATE = app
 CONFIG += link_pkgconfig debug
 PKGCONFIG += openthreads openscenegraph
 
-OPENCTM = ../../polytoolkit/openctm
+OPENCTM = ../../gis/polytoolkit/openctm
 INCLUDEPATH += $${OPENCTM}
 
 #liblzma

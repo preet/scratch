@@ -74,13 +74,19 @@ Vx ConvLLAToECEF(const PointLLA &pointLLA)
 
 int main(int argc, const char *argv[])
 {
-    if(argc != 3)   {
-        std::cout << "Usage: #> ./pcl_wkt_to_ctm inputfile.csv outputfile.ctm\n";
+    if(argc != 4)   {
+        std::cout << "Usage: #> ./pcl_wkt_to_ctm inputfile.csv outputfile.ctm TYPE\n";
         std::cout << " * Expect each line of input to contain a single WKT def\n";
         std::cout << " * The output file is an OpenCTM file containing point data\n";
         std::cout << " * You can create the input file from a shapefile with gdal's ogr tools:\n";
         std::cout << "   ogr2ogr -f CSV file.csv shape.shp -lco -nlt POLYGON -select \"\"\n";
+        std::cout << " * TYPE is either POLYGON or LINESTRING \n";
     }
+
+    bool TYPE_IS_POLYGON = false;
+    std::string geoTypeStr = argv[3];
+    if(geoTypeStr.compare(std::string("POLYGON")) == 0)
+    {   TYPE_IS_POLYGON = true;   }
 
     std::ifstream inputWktFile;
     inputWktFile.open(argv[1]);
@@ -118,39 +124,60 @@ int main(int argc, const char *argv[])
             }
             delete[] inputWKTRef;
 
-            if(!(inputGeometry->getGeometryType() == wkbPolygon))   {
-                std::cout << "Warn: WKT is not POLYGON (ignoring)" << std::endl;
-                std::cout << "-> " << wktLine << std::endl;
-                continue;
-            }
+            if(TYPE_IS_POLYGON)
+            {
+                if(!(inputGeometry->getGeometryType() == wkbPolygon))   {
+                    std::cout << "Warn: WKT is not POLYGON (ignoring)" << std::endl;
+                    std::cout << "-> " << wktLine << std::endl;
+                    continue;
+                }
 
-            // WKT_POLYGON // one outer ring, multiple inner rings
+                // WKT_POLYGON // one outer ring, multiple inner rings
+                OGRPolygon *singlePoly = (OGRPolygon*)inputGeometry;
 
-            OGRPolygon *singlePoly = (OGRPolygon*)inputGeometry;
+                // outer ring
+                OGRLinearRing *outerRing = singlePoly->getExteriorRing();
 
-            // outer ring
-            OGRLinearRing *outerRing = singlePoly->getExteriorRing();
-
-            // (0,0,0) signals a new ring (inner or outer)
-            myVx.x = 0; myVx.y = 0; myVx.z = 0; listVx.push_back(myVx);
-            for(size_t i=0; i < outerRing->getNumPoints(); i++)   {
-                PointLLA pointLLA(outerRing->getY(i),outerRing->getX(i));
-                myVx = ConvLLAToECEF(pointLLA);
-                listVx.push_back(myVx);
-            }
-
-            // inner rings
-            for(size_t n=0; n < singlePoly->getNumInteriorRings(); n++)   {
-                OGRLinearRing * innerRing = singlePoly->getInteriorRing(n);
-
+                // (0,0,0) signals a new ring (inner or outer)
                 myVx.x = 0; myVx.y = 0; myVx.z = 0; listVx.push_back(myVx);
-                for(size_t i=0; i < innerRing->getNumPoints(); i++)    {
-                    PointLLA pointLLA(innerRing->getY(i),innerRing->getX(i));
+                for(size_t i=0; i < outerRing->getNumPoints(); i++)   {
+                    PointLLA pointLLA(outerRing->getY(i),outerRing->getX(i));
+                    myVx = ConvLLAToECEF(pointLLA);
+                    listVx.push_back(myVx);
+                }
+
+                // inner rings
+                for(size_t n=0; n < singlePoly->getNumInteriorRings(); n++)   {
+                    OGRLinearRing * innerRing = singlePoly->getInteriorRing(n);
+
+                    myVx.x = 0; myVx.y = 0; myVx.z = 0; listVx.push_back(myVx);
+                    for(size_t i=0; i < innerRing->getNumPoints(); i++)    {
+                        PointLLA pointLLA(innerRing->getY(i),innerRing->getX(i));
+                        myVx = ConvLLAToECEF(pointLLA); listVx.push_back(myVx);
+                        listVx.push_back(myVx);
+                    }
+                }
+                delete inputGeometry;
+            }
+            else    // LINESTRING
+            {
+                if(!(inputGeometry->getGeometryType() == wkbLineString))   {
+                    std::cout << "Warn: WKT is not LINESTRING (ignoring)" << std::endl;
+                    std::cout << "-> " << wktLine << std::endl;
+                    continue;
+                }
+
+                OGRLineString * lineString = (OGRLineString*)inputGeometry;
+
+                // (0,0,0) signals the start of a new line string
+                myVx.x = 0;  myVx.y = 0;  myVx.z = 0;  listVx.push_back(myVx);
+                for(size_t i=0; i < lineString->getNumPoints(); i++)   {
+                    PointLLA pointLLA(lineString->getY(i),lineString->getX(i));
                     myVx = ConvLLAToECEF(pointLLA); listVx.push_back(myVx);
                     listVx.push_back(myVx);
                 }
+                delete inputGeometry;
             }
-            delete inputGeometry;
         }
         inputWktFile.close();
 

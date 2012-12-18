@@ -194,6 +194,15 @@ void buildPolylineAsTriStrip(std::vector<Vec3> const &listPolylineVx,
             double sinTheta = (edgePrev.Cross(edgeBisect)).Magnitude()/
                     (edgePrev.Magnitude()*edgeBisectLength);
 
+            // special case: edge doubles back on itself [bad data]
+            if(sinTheta < K_EPS)   {
+                listOffsetPtsL[idx+1] = listOffsetPtsR[idx+2];
+                listOffsetPtsL[idx+2] = listOffsetPtsR[idx+1];
+                continue;
+            }
+
+            qDebug() << "SINTHETA " << sinTheta << ", EDGEBISECTLENGTH " << edgeBisectLength;
+
             // get the vertex coincident with the xsec of adjacent inside edges
             Vec3 vecBisect = edgeBisect.Normalized().ScaledBy(offsetLength/sinTheta);
             vecBisect = listPolylineVx[i]+vecBisect;
@@ -223,10 +232,17 @@ void buildPolylineAsTriStrip(std::vector<Vec3> const &listPolylineVx,
     }
 }
 
+void printVector(Vec3 const &myVector)
+{
+    qDebug() << "### > " << myVector.x
+             << " " << myVector.y
+             << " " << myVector.z;
+}
+
 int main(int argc, char *argv[])
 {
     // set debug severity
-//    osg::setNotifyLevel(osg::DEBUG_INFO);
+    osg::setNotifyLevel(osg::ALWAYS);
 
     // add shaders to openscenegraph
     osg::ref_ptr<osg::Program> shProgram = new osg::Program;
@@ -245,6 +261,11 @@ int main(int argc, char *argv[])
     std::vector<Vec2> txTriStrip;
     GetStreetVx(vxArray);
     buildPolylineAsTriStrip(vxArray,2,vxTriStrip,txTriStrip);
+
+    for(size_t i=0; i < vxTriStrip.size(); i++)
+    {
+        printVector(vxTriStrip[i]);
+    }
 
     osg::ref_ptr<osg::Vec3Array> listVx = new osg::Vec3Array(vxTriStrip.size());
     osg::ref_ptr<osg::Vec2Array> listTx = new osg::Vec2Array(txTriStrip.size());
@@ -286,7 +307,7 @@ int main(int argc, char *argv[])
     viewer.setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
     viewer.setUpViewInWindow(100,100,800,480);
     viewer.setSceneData(groupRoot.get());
-    viewer.getCamera()->setClearColor(osg::Vec4(0,0,0,1));
+//    viewer.getCamera()->setClearColor(osg::Vec4(0,0,0,1));
 
     osgViewer::Viewer::Windows windows;
     viewer.getWindows(windows);
@@ -302,6 +323,25 @@ int main(int argc, char *argv[])
 void GetStreetVx(std::vector<Vec3> &listVx)
 {
     std::vector<PointLLA> wayPointsLLA;
+
+    // WAY ID 22688985
+//    wayPointsLLA.push_back(PointLLA(43.6762198, -79.3998242));
+//    wayPointsLLA.push_back(PointLLA(43.6763392, -79.3994667));
+//    wayPointsLLA.push_back(PointLLA(43.6766179, -79.3981721));
+
+    // ??
+//    wayPointsLLA.push_back(PointLLA(43.67622, -79.399824));
+//    wayPointsLLA.push_back(PointLLA(43.676339, -79.399467));
+//    wayPointsLLA.push_back(PointLLA(43.676618, -79.398172));
+    wayPointsLLA.push_back(PointLLA(43.676987, -79.398323));
+    wayPointsLLA.push_back(PointLLA(43.677038, -79.398343));
+    wayPointsLLA.push_back(PointLLA(43.676987, -79.398323));
+//    wayPointsLLA.push_back(PointLLA(43.676618, -79.398172));
+//    wayPointsLLA.push_back(PointLLA(43.676636, -79.397989));
+//    wayPointsLLA.push_back(PointLLA(43.676556, -79.397963));
+//    wayPointsLLA.push_back(PointLLA(43.676244, -79.397838));
+//    wayPointsLLA.push_back(PointLLA(43.675483, -79.397543));
+//    wayPointsLLA.push_back(PointLLA( 43.675437, -79.397525));
 
     // WAY ID 69844700
 //    wayPointsLLA.push_back(PointLLA(43.6690187, -79.3843227));
@@ -324,46 +364,46 @@ void GetStreetVx(std::vector<Vec3> &listVx)
 //    wayPointsLLA.push_back(PointLLA(43.7682636, -79.2488975));
 
     // STELVIO PASS ITALY
-    wayPointsLLA.push_back(PointLLA(46.5315501, 10.4564453));
-    wayPointsLLA.push_back(PointLLA(46.5315220, 10.4564494));
-    wayPointsLLA.push_back(PointLLA(46.5314896, 10.4564166));
-    wayPointsLLA.push_back(PointLLA(46.5313572, 10.4561587));
-    wayPointsLLA.push_back(PointLLA(46.5312671, 10.4559397));
-    wayPointsLLA.push_back(PointLLA(46.5311671, 10.4558128));
-    wayPointsLLA.push_back(PointLLA(46.5310362, 10.4557330));
-    wayPointsLLA.push_back(PointLLA(46.5304194, 10.4555181));
-    wayPointsLLA.push_back(PointLLA(46.5301335, 10.4552397));
-    wayPointsLLA.push_back(PointLLA(46.5300884, 10.4552233));
-    wayPointsLLA.push_back(PointLLA(46.5300068, 10.4552315));
-    wayPointsLLA.push_back(PointLLA(46.5298772, 10.4552622));
-    wayPointsLLA.push_back(PointLLA(46.5296026, 10.4553093));
-    wayPointsLLA.push_back(PointLLA(46.5294699, 10.4553312));
-    wayPointsLLA.push_back(PointLLA(46.5294350, 10.4553525));
-    wayPointsLLA.push_back(PointLLA(46.5294192, 10.4553885));
-    wayPointsLLA.push_back(PointLLA(46.5294192, 10.4554343));
-    wayPointsLLA.push_back(PointLLA(46.5294328, 10.4554622));
-    wayPointsLLA.push_back(PointLLA(46.5294598, 10.4554704));
-    wayPointsLLA.push_back(PointLLA(46.5299544, 10.4553508));
-    wayPointsLLA.push_back(PointLLA(46.5299746, 10.4553508));
-    wayPointsLLA.push_back(PointLLA(46.5299904, 10.4553705));
-    wayPointsLLA.push_back(PointLLA(46.5300006, 10.4554114));
-    wayPointsLLA.push_back(PointLLA(46.5299938, 10.4554458));
-    wayPointsLLA.push_back(PointLLA(46.5299713, 10.4554785));
-    wayPointsLLA.push_back(PointLLA(46.5299082, 10.4555015));
-    wayPointsLLA.push_back(PointLLA(46.5295071, 10.4555981));
-    wayPointsLLA.push_back(PointLLA(46.5294508, 10.4556325));
-    wayPointsLLA.push_back(PointLLA(46.5294226, 10.4556734));
-    wayPointsLLA.push_back(PointLLA(46.5294238, 10.4557127));
-    wayPointsLLA.push_back(PointLLA(46.5294395, 10.4557373));
-    wayPointsLLA.push_back(PointLLA(46.5294711, 10.4557422));
-    wayPointsLLA.push_back(PointLLA(46.5295758, 10.4557258));
-    wayPointsLLA.push_back(PointLLA(46.5298124, 10.4556587));
-    wayPointsLLA.push_back(PointLLA(46.5298823, 10.4556701));
-    wayPointsLLA.push_back(PointLLA(46.5299431, 10.4556865));
-    wayPointsLLA.push_back(PointLLA(46.5300006, 10.4557438));
-    wayPointsLLA.push_back(PointLLA(46.5301110, 10.4558928));
-    wayPointsLLA.push_back(PointLLA(46.5302901, 10.4561352));
-    wayPointsLLA.push_back(PointLLA(46.5306033, 10.4564070));
+//    wayPointsLLA.push_back(PointLLA(46.5315501, 10.4564453));
+//    wayPointsLLA.push_back(PointLLA(46.5315220, 10.4564494));
+//    wayPointsLLA.push_back(PointLLA(46.5314896, 10.4564166));
+//    wayPointsLLA.push_back(PointLLA(46.5313572, 10.4561587));
+//    wayPointsLLA.push_back(PointLLA(46.5312671, 10.4559397));
+//    wayPointsLLA.push_back(PointLLA(46.5311671, 10.4558128));
+//    wayPointsLLA.push_back(PointLLA(46.5310362, 10.4557330));
+//    wayPointsLLA.push_back(PointLLA(46.5304194, 10.4555181));
+//    wayPointsLLA.push_back(PointLLA(46.5301335, 10.4552397));
+//    wayPointsLLA.push_back(PointLLA(46.5300884, 10.4552233));
+//    wayPointsLLA.push_back(PointLLA(46.5300068, 10.4552315));
+//    wayPointsLLA.push_back(PointLLA(46.5298772, 10.4552622));
+//    wayPointsLLA.push_back(PointLLA(46.5296026, 10.4553093));
+//    wayPointsLLA.push_back(PointLLA(46.5294699, 10.4553312));
+//    wayPointsLLA.push_back(PointLLA(46.5294350, 10.4553525));
+//    wayPointsLLA.push_back(PointLLA(46.5294192, 10.4553885));
+//    wayPointsLLA.push_back(PointLLA(46.5294192, 10.4554343));
+//    wayPointsLLA.push_back(PointLLA(46.5294328, 10.4554622));
+//    wayPointsLLA.push_back(PointLLA(46.5294598, 10.4554704));
+//    wayPointsLLA.push_back(PointLLA(46.5299544, 10.4553508));
+//    wayPointsLLA.push_back(PointLLA(46.5299746, 10.4553508));
+//    wayPointsLLA.push_back(PointLLA(46.5299904, 10.4553705));
+//    wayPointsLLA.push_back(PointLLA(46.5300006, 10.4554114));
+//    wayPointsLLA.push_back(PointLLA(46.5299938, 10.4554458));
+//    wayPointsLLA.push_back(PointLLA(46.5299713, 10.4554785));
+//    wayPointsLLA.push_back(PointLLA(46.5299082, 10.4555015));
+//    wayPointsLLA.push_back(PointLLA(46.5295071, 10.4555981));
+//    wayPointsLLA.push_back(PointLLA(46.5294508, 10.4556325));
+//    wayPointsLLA.push_back(PointLLA(46.5294226, 10.4556734));
+//    wayPointsLLA.push_back(PointLLA(46.5294238, 10.4557127));
+//    wayPointsLLA.push_back(PointLLA(46.5294395, 10.4557373));
+//    wayPointsLLA.push_back(PointLLA(46.5294711, 10.4557422));
+//    wayPointsLLA.push_back(PointLLA(46.5295758, 10.4557258));
+//    wayPointsLLA.push_back(PointLLA(46.5298124, 10.4556587));
+//    wayPointsLLA.push_back(PointLLA(46.5298823, 10.4556701));
+//    wayPointsLLA.push_back(PointLLA(46.5299431, 10.4556865));
+//    wayPointsLLA.push_back(PointLLA(46.5300006, 10.4557438));
+//    wayPointsLLA.push_back(PointLLA(46.5301110, 10.4558928));
+//    wayPointsLLA.push_back(PointLLA(46.5302901, 10.4561352));
+//    wayPointsLLA.push_back(PointLLA(46.5306033, 10.4564070));
 
     // convert to ECEF
     listVx.resize(wayPointsLLA.size());
