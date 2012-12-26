@@ -13,8 +13,10 @@ SOURCES += main.cpp
             LIBS += -L$${OSGLIBDIR} -losg
             LIBS += -L$${OSGLIBDIR} -lOpenThreads
 
-moreFiles.path = $$OUT_PWD
-moreFiles.files += \
-    shaders
+ifonts.path = $$OUT_PWD
+ifonts.files += *.ttf
 
-INSTALLS += moreFiles
+ishaders.path = $$OUT_PWD
+ishaders.files += shaders/*
+
+INSTALLS += ifonts ishaders
