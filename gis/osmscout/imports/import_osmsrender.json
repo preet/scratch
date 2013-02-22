@@ -1,17 +1,17 @@
 {
    "IMPORTCONFIG":
    {
-      "mapfile":"/home/preet/Documents/maps/openstreetmap/toronto.osm.pbf",
-      "typefile":"/home/preet/Dev/projects/libosmscout-render/res/map_render_new_debug.ost",
+      "mapfile":"/home/preet/temp/toronto.osm.pbf",
+      "typefile":"/home/preet/Dev/projects/osmsrender/res/map_render.ost",
       
       "startStep":1,
       "endStep":21,
       
       "strictAreas":false,
       
-      "renumberIds":false,
-      "renumberBlockSize":40000000,
-      "renumberMag":14,
+      "sortObjects":true,
+      "sortBlockSize":40000000,
+      "sortTileMag":13,
       
       "numericIndexPageSize":4096,
       
@@ -46,10 +46,10 @@
       "areaNodeIndexCellSizeAverage":16,
       "areaNodeIndexCellSizeMax":256,
       
-      "waterIndexMinMag":7,
-      "waterIndexMaxMag":7,
+      "waterIndexMinMag":6,
+      "waterIndexMaxMag":14,
       
-      "optimizationMaxWayCount":1000000,
+      "optimizationMaxWayCount":0,
       "optimizationMaxMag":10,
       "optimizationMinMag":6,
       "optimizationCellSizeAverage":16,

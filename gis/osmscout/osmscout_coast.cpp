@@ -119,11 +119,11 @@ int main(int argc, char *argv[])
     //    magBlock     = 2*2*2*2*2*2*1024  // 16
 
     int mapZoom = atoi(argv[2]);
-    osmscout::Mag mapMag = osmscout::Mag(size_t(pow(2,mapZoom)));
+    osmscout::Magnification mag; mag.SetLevel(size_t(mapZoom));
 
     // get tiles
     std::list<osmscout::GroundTile> listTiles;
-    opOk = database.GetGroundTiles(minLon-1.3,minLat-1.3,maxLon+1.3,maxLat+1.3,mapMag,listTiles);
+    opOk = database.GetGroundTiles(minLon-1.3,minLat-1.3,maxLon+1.3,maxLat+1.3,mag.GetMagnification(),listTiles);
     if(!opOk)  {   std::cerr << "ERROR: Could not get ground tiles\n"; return -1;   }
 
     std::cerr << "INFO: Found " << listTiles.size()
@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
         if(tileIt->coords.size() == 0)
         {   continue;   }
 
-        size_t cellId = genCellId(tileIt->xAbs,tileIt->yAbs,mapMag);
+        size_t cellId = genCellId(tileIt->xAbs,tileIt->yAbs,mag.GetLevel());
         findIt = listTilesByCell.find(cellId);
         if(findIt == listTilesByCell.end())     // dne
         {

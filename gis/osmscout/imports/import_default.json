@@ -9,9 +9,9 @@
       
       "strictAreas":false,
       
-      "renumberIds":false,
-      "renumberBlockSize":40000000,
-      "renumberMag":14,
+      "sortObjects":true,
+      "sortBlockSize":40000000,
+      "sortTileMag":13,
       
       "numericIndexPageSize":4096,
       
@@ -56,7 +56,7 @@
       "optimizationCellSizeMax":256,
       "optimizationWayMethod":"TransPolygon::fast",
       
-      "routeNodeBlockSize":1500000,
+      "routeNodeBlockSize":500000,
       
       "assumeLand":true
    }

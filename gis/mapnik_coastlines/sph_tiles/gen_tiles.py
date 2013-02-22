@@ -36,7 +36,7 @@ vMap.layers.append(vLayer)
 
 ### ======================================
 ### Save tiles based on zoom level
-vMaxZoom = 6;
+vMaxZoom = 9;
 vWorldMinLon = None;
 vDirName  = None;
 
@@ -61,13 +61,13 @@ for x in range(0,2):
 		for lon in range(0,numDivs):
 			minLon = vWorldMinLon + (lon*lonStep);
 			maxLon = vWorldMinLon + ((lon+1)*lonStep);
-			print '  lon: [' + str(minLon) + ' to ' + str(maxLon) + ']';
+			#print '  lon: [' + str(minLon) + ' to ' + str(maxLon) + ']';
 			
 			# lat divisions
 			for lat in range(0,numDivs):
 				minLat = -90.0 + (lat*latStep);
 				maxLat = -90.0 + ((lat+1)*latStep);
-				print '    lat: [' + str(minLat) + ' to ' + str(maxLat) + ']';
+				#print '    lat: [' + str(minLat) + ' to ' + str(maxLat) + ']';
 						
 				bbox = mapnik.Envelope(minLon,minLat,maxLon,maxLat);
 				vMap.zoom_to_box(bbox);

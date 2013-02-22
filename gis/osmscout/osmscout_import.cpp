@@ -119,9 +119,9 @@ int main(int argc, char *argv[])
 
     bool strictAreas;
 
-    bool renumberIds;
-    size_t renumberBlockSize;
-    size_t renumberMag;
+    bool sortObjects;
+    size_t sortBlockSize;
+    size_t sortTileMag;
 
     size_t numericIndexPageSize;
 
@@ -181,9 +181,9 @@ int main(int argc, char *argv[])
 
     opOk = opOk && GetImportParamAsBool(jImportConfig,"strictAreas",strictAreas);
 
-    opOk = opOk && GetImportParamAsBool(jImportConfig,"renumberIds",renumberIds);
-    opOk = opOk && GetImportParamAsInt(jImportConfig,"renumberBlockSize",renumberBlockSize);
-    opOk = opOk && GetImportParamAsInt(jImportConfig,"renumberMag",renumberMag);
+    opOk = opOk && GetImportParamAsBool(jImportConfig,"sortObjects",sortObjects);
+    opOk = opOk && GetImportParamAsInt(jImportConfig,"sortBlockSize",sortBlockSize);
+    opOk = opOk && GetImportParamAsInt(jImportConfig,"sortTileMag",sortTileMag);
 
     opOk = opOk && GetImportParamAsInt(jImportConfig,"numericIndexPageSize",numericIndexPageSize);
 
@@ -249,9 +249,9 @@ int main(int argc, char *argv[])
 
     parameter.SetStrictAreas(strictAreas);
 
-    parameter.SetRenumberIds(renumberIds);
-    parameter.SetRenumberBlockSize(renumberBlockSize);
-    parameter.SetRenumberMag(renumberMag);
+    parameter.SetSortObjects(sortObjects);
+    parameter.SetSortBlockSize(sortBlockSize);
+    parameter.SetSortTileMag(sortTileMag);
 
     parameter.SetNumericIndexPageSize(numericIndexPageSize);
 
