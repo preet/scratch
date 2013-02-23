@@ -286,7 +286,7 @@ It's possible the app didn't work. If something is wrong, the app might seem to 
 
 `$ blackberry-deploy -getfile logs/log log.txt -device <device ip> -password <device pass> qml_helloworld.bar`
 
-Some common problems are missing/wrong libs (ie you deployed simulator libs to the device or vice-versa) and incorrect asset paths. 
+Some common problems are missing/wrong libs (ie you deployed simulator libs to the device or vice-versa) and incorrect asset paths. Note that in addition to the log, you can also get the *.core file [executablename.core] in the logs directory for post mortem debugging.
 
 ### Application file structure  
 It can be helpful to see how the application directory is laid out to help with debugging or planning out your application's file structure. There's more information on file structure available on [RIM's website](https://developer.blackberry.com/native/documentation/com.qnx.doc.native_sdk.devguide/com.qnx.doc.native_sdk.devguide/topic/accessible_folders.html). You can ssh to the device/simulator to browse your app's directory as well:
