@@ -119,11 +119,15 @@ int main(int argc, char *argv[])
     //    magBlock     = 2*2*2*2*2*2*1024  // 16
 
     int mapZoom = atoi(argv[2]);
-    osmscout::Magnification mag; mag.SetLevel(size_t(mapZoom));
+    osmscout::Magnification mag;
+    mag.SetLevel(size_t(mapZoom));
 
     // get tiles
     std::list<osmscout::GroundTile> listTiles;
-    opOk = database.GetGroundTiles(minLon-1.3,minLat-1.3,maxLon+1.3,maxLat+1.3,mag.GetMagnification(),listTiles);
+    opOk = database.GetGroundTiles(minLon-1.3,minLat-1.3,
+                                   maxLon+1.3,maxLat+1.3,
+                                   64.0,listTiles);
+
     if(!opOk)  {   std::cerr << "ERROR: Could not get ground tiles\n"; return -1;   }
 
     std::cerr << "INFO: Found " << listTiles.size()
@@ -168,6 +172,7 @@ int main(int argc, char *argv[])
     size_t k=0; size_t p=90000000;
 
     double kMinLat,kMaxLat,kMinLon,kMaxLon;
+    double cellWidth, cellHeight;
     for(cellIt = listTilesByCell.begin();
         cellIt != listTilesByCell.end(); ++cellIt)
     {   // for every cell
@@ -184,6 +189,9 @@ int main(int argc, char *argv[])
             kMaxLat = kMinLat + tilePtr->cellHeight;
             kMinLon = tilePtr->xAbs*tilePtr->cellWidth-180.0;
             kMaxLon = kMinLon + tilePtr->cellWidth;
+
+            cellWidth = tilePtr->cellWidth;
+            cellHeight = tilePtr->cellHeight;
 
             // BUILD CELL BORDERS
             osg::ref_ptr<osg::Vec3dArray> gmTileVx = new osg::Vec3dArray;
@@ -239,6 +247,11 @@ int main(int argc, char *argv[])
         }
         gmCoastVx->pop_back();
 
+//        std::cout << "deltaMinLon: " << kMaxLon-kMinLon << std::endl;
+//        std::cout << "deltaMinLat: " << kMaxLat-kMinLat << std::endl;
+        std::cout << "cellHeight: " << cellHeight << std::endl;
+        std::cout << "cellWidth: " << cellWidth << std::endl;
+
         // random color
         osg::Vec4 color(randomIntensity(gmCoastVx->size()),
                         randomIntensity(k),
@@ -264,7 +277,8 @@ int main(int argc, char *argv[])
             {
                 osg::Vec3d vx = gmCoastVx->at(i);
                 if((vx.x() == 0) && (vx.y() == 0) && (vx.z() == 0))
-                {   std::cout << i << "isNewSegment" << std::endl;
+                {
+                    //std::cout << i << "isNewSegment" << std::endl;
                     newSegment = true; continue;   }
 
                 if(newSegment)   {

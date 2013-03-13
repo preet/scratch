@@ -93,7 +93,7 @@ NUM_IMG = NUM_IMG + 1;
 ### ======================================
 ### Save tiles based on zoom level
 print '* building feature tiles...';
-MAX_ZOOM = 3;
+MAX_ZOOM = 7;
 for z in range(MAX_ZOOM+1):
 	print '  [level: ' + str(z) + ']';
 	
@@ -105,7 +105,7 @@ for z in range(MAX_ZOOM+1):
 	
 	# lon divs
 	for lon in range(0,lon_divs):
-		min_lon = lon * lon_step-180.0;
+		min_lon = lon * lon_step - 180.0;
 		max_lon = min_lon + lon_step;
 		
 		# lat divs

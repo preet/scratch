@@ -36,7 +36,7 @@ vMap.layers.append(vLayer)
 
 ### ======================================
 ### Save tiles based on zoom level
-vMaxZoom = 9;
+vMaxZoom = 7;
 vWorldMinLon = None;
 vDirName  = None;
 
