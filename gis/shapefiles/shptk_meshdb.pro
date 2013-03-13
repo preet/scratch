@@ -3,13 +3,31 @@ CONFIG   -= qt
 TEMPLATE = app
 
 # main
-SOURCES += shptk_meshgen.cpp
+SOURCES += shptk_meshdb.cpp
 
-# openscenegraph (for debug only)
-PKGCONFIG += openthreads openscenegraph
+# kompex
+PATH_KOMPEX = /home/preet/Dev/scratch/thirdparty/kompex
+INCLUDEPATH += $${PATH_KOMPEX}
+DEFINES += SQLITE_OMIT_LOAD_EXTENSION
+HEADERS += \
+    $${PATH_KOMPEX}/sqlite3.h \
+    $${PATH_KOMPEX}/KompexSQLiteStreamRedirection.h \
+    $${PATH_KOMPEX}/KompexSQLiteStatement.h \
+    $${PATH_KOMPEX}/KompexSQLitePrerequisites.h \
+    $${PATH_KOMPEX}/KompexSQLiteException.h \
+    $${PATH_KOMPEX}/KompexSQLiteDatabase.h \
+    $${PATH_KOMPEX}/KompexSQLiteBlob.h
+
+SOURCES += \
+    $${PATH_KOMPEX}/sqlite3.c \
+    $${PATH_KOMPEX}/KompexSQLiteStatement.cpp \
+    $${PATH_KOMPEX}/KompexSQLiteDatabase.cpp \
+    $${PATH_KOMPEX}/KompexSQLiteBlob.cpp
+
+LIBS += -lpthread
 
 # openctm
-PATH_OPENCTM = /home/preet/Dev/scratch/thirdpary/openctm
+PATH_OPENCTM = /home/preet/Dev/scratch/gis/polytoolkit/openctm
 INCLUDEPATH += $${PATH_OPENCTM}
 
     #liblzma

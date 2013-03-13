@@ -22,6 +22,8 @@
 #include <math.h>
 #include <cstdlib>
 #include <vector>
+#include <string>
+#include <map>
 
 #define K_PI 3.141592653589
 #define K_DEG2RAD K_PI/180.0
@@ -467,6 +469,143 @@ void CalcPolylineSimplifyVW(std::vector<Vec3> const &listVx,
         delete listVWPoints[i];
     }
 }
+
+struct GeoBounds
+{
+    double minLat;
+    double minLon;
+    double maxLat;
+    double maxLon;
+};
+
+void CalcQuadkey(PointLLA const &lla,
+                 size_t magLevel,
+                 std::string &quadKey)
+{
+    double minLon = -180.0;
+    double maxLon = 0.0;
+    double minLat = -90.0;
+    double maxLat = 90.0;
+
+    for(size_t i=0; i < magLevel; i++)
+    {
+        double diffLon = (maxLon-minLon)/2.0;
+        double diffLat = (maxLat-minLat)/2.0;
+
+        double midLon = (maxLon+minLon)/2.0;
+        double midLat = (maxLat+minLat)/2.0;
+
+        if(lla.lat > midLat)   {        // upper
+            minLat += diffLat;
+            if(lla.lon < midLon)   {        // left
+                quadKey.append("00");
+                maxLon -= diffLon;
+            }
+            else   {                        // right
+                quadKey.append("01");
+                minLon += diffLon;
+            }
+        }
+        else   {                        // lower
+            maxLat -= diffLat;
+            if(lla.lon < midLon)   {        // left
+                quadKey.append("10");
+                maxLon -= diffLon;
+            }
+            else   {                        // right
+                quadKey.append("11");
+                minLon += diffLon;
+            }
+        }
+    }
+}
+
+void CalcQuadKeyFromLLA(GeoBounds const &rootBounds,
+                        PointLLA const &lla,
+                        size_t magLevel,
+                        std::string &quadKey)
+{
+    double minLon = rootBounds.minLon;
+    double maxLon = rootBounds.maxLon;
+    double minLat = rootBounds.minLat;
+    double maxLat = rootBounds.maxLat;
+
+    for(size_t i=0; i < magLevel; i++)
+    {
+        double diffLon = (maxLon-minLon)/2.0;
+        double diffLat = (maxLat-minLat)/2.0;
+
+        double midLon = (maxLon+minLon)/2.0;
+        double midLat = (maxLat+minLat)/2.0;
+
+        if(lla.lat > midLat)   {        // upper
+            minLat += diffLat;
+            if(lla.lon < midLon)   {        // left
+                quadKey.append("00");
+                maxLon -= diffLon;
+            }
+            else   {                        // right
+                quadKey.append("01");
+                minLon += diffLon;
+            }
+        }
+        else   {                        // lower
+            maxLat -= diffLat;
+            if(lla.lon < midLon)   {        // left
+                quadKey.append("10");
+                maxLon -= diffLon;
+            }
+            else   {                        // right
+                quadKey.append("11");
+                minLon += diffLon;
+            }
+        }
+    }
+}
+
+void CalcBoundsFromQuadKey(std::string const &quadKey,
+                           GeoBounds const &rootBounds,
+                           GeoBounds &quadBounds)
+{
+    quadBounds = rootBounds;
+
+    if(quadKey.size() < 2)   {
+        return;
+    }
+
+    if(quadKey.size() % 2 != 0)   {
+        return;
+    }
+
+    for(size_t i=0; i < quadKey.size(); i+=2)
+    {
+        std::string quadrant = quadKey.substr(i,2);
+        double halfLonStep = (quadBounds.maxLon-quadBounds.minLon)/2;
+        double halfLatStep = (quadBounds.maxLat-quadBounds.minLat)/2;
+
+        // top left quadrant
+        if(quadrant.compare("00") == 0)   {
+            quadBounds.maxLon -= halfLonStep;
+            quadBounds.minLat += halfLatStep;
+        }
+        // top right quadrant
+        else if(quadrant.compare("01") == 0)   {
+            quadBounds.minLon += halfLonStep;
+            quadBounds.minLat += halfLatStep;
+        }
+        // bottom left quadrant
+        else if(quadrant.compare("10") == 0)   {
+            quadBounds.maxLon -= halfLonStep;
+            quadBounds.maxLat -= halfLatStep;
+        }
+        // bottom right quadrant
+        else if(quadrant.compare("11") == 0)   {
+            quadBounds.minLon += halfLonStep;
+            quadBounds.maxLat -= halfLatStep;
+        }
+    }
+}
+
 
 
 
