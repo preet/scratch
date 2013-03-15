@@ -108,8 +108,9 @@ int main(int argc, const char *argv[])
     rootBounds.minLat = -90.0;
     rootBounds.maxLat = 90.0;
     size_t magLevel = 7;
-    double sideDivs = pow(2,double(magLevel));
-    double sideStep = 180.0/sideDivs;
+    double numDivs = pow(2,double(magLevel));
+    double lonWidth = (rootBounds.maxLon-rootBounds.minLon)/numDivs;
+    double latWidth = (rootBounds.maxLat-rootBounds.minLat)/numDivs;
 
     // get a list of files in the input path
     std::vector<std::string> listFiles;
@@ -167,11 +168,11 @@ int main(int argc, const char *argv[])
         GeoBounds tileBounds;
         CalcBoundsFromQuadKey(quadKey,rootBounds,tileBounds);
 
-        double adjLon = tileBounds.minLon + 180.0;       // 0-360 [W->E]
-        double adjLat = 90.0 - tileBounds.minLat;        // 0-180 [N->S]
+        double adjLon = (tileBounds.minLon + (lonWidth/2.0)) + 180.0;       // 0-360 [W->E]
+        double adjLat = 90.0 - (tileBounds.minLat + (latWidth/2.0));        // 0-180 [N->S]
 
-        size_t lonIx = adjLon/sideStep;
-        size_t latIx = adjLat/sideStep;
+        size_t lonIx = adjLon/lonWidth;
+        size_t latIx = adjLat/latWidth;
 
         // std::cout << "LONIX: " << lonIx << " , LATIX: " << latIx << std::endl;
 
