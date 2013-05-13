@@ -1,9 +1,16 @@
 #ifndef QQUICKFBOVIEWPORTOSG_H
 #define QQUICKFBOVIEWPORTOSG_H
 
-#define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
-#include <GL/glext.h>
+#ifdef DEV_PC
+    #define GL_GLEXT_PROTOTYPES
+    #include <GL/gl.h>
+    #include <GL/glext.h>
+#endif
+
+#ifdef DEV_PLAYBOOK
+    #define GL_RGBA8 GL_RGBA
+    #include <GLES2/gl2.h>
+#endif
 
 #include <QTimer>
 #include <QMutex>

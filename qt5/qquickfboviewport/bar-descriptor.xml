@@ -16,15 +16,17 @@
     <env value="app/native/plugins" var="QT_PLUGIN_PATH"/>
     <env value="app/native/lib" var="LD_LIBRARY_PATH"/>
     <env value="no" var="QML_FIXED_ANIMATION_STEP"/>
-    <env value="1" var="QML_FORCE_THREADED_RENDER"/>
+    <env value="0" var="QML_FORCE_THREADED_RENDER"/>
+    <env value="1" var="QML_BAD_GUI_RENDERLOOP"/>
     <!-- <arg>-style</arg> -->
     <!-- <arg>qnxlight</arg> -->
     <action system="true">run_native</action>
     <!-- textureinsgnode should point to the project binary, path can be relative -->
-    <asset type="Qnx/Elf" path="textureinsgnode" entry="true">textureinsgnode</asset>
+    <asset entry="true" type="Qnx/Elf" path="qquickfboviewport">qquickfboviewport</asset>
     <asset path="%QT_INSTALL_LIBS%">lib</asset>
     <asset path="%QT_INSTALL_PLUGINS%">plugins</asset>
     <asset path="%QT_INSTALL_QML%">imports</asset>
+    <asset path="res">res</asset>
     <!-- These values will be replaced when deploying in Qt Creator -->
     <authorId>gYAAgOTuT0B9ytlqvWI4hESaSfo</authorId>
 </qnx>

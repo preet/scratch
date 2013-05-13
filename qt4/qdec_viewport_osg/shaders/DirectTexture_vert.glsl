@@ -33,5 +33,5 @@ void main()
 {
     gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
     VertexColor = Color;
-    TexCoord0 = gl_MultiTexCoord1.xy;
+    TexCoord0 = gl_MultiTexCoord0.xy;
 }

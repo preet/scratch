@@ -27,6 +27,7 @@ qnx {
         -e $$[QT_INSTALL_LIBS]/libQt5V8.so.5 lib/libQt5V8.so.5 \
         -e $$[QT_INSTALL_LIBS]/libQt5XmlPatterns.so.5 lib/libQt5XmlPatterns.so.5 \
         -e $$[QT_INSTALL_PLUGINS]/platforms/libqqnx.so plugins/platforms/libqqnx.so \
+        -e /home/preet/snrub.png res/snrub.png \
         -e $$[QT_INSTALL_QML]/ qml/
 
     package.target = $${TARGET}.bar

@@ -52,7 +52,15 @@ int main(int argc, char **argv)
 
     QQuickView view;
     view.setResizeMode(QQuickView::SizeRootObjectToView);
+#ifdef DEV_PC
     view.setSource(QUrl("main.qml"));
+#endif
+
+#ifdef DEV_PLAYBOOK
+    view.setSource(QUrl("app/native/res/main.qml"));
+#endif
+
+
     view.show();
 
     return app.exec();

@@ -12,19 +12,20 @@
     </initialWindow>
     <author>Individual</author>
     <copyright>COPYRIGHT</copyright>
-    <env var="QML2_IMPORT_PATH" value="app/native/qml"/>
-    <env var="QT_PLUGIN_PATH" value="app/native/plugins"/>
-    <env var="LD_LIBRARY_PATH" value="app/native/lib"/>
-    <env var="QML_FIXED_ANIMATION_STEP" value="no"/>
-    <env var="QML_FORCE_THREADED_RENDER" value="1" /> 
+    <env value="app/native/qml" var="QML2_IMPORT_PATH"/>
+    <env value="app/native/plugins" var="QT_PLUGIN_PATH"/>
+    <env value="app/native/lib" var="LD_LIBRARY_PATH"/>
+    <!--<env value="no" var="QML_FIXED_ANIMATION_STEP"/>-->
+    <env value="1" var="QML_FORCE_THREADED_RENDER"/>
     <!-- <arg>-style</arg> -->
     <!-- <arg>qnxlight</arg> -->
     <action system="true">run_native</action>
     <!-- textureinsgnode should point to the project binary, path can be relative -->
-    <asset entry="true" type="Qnx/Elf" path="textureinsgnode">textureinsgnode</asset>
+    <asset type="Qnx/Elf" path="textureinsgnode" entry="true">textureinsgnode</asset>
     <asset path="%QT_INSTALL_LIBS%">lib</asset>
     <asset path="%QT_INSTALL_PLUGINS%">plugins</asset>
     <asset path="%QT_INSTALL_QML%">imports</asset>
+        <asset path="res">res</asset>
     <!-- These values will be replaced when deploying in Qt Creator -->
     <authorId>gYAAgOTuT0B9ytlqvWI4hESaSfo</authorId>
 </qnx>

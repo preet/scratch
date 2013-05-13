@@ -37,7 +37,7 @@ void QSGFBONode::onRenderFBO()
         // Render the frame
         this->renderFrame();
 
-        // Release rendering back to system FBO
+        // Release rendering back to qt
         m_fbo->release();
     }
     else
@@ -63,6 +63,8 @@ void QSGFBONode::renderFrame()
 
     // qt passes values to VertexAttrib 3,4,5 manually
     // so we should disable them when we use em
+    glDisableVertexAttribArray(1);
+    glDisableVertexAttribArray(2);
     glDisableVertexAttribArray(3);
     glDisableVertexAttribArray(4);
     glDisableVertexAttribArray(5);
@@ -71,6 +73,8 @@ void QSGFBONode::renderFrame()
     // openscenegraph, but it must be disabled before passing
     // things back to QPainter
     glDisable(GL_DEPTH_TEST);
+//    glDisable(GL_CULL_FACE);
+    glBindTexture(GL_TEXTURE_2D,0);
 }
 
 void QSGFBONode::initNode()
@@ -93,10 +97,10 @@ void QSGFBONode::initOSG()
 
     // draw a plane
     osg::ref_ptr<osg::Vec3Array> listVxArray = new osg::Vec3Array;
-    listVxArray->push_back(osg::Vec3(-1,0,1));  // top left
+    listVxArray->push_back(osg::Vec3(-2,0,1));  // top left
     listVxArray->push_back(osg::Vec3(-1,0,-1)); // bottom left
     listVxArray->push_back(osg::Vec3(1,0,-1));  // bottom right
-    listVxArray->push_back(osg::Vec3(1,0,1));   // top right
+    listVxArray->push_back(osg::Vec3(2,0,1));   // top right
 
     osg::ref_ptr<osg::Vec2Array> listTxArray = new osg::Vec2Array;
     listTxArray->push_back(osg::Vec2(0,1));     // top left
@@ -116,7 +120,12 @@ void QSGFBONode::initOSG()
     listIdxs->at(5) = 3;
 
     // load texture
-    QString imgPath = "/home/preet/mrsnrub.jpg";
+#ifdef DEV_PC
+    QString imgPath = "/home/preet/slurms.png";
+#endif
+#ifdef DEV_PLAYBOOK
+    QString imgPath = "app/native/res/slurms.png";
+#endif
     osg::ref_ptr<osg::Image> texImg = osgDB::readImageFile(imgPath.toStdString());
     osg::ref_ptr<osg::Texture2D> texGeom = new osg::Texture2D;
     texGeom->setImage(texImg);
@@ -128,32 +137,39 @@ void QSGFBONode::initOSG()
     // setup geometry
     osg::ref_ptr<osg::Geometry> geomMesh = new osg::Geometry;
     geomMesh->setVertexArray(listVxArray);
-    geomMesh->setTexCoordArray(1,listTxArray);
+    geomMesh->setTexCoordArray(0,listTxArray);
     geomMesh->addPrimitiveSet(listIdxs);
     geomMesh->setUseVertexBufferObjects(true);
-    geomMesh->getOrCreateStateSet()->setTextureAttributeAndModes(1,texGeom);
+    geomMesh->getOrCreateStateSet()->setTextureAttributeAndModes(0,texGeom);
 
     // node mesh
     osg::ref_ptr<osg::Geode> geodeMesh = new osg::Geode;
     geodeMesh->addDrawable(geomMesh);
 
     // setup shaders
+#ifdef DEV_PC
     QString m_shaderPrefix = "#version 120\n";
-    QString m_resPrefix = "/home/preet/Dev/scratch/qt4/qdec_viewport_osg/";
+    QString m_resPrefix = "/home/preet/Dev/scratch/qt4/qdec_viewport_osg/shaders/";
+#endif
+
+#ifdef DEV_PLAYBOOK
+    QString m_shaderPrefix = "#version 100\n";
+    QString m_resPrefix = "app/native/res/";
+#endif
 
     osg::ref_ptr<osg::Program> shProgram = new osg::Program;
     shProgram->setName("TextShader");
 
-    QString vShader = readFileAsQString(m_resPrefix + "shaders/DirectTexture_vert.glsl");
+    QString vShader = readFileAsQString(m_resPrefix + "DirectTexture_vert.glsl");
     vShader.prepend(m_shaderPrefix);
     shProgram->addShader(new osg::Shader(osg::Shader::VERTEX,vShader.toStdString()));
 
-    QString fShader = readFileAsQString(m_resPrefix + "shaders/DirectTexture_frag.glsl");
+    QString fShader = readFileAsQString(m_resPrefix + "DirectTexture_frag.glsl");
     vShader.prepend(m_shaderPrefix);
     shProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT,fShader.toStdString()));
 
     osg::ref_ptr<osg::Uniform> myColor = new osg::Uniform("Color",osg::Vec4(0,1,1,1));
-    osg::ref_ptr<osg::Uniform> myTexture = new osg::Uniform("Texture",1);
+    osg::ref_ptr<osg::Uniform> myTexture = new osg::Uniform("Texture",0);
 
     // enable shader program
     osg::StateSet *ss = geodeMesh->getOrCreateStateSet();
