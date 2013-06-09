@@ -1,23 +1,152 @@
 #include "qquickfboviewportosg.h"
 
+const char * vertex_shader =
+        "// VERTEX SHADER\n"
+        "\n"
+        "// notes:\n"
+        "// to maintain compatibility, the version\n"
+        "// preprocessor call needs to be added to the\n"
+        "// beginning of this file by the (cpu) compiler:\n"
+        "//\n"
+        "// \"#version 100\" for OpenGL ES 2 and\n"
+        "// \"#version 120\" (or higher) for desktop OpenGL\n"
+        "\n"
+        "#ifdef GL_ES\n"
+        "    // vertex shader defaults for types are:\n"
+        "    // precision highp float;\n"
+        "    // precision highp int;\n"
+        "    // precision lowp sampler2D;\n"
+        "    // precision lowp samplerCube;\n"
+        "#else\n"
+        "    // with default (non ES) OpenGL shaders, precision\n"
+        "    // qualifiers aren't used -- we explicitly set them\n"
+        "    // to be defined as 'nothing' so they are ignored\n"
+        "    #define lowp\n"
+        "    #define mediump\n"
+        "    #define highp\n"
+        "#endif\n"
+        "\n"
+        "// varyings\n"
+        "varying mediump vec4 VertexColor;\n"
+        "\n"
+        "void main()\n"
+        "{\n"
+        "   // default params\n"
+        "   vec4 LightPosition = vec4(0.0, 0.0, 0.0, 1.0);\n"
+        "   vec3 LightColor = vec3(1.0, 1.0, 1.0);\n"
+        "   vec3 DiffuseColor = vec3(gl_Color);\n"
+        "//   vec3 DiffuseColor = abs(normalize(vec3(gl_Vertex)));\n"
+        "   float Alpha = gl_Color.w;\n"
+        "\n"
+        "   // find the vector from the given vertex to the light source\n"
+        "   vec4 vertexInWorldSpace = gl_ModelViewMatrix * vec4(gl_Vertex);\n"
+        "   vec3 normalInWorldSpace = normalize(gl_NormalMatrix * gl_Normal);\n"
+        "   vec3 lightDirn = normalize(vec3(LightPosition-vertexInWorldSpace));\n"
+        "\n"
+        "   // calculate final vertex color\n"
+        "   VertexColor = vec4(DiffuseColor * max(dot(lightDirn,normalInWorldSpace),0.0), Alpha);\n"
+        "\n"
+        "   // calculate projected vertex position\n"
+        "   gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;\n"
+        "}\n"
+        "";
 
-QSGFBONode::QSGFBONode(QQuickWindow * window) :
+const char * frag_shader =
+        "// FRAGMENT SHADER\n"
+        "\n"
+        "// notes:\n"
+        "// to maintain compatibility, the version\n"
+        "// preprocessor call needs to be added to the\n"
+        "// beginning of this file by the (cpu) compiler:\n"
+        "//\n"
+        "// \"#version 100\" for OpenGL ES 2 and\n"
+        "// \"#version 120\" (or higher) for desktop OpenGL\n"
+        "\n"
+        "#ifdef GL_ES\n"
+        "    // the fragment shader in ES 2 doesn't have a\n"
+        "    // default precision qualifier for floats so\n"
+        "    // it needs to be explicitly specified\n"
+        "    precision mediump float;\n"
+        "\n"
+        "    // note: highp may not be available for float types in\n"
+        "    // the fragment shader -- use the following to set it:\n"
+        "    // #ifdef GL_FRAGMENT_PRECISION_HIGH\n"
+        "    // precision highp float;\n"
+        "    // #else\n"
+        "    // precision mediump float;\n"
+        "    // #endif\n"
+        "\n"
+        "    // fragment shader defaults for other types are:\n"
+        "    // precision mediump int;\n"
+        "    // precision lowp sampler2D;\n"
+        "    // precision lowp samplerCube;\n"
+        "#else\n"
+        "    // with default (non ES) OpenGL shaders, precision\n"
+        "    // qualifiers aren't used -- we explicitly set them\n"
+        "    // to be defined as 'nothing' so they are ignored\n"
+        "    #define lowp\n"
+        "    #define mediump\n"
+        "    #define highp\n"
+        "#endif\n"
+        "\n"
+        "// varyings\n"
+        "varying vec4 VertexColor;\n"
+        "\n"
+        "// uniforms\n"
+        "\n"
+        "void main()\n"
+        "{\n"
+        "    gl_FragColor = VertexColor;\n"
+        "}\n"
+        "";
+
+
+class RotateCB : public osg::NodeCallback
+{
+public:
+    RotateCB() : m_angle(0)
+    {}
+
+    virtual void operator()(osg::Node * node, osg::NodeVisitor * nv)
+    {
+        osg::Matrix xf;
+        xf.makeRotate(m_angle,osg::Vec3(0,0,1));
+
+        osg::MatrixTransform * xfNode =
+                dynamic_cast<osg::MatrixTransform*>(node);
+        xfNode->setMatrix(xf);
+
+        m_angle+=0.1;
+        if(m_angle > 2*3.141592)   {
+            m_angle = 0;
+        }
+    }
+
+private:
+    double m_angle;
+};
+
+
+QSGFBONodeOSG::QSGFBONodeOSG(QQuickWindow * window) :
     m_fbo(NULL),
     m_texture(NULL),
     m_window(window)
 {
+    // The GL context used for rendering the scenegraph
+    // is bound when the beforeRendering() signal is sent,
+    // so we can render the OSG scene to our FBO.
     connect(m_window,SIGNAL(beforeRendering()),
             this,SLOT(onRenderFBO()),
             Qt::DirectConnection);
 }
 
-QSGFBONode::~QSGFBONode()
+QSGFBONodeOSG::~QSGFBONodeOSG()
 {
     delete m_texture;
     delete m_fbo;
 }
 
-void QSGFBONode::onRenderFBO()
+void QSGFBONodeOSG::onRenderFBO()
 {
     QSize size = rect().size().toSize();
 
@@ -29,7 +158,6 @@ void QSGFBONode::onRenderFBO()
     m_render_frame_mutex.lock();
     if(m_render_frame)   {
         m_render_frame = false;
-        m_render_frame_mutex.unlock();
 
         // Bind rendering to the SG Node FBO
         m_fbo->bind();
@@ -40,18 +168,25 @@ void QSGFBONode::onRenderFBO()
         // Release rendering back to qt
         m_fbo->release();
     }
-    else
-    {   m_render_frame_mutex.unlock();   }
-}
-
-void QSGFBONode::onQueueFrame()
-{
-    m_render_frame_mutex.lock();
-    m_render_frame = true;
     m_render_frame_mutex.unlock();
+
+    // Don't need this as we call makeDirty()
+    // in updatePaintNode()
+    //
+    // m_window->update();
 }
 
-void QSGFBONode::renderFrame()
+void QSGFBONodeOSG::onQueueFrame()
+{
+    // Don't queue any frame updates unless we
+    // are done rendering the previous frame
+    if(m_render_frame_mutex.tryLock())   {
+        m_render_frame = true;
+        m_render_frame_mutex.unlock();
+    }
+}
+
+void QSGFBONodeOSG::renderFrame()
 {
     m_osg_viewer->getCamera()->getGraphicsContext()->getState()->reset();
     m_osg_viewer->getCamera()->getGraphicsContext()->getState()->apply(m_osg_stateset);
@@ -77,7 +212,7 @@ void QSGFBONode::renderFrame()
     glBindTexture(GL_TEXTURE_2D,0);
 }
 
-void QSGFBONode::initNode()
+void QSGFBONodeOSG::initNode()
 {
     QSize size = rect().size().toSize();
     QOpenGLFramebufferObjectFormat format;
@@ -91,96 +226,108 @@ void QSGFBONode::initNode()
     this->setTexture(m_texture);
 }
 
-void QSGFBONode::initOSG()
+void QSGFBONodeOSG::initOSG()
 {
-        QSize size = rect().size().toSize();
+    QSize size = rect().size().toSize();
 
-    // draw a plane
-    osg::ref_ptr<osg::Vec3Array> listVxArray = new osg::Vec3Array;
-    listVxArray->push_back(osg::Vec3(-2,0,1));  // top left
-    listVxArray->push_back(osg::Vec3(-1,0,-1)); // bottom left
-    listVxArray->push_back(osg::Vec3(1,0,-1));  // bottom right
-    listVxArray->push_back(osg::Vec3(2,0,1));   // top right
 
-    osg::ref_ptr<osg::Vec2Array> listTxArray = new osg::Vec2Array;
-    listTxArray->push_back(osg::Vec2(0,1));     // top left
-    listTxArray->push_back(osg::Vec2(0,0));     // bottom left
-    listTxArray->push_back(osg::Vec2(1,0));     // bottom right
-    listTxArray->push_back(osg::Vec2(1,1));     // top right
-
-    osg::ref_ptr<osg::DrawElementsUInt> listIdxs =
-            new osg::DrawElementsUInt(GL_TRIANGLES,6);
-
-    listIdxs->at(0) = 0;
-    listIdxs->at(1) = 1;
-    listIdxs->at(2) = 2;
-
-    listIdxs->at(3) = 0;
-    listIdxs->at(4) = 2;
-    listIdxs->at(5) = 3;
-
-    // load texture
-#ifdef DEV_PC
-    QString imgPath = "/home/preet/slurms.png";
-#endif
-#ifdef DEV_PLAYBOOK
-    QString imgPath = "app/native/res/slurms.png";
-#endif
-    osg::ref_ptr<osg::Image> texImg = osgDB::readImageFile(imgPath.toStdString());
-    osg::ref_ptr<osg::Texture2D> texGeom = new osg::Texture2D;
-    texGeom->setImage(texImg);
-    texGeom->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::NEAREST);
-    texGeom->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::NEAREST);
-    texGeom->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
-    texGeom->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
-
-    // setup geometry
-    osg::ref_ptr<osg::Geometry> geomMesh = new osg::Geometry;
-    geomMesh->setVertexArray(listVxArray);
-    geomMesh->setTexCoordArray(0,listTxArray);
-    geomMesh->addPrimitiveSet(listIdxs);
-    geomMesh->setUseVertexBufferObjects(true);
-    geomMesh->getOrCreateStateSet()->setTextureAttributeAndModes(0,texGeom);
-
-    // node mesh
-    osg::ref_ptr<osg::Geode> geodeMesh = new osg::Geode;
-    geodeMesh->addDrawable(geomMesh);
-
-    // setup shaders
-#ifdef DEV_PC
-    QString m_shaderPrefix = "#version 120\n";
-    QString m_resPrefix = "/home/preet/Dev/scratch/qt4/qdec_viewport_osg/shaders/";
-#endif
-
-#ifdef DEV_PLAYBOOK
-    QString m_shaderPrefix = "#version 100\n";
-    QString m_resPrefix = "app/native/res/";
-#endif
-
+    // shaders
+    QString shaderPrefix = "#version 120\n";
     osg::ref_ptr<osg::Program> shProgram = new osg::Program;
-    shProgram->setName("TextShader");
 
-    QString vShader = readFileAsQString(m_resPrefix + "DirectTexture_vert.glsl");
-    vShader.prepend(m_shaderPrefix);
+    QString vShader(vertex_shader);
+    vShader.prepend(shaderPrefix);
     shProgram->addShader(new osg::Shader(osg::Shader::VERTEX,vShader.toStdString()));
 
-    QString fShader = readFileAsQString(m_resPrefix + "DirectTexture_frag.glsl");
-    vShader.prepend(m_shaderPrefix);
+    QString fShader(frag_shader);
+    fShader.prepend(shaderPrefix);
     shProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT,fShader.toStdString()));
 
-    osg::ref_ptr<osg::Uniform> myColor = new osg::Uniform("Color",osg::Vec4(0,1,1,1));
-    osg::ref_ptr<osg::Uniform> myTexture = new osg::Uniform("Texture",0);
+    // geometry
+    double ppushsz = 1.0/2;
+    double npushsz = ppushsz*-1.0;
+    osg::ref_ptr<osg::Vec3Array> gmListVx = new osg::Vec3Array;
+    gmListVx->push_back(osg::Vec3(ppushsz,0,0));     // 0 +x
+    gmListVx->push_back(osg::Vec3(0,ppushsz,0));     // 1 +y
+    gmListVx->push_back(osg::Vec3(0,0,ppushsz));     // 2 +z
+    gmListVx->push_back(osg::Vec3(npushsz,0,0));     // 3 -x
+    gmListVx->push_back(osg::Vec3(0,npushsz,0));     // 4 -y
+    gmListVx->push_back(osg::Vec3(0,0,npushsz));     // 5 -z
 
-    // enable shader program
-    osg::StateSet *ss = geodeMesh->getOrCreateStateSet();
-    ss->addUniform(myColor);
-    ss->addUniform(myTexture);
-    ss->setAttributeAndModes(shProgram,osg::StateAttribute::ON);
-    ss->setMode(GL_BLEND,osg::StateAttribute::ON);
+    osg::ref_ptr<osg::Vec3Array> gmListNx = new osg::Vec3Array;
+    for(size_t i=0; i < gmListVx->size(); i++)   {
+        osg::Vec3 nx = gmListVx->at(i);
+        nx.normalize();
+        gmListNx->push_back(nx);
+    }
 
-    // add stuff to scene
+    osg::ref_ptr<osg::DrawElementsUByte> gmListIx =
+            new osg::DrawElementsUByte(GL_TRIANGLES);
+    gmListIx->push_back(0);
+    gmListIx->push_back(1);
+    gmListIx->push_back(2);
+
+    gmListIx->push_back(1);
+    gmListIx->push_back(3);
+    gmListIx->push_back(2);
+
+    gmListIx->push_back(3);
+    gmListIx->push_back(4);
+    gmListIx->push_back(2);
+
+    gmListIx->push_back(4);
+    gmListIx->push_back(0);
+    gmListIx->push_back(2);
+
+    gmListIx->push_back(1);
+    gmListIx->push_back(0);
+    gmListIx->push_back(5);
+
+    gmListIx->push_back(3);
+    gmListIx->push_back(1);
+    gmListIx->push_back(5);
+
+    gmListIx->push_back(4);
+    gmListIx->push_back(3);
+    gmListIx->push_back(5);
+
+    gmListIx->push_back(0);
+    gmListIx->push_back(4);
+    gmListIx->push_back(5);
+
+    osg::ref_ptr<osg::Vec4Array> gmListCx = new osg::Vec4Array;
+    gmListCx->push_back(osg::Vec4(1,0,0,1));
+    gmListCx->push_back(osg::Vec4(0,1,0,1));
+    gmListCx->push_back(osg::Vec4(0,0,1,1));
+    gmListCx->push_back(osg::Vec4(1,1,0,1));
+    gmListCx->push_back(osg::Vec4(0,1,1,1));
+    gmListCx->push_back(osg::Vec4(1,0,1,1));
+
+    osg::ref_ptr<osg::Geometry> gmOct = new osg::Geometry;
+    gmOct->setVertexArray(gmListVx);
+    gmOct->setNormalArray(gmListNx);
+    gmOct->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
+    gmOct->setColorArray(gmListCx);
+    gmOct->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+    gmOct->addPrimitiveSet(gmListIx);
+
+
+    osg::ref_ptr<osg::Geode> gdOct = new osg::Geode;
+    gdOct->addDrawable(gmOct);
+
+
+    osg::ref_ptr<osg::MatrixTransform> xfOct = new osg::MatrixTransform;
+    xfOct->setMatrix(osg::Matrix::identity());
+    xfOct->setUpdateCallback(new RotateCB);
+    xfOct->addChild(gdOct);
+
+    // state
+    osg::StateSet * ss = gdOct->getOrCreateStateSet();
+    ss->setAttributeAndModes(shProgram);
+
+    // scene
     osg::ref_ptr<osg::Group> groupRoot = new osg::Group;
-    groupRoot->addChild(geodeMesh);
+    groupRoot->addChild(xfOct);
 
     // create viewer and embedded window
     m_osg_viewer = new osgViewer::Viewer;
@@ -206,43 +353,65 @@ void QSGFBONode::initOSG()
 //    m_osg_viewer->getCamera()->setClearMask(GL_DEPTH_BUFFER_BIT);
 }
 
-QString QSGFBONode::readFileAsQString(const QString &myFilePath)
+// ============================================================== //
+// ============================================================== //
+
+QQuickFBOViewportOSG::QQuickFBOViewportOSG()
 {
-    QFile myFile(myFilePath);
-    myFile.open(QIODevice::ReadOnly);
+    // The ItemHasContents flag must be set to true
+    // for update() to trigger updatePaintNode()
+    setFlag(QQuickItem::ItemHasContents,true);
 
-    QTextStream textStream(&myFile);
-    return textStream.readAll();
-}
+    // We can't directly control the rate at which the
+    // (qt) scenegraph renders frames -- other nodes may
+    // be updated at arbitrary intervals based on their
+    // state (ie are they dirty,etc)
 
-
-
-QQuickFBOViewport::QQuickFBOViewport()
-{
-    setFlag(ItemHasContents,true);
-
-    QTimer * updTimer = new QTimer;
-    connect(updTimer,SIGNAL(timeout()),
+    // We *can* force the scene graph to render frames
+    // at a minimum rate by marking this QQuickItem's
+    // node dirty with a timer.
+    connect(&m_timer,SIGNAL(timeout()),
             this,SLOT(onRenderFrame()));
-    updTimer->start(60);
+
+    m_timer.start(48);
 }
 
-void QQuickFBOViewport::onRenderFrame()
+QQuickFBOViewportOSG::~QQuickFBOViewportOSG()
+{}
+
+void QQuickFBOViewportOSG::onRenderFrame()
 {
+    // The queueFrame will emit a signal from this QQuickItem
+    // to its child QSGFBONodeOSG. The node will set internal
+    // state forcing a render to the FBO when Qt next decides
+    // to render by listening to QQuickWindow::beforeRendering()
     emit queueFrame();
+
+    // We call update here to invoke updatePaintNode() and
+    // set the QSGFBONodeOSG's state to dirty.
+    // This will make Qt render a new frame.
     this->update();
 }
 
-QSGNode * QQuickFBOViewport::updatePaintNode(QSGNode * oldNode,
-                                             UpdatePaintNodeData * updData)
+QSGNode * QQuickFBOViewportOSG::updatePaintNode(QSGNode * oldNode,
+                                                UpdatePaintNodeData * updData)
 {
-    QSGFBONode * fboNode = static_cast<QSGFBONode*>(oldNode);
+    QSGFBONodeOSG * fboNode = static_cast<QSGFBONodeOSG*>(oldNode);
     if(!fboNode)   {
-        fboNode = new QSGFBONode(window());
+        fboNode = new QSGFBONodeOSG(window());
+
+        // Note: We want the main thread (the thread that owns this
+        //       QQuickItem) to execute QSGFBONodeOSG::onQueueFrame().
         connect(this,SIGNAL(queueFrame()),
-                fboNode,SLOT(onQueueFrame()));
+                fboNode,SLOT(onQueueFrame()),
+                Qt::DirectConnection);
     }
+    // Handle resize
     fboNode->setRect(boundingRect());
+
+    // Mark the node as dirty to force Qt's scenegraph to
+    // render a new frame (and thus update the FBO)
+    fboNode->markDirty(QSGNode::DirtyMaterial);
 
     return fboNode;
 }

@@ -9,7 +9,8 @@ SOURCES += \
     main.cpp
 
 OTHER_FILES += \
-    main.qml
+    main.qml \
+    bar-descriptor.xml
 
 qmlfiles.path = $${OUT_PWD}
 qmlfiles.files = main.qml

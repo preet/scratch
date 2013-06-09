@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<qnx xmlns="http://www.qnx.com/schemas/application/1.0">
+    <id>com.example.qqviewportosg</id>
+    <name>qqviewportosg</name>
+    <versionNumber>1.0.0</versionNumber>
+    <description>DESCRIPTION</description>
+    <initialWindow>
+        <aspectRatio>landscape</aspectRatio>
+        <autoOrients>false</autoOrients>
+        <systemChrome>none</systemChrome>
+        <transparent>false</transparent>
+    </initialWindow>
+    <author>Individual</author>
+    <copyright>COPYRIGHT</copyright>
+    <env value="app/native/qml" var="QML2_IMPORT_PATH"/>
+    <env value="app/native/plugins" var="QT_PLUGIN_PATH"/>
+    <env value="app/native/lib" var="LD_LIBRARY_PATH"/>
+    <env value="no" var="QML_FIXED_ANIMATION_STEP"/>
+    <env value="0" var="QML_FORCE_THREADED_RENDER"/>
+    <env value="1" var="QML_BAD_GUI_RENDERLOOP"/>
+    <!-- <arg>-style</arg> -->
+    <!-- <arg>qnxlight</arg> -->
+    <action system="true">run_native</action>
+    <!-- textureinsgnode should point to the project binary, path can be relative -->
+    <asset entry="true" type="Qnx/Elf" path="qquickfboviewport">qquickfboviewport</asset>
+    <asset path="%QT_INSTALL_LIBS%">lib</asset>
+    <asset path="%QT_INSTALL_PLUGINS%">plugins</asset>
+    <asset path="%QT_INSTALL_QML%">imports</asset>
+    <asset path="res">res</asset>
+    <!-- These values will be replaced when deploying in Qt Creator -->
+    <authorId>gYAAgOTuT0B9ytlqvWI4hESaSfo</authorId>
+</qnx>

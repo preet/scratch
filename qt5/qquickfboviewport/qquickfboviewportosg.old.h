@@ -1,7 +1,7 @@
 #ifndef QQUICKFBOVIEWPORTOSG_H
 #define QQUICKFBOVIEWPORTOSG_H
 
-#ifdef DEV_DESKTOP
+#ifdef DEV_PC
     #define GL_GLEXT_PROTOTYPES
     #include <GL/gl.h>
     #include <GL/glext.h>
@@ -31,13 +31,14 @@
 #include <osg/Shader>
 #include <osg/Uniform>
 
-class QSGFBONodeOSG : public QObject, public QSGSimpleTextureNode
+
+class QSGFBONode : public QObject, public QSGSimpleTextureNode
 {
     Q_OBJECT
 
 public:
-    QSGFBONodeOSG(QQuickWindow * window);
-    ~QSGFBONodeOSG();
+    QSGFBONode(QQuickWindow * window);
+    ~QSGFBONode();
 
 public slots:
     // onRenderFBO
@@ -59,6 +60,8 @@ private:
     void renderFrame();
     void initNode();
     void initOSG();
+    QString readFileAsQString(QString const &);
+
 
     QOpenGLFramebufferObject    * m_fbo;
     QSGTexture                  * m_texture;
@@ -74,16 +77,13 @@ private:
 };
 
 
-// ============================================================== //
-// ============================================================== //
 
-class QQuickFBOViewportOSG : public QQuickItem
+class QQuickFBOViewport : public QQuickItem
 {
     Q_OBJECT
 
 public:
-    QQuickFBOViewportOSG();
-    ~QQuickFBOViewportOSG();
+    QQuickFBOViewport();
 
 public slots:
     // onRenderFrame
@@ -102,7 +102,7 @@ protected:
     QSGNode * updatePaintNode(QSGNode *, UpdatePaintNodeData *);
 
 private:
-    QTimer m_timer;
+
 };
 
 #endif // QQUICKFBOVIEWPORTOSG_H
