@@ -48,11 +48,12 @@ int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
 
-    qmlRegisterType<QQuickFBOViewport>("ViewportItems", 1, 0, "ViewportItem");
+    qmlRegisterType<QQuickFBOViewportOSG>("ViewportItems", 1, 0, "ViewportItem");
 
     QQuickView view;
     view.setResizeMode(QQuickView::SizeRootObjectToView);
-#ifdef DEV_PC
+
+#ifdef DEV_DESKTOP
     view.setSource(QUrl("main.qml"));
 #endif
 

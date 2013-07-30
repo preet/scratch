@@ -1,0 +1,732 @@
+
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <vector>
+
+#include <osg/Program>
+#include <osg/Uniform>
+#include <osg/Geometry>
+#include <osgViewer/Viewer>
+#include <osgViewer/CompositeViewer>
+#include <osgGA/TrackballManipulator>
+#include <osg/MatrixTransform>
+#include <osg/CullFace>
+
+#include "../../UNTRACKED/Vec2.hpp"
+#include "../../UNTRACKED/Vec3.hpp"
+
+// geometric defines!
+// PI!
+#define K_PI 3.141592653589
+#define K_DEG2RAD K_PI/180.0
+#define K_RAD2DEG 180.0/K_PI
+
+// epsilon error
+#define K_EPS 1E-11
+#define K_NEPS -1E-11
+
+// average radius
+#define RAD_AV 6371000
+
+// WGS84 ellipsoid parameters
+// (http://en.wikipedia.org/wiki/WGS_84)
+#define ELL_SEMI_MAJOR 6378137.0            // meters
+#define ELL_SEMI_MAJOR_EXP2 40680631590769.0
+
+#define ELL_SEMI_MINOR 6356752.3142         // meters
+#define ELL_SEMI_MINOR_EXP2 40408299984087.1
+
+#define ELL_F 1.0/298.257223563
+#define ELL_ECC_EXP2 6.69437999014e-3
+#define ELL_ECC2_EXP2 6.73949674228e-3
+
+// circumference
+#define CIR_EQ 40075017.0   // around equator  (meters)
+#define CIR_MD 40007860.0   // around meridian (meters)
+#define CIR_AV 40041438.0   // average (meters)
+
+struct LODRange
+{
+    LODRange() :
+        min(0),max(0),level(0)
+    {}
+
+    double min;
+    double max;
+    size_t level;
+};
+
+struct Vertex
+{
+    Vertex() :
+        x(0),y(0),z(0),
+        lon(0),lat(0),alt(0),
+        distToEye(0),
+        hasBeenTested(false),
+        inFrustum(false)
+    {}
+
+    double x,y,z;
+    double lon,lat,alt;
+    double distToEye;
+    bool hasBeenTested;
+    bool inFrustum;
+};
+
+struct Tile
+{
+    Tile() :
+        vxTL(NULL),
+        vxBL(NULL),
+        vxBR(NULL),
+        vxTR(NULL),
+        subtileTL(NULL),
+        subtileBL(NULL),
+        subtileBR(NULL),
+        subtileTR(NULL),
+        level(0),
+        hasSubtiles(false)
+    {}
+
+    Vertex  * vxTL;
+    Vertex  * vxBL;
+    Vertex  * vxBR;
+    Vertex  * vxTR;
+
+    Tile * subtileTL;
+    Tile * subtileBL;
+    Tile * subtileBR;
+    Tile * subtileTR;
+
+    size_t level;
+    bool hasSubtiles;
+};
+
+std::vector<Vertex*> g_LIST_BASE_VERTICES;
+std::vector<Tile*>   g_LIST_BASE_TILES;
+
+std::vector<Vertex*> g_LIST_TEMP_VERTICES;
+
+struct PointLLA
+{
+    PointLLA() :
+        lon(0),lat(0),alt(0) {}
+
+    PointLLA(double myLat, double myLon) :
+        lon(myLon),lat(myLat),alt(0) {}
+
+    PointLLA(double myLat, double myLon, double myAlt) :
+        lon(myLon),lat(myLat),alt(myAlt) {}
+
+    double lon;
+    double lat;
+    double alt;
+};
+
+Vec3 ConvLLAToECEF(const PointLLA &pointLLA)
+{
+    Vec3 pointECEF;
+
+    // remember to convert deg->rad
+    double sinLat = sin(pointLLA.lat * K_DEG2RAD);
+    double sinLon = sin(pointLLA.lon * K_DEG2RAD);
+    double cosLat = cos(pointLLA.lat * K_DEG2RAD);
+    double cosLon = cos(pointLLA.lon * K_DEG2RAD);
+
+    // v = radius of curvature (meters)
+    double v = ELL_SEMI_MAJOR / (sqrt(1-(ELL_ECC_EXP2*sinLat*sinLat)));
+    pointECEF.x = (v + pointLLA.alt) * cosLat * cosLon;
+    pointECEF.y = (v + pointLLA.alt) * cosLat * sinLon;
+    pointECEF.z = ((1-ELL_ECC_EXP2)*v + pointLLA.alt)*sinLat;
+
+    return pointECEF;
+}
+
+PointLLA ConvECEFToLLA(const Vec3 &pointECEF)
+{
+    PointLLA pointLLA;
+
+    double p = (sqrt(pow(pointECEF.x,2) + pow(pointECEF.y,2)));
+    double th = atan2(pointECEF.z*ELL_SEMI_MAJOR, p*ELL_SEMI_MINOR);
+    double sinTh = sin(th);
+    double cosTh = cos(th);
+
+    // calc longitude
+    pointLLA.lon = atan2(pointECEF.y, pointECEF.x);
+
+    // calc latitude
+    pointLLA.lat = atan2(pointECEF.z + ELL_ECC2_EXP2*ELL_SEMI_MINOR*sinTh*sinTh*sinTh,
+                         p - ELL_ECC_EXP2*ELL_SEMI_MAJOR*cosTh*cosTh*cosTh);
+    // calc altitude
+    double sinLat = sin(pointLLA.lat);
+    double N = ELL_SEMI_MAJOR / (sqrt(1-(ELL_ECC_EXP2*sinLat*sinLat)));
+    pointLLA.alt = (p/cos(pointLLA.lat)) - N;
+
+    // convert from rad to deg
+    pointLLA.lon = pointLLA.lon * K_RAD2DEG;
+    pointLLA.lat = pointLLA.lat * K_RAD2DEG;
+
+    return pointLLA;
+}
+
+std::string ReadFileAsString(std::string const &fileName)
+{
+    std::ifstream ifs(fileName.c_str());
+    std::string content( (std::istreambuf_iterator<char>(ifs) ),
+                         (std::istreambuf_iterator<char>()    ) );
+    return content;
+}
+
+std::vector<LODRange> BuildLODRanges()
+{
+    LODRange range;
+    std::vector<LODRange> listRanges;
+
+    range.min = 0;
+    range.max = 800;
+    listRanges.push_back(range);
+
+    range.min = 800;
+    range.max = 2000;
+    listRanges.push_back(range);
+
+    range.min = 2000;
+    range.max = 4000;
+    listRanges.push_back(range);
+
+    range.min = 4000;
+    range.max = 8000;
+    listRanges.push_back(range);
+
+    range.min = 8000;
+    range.max = 16000;
+    listRanges.push_back(range);
+
+    range.min = 16000;
+    range.max = 50000;
+    listRanges.push_back(range);
+
+    range.min = 50000;
+    range.max = 100000;
+    listRanges.push_back(range);
+
+    range.min = 100000;
+    range.max = 200000;
+    listRanges.push_back(range);
+
+    range.min = 200000;
+    range.max = 400000;
+    listRanges.push_back(range);
+
+    range.min = 400000;
+    range.max = 800000;
+    listRanges.push_back(range);
+
+    range.min = 800000;
+    range.max = 2000000;
+    listRanges.push_back(range);
+
+    range.min = 2000000;
+    range.max = 5000000;
+    listRanges.push_back(range);
+
+    range.min = 5000000;
+    range.max = 12500000;
+    listRanges.push_back(range);
+
+    range.min = 12500000;
+    range.max = 25000000;
+    listRanges.push_back(range);
+
+    range.min = 25000000;
+    range.max = 50000000;
+    listRanges.push_back(range);
+
+    for(size_t i=0; i < listRanges.size(); i++)   {
+        double avRange = (listRanges[i].min+
+                          listRanges[i].max)/2.0;
+        double viewMag = (CIR_AV)/avRange;
+        double level = log2(viewMag);
+        size_t roundedLevel = size_t(round(level));
+        listRanges[i].level = roundedLevel;
+    }
+
+    return listRanges;
+}
+
+std::vector<LODRange> g_LIST_LOD_RANGES;
+
+void BuildBaseTileList(double minLon, double minLat,
+                       double maxLon, double maxLat,
+                       size_t lonSegments,
+                       size_t latSegments,
+                       std::vector<Vertex*> &listVx,
+                       std::vector<Tile*> &listTiles)
+{
+    double lonStep = (maxLon-minLon)/lonSegments;
+    double latStep = (maxLat-minLat)/latSegments;
+
+    // build vertices
+    for(size_t i=0; i <= latSegments; i++)   {
+        for(size_t j=0; j <= lonSegments; j++)   {
+            Vec3 temp = ConvLLAToECEF(PointLLA((i*latStep)+minLat,
+                                               (j*lonStep)+minLon,0.0));
+            Vertex * vx = new Vertex;
+            vx->lon = (j*lonStep)+minLon;
+            vx->lat = (i*latStep)+minLat;
+            vx->alt = 0;
+            vx->x = temp.x;
+            vx->y = temp.y;
+            vx->z = temp.z;
+
+            listVx.push_back(vx);
+        }
+    }
+
+    // build tiles
+    size_t vIdx=0;
+    for(size_t i=0; i < latSegments; i++)   {
+        for(size_t j=0; j < lonSegments; j++)   {
+            Tile * tile = new Tile;
+            tile->vxBL = listVx[vIdx];
+            tile->vxBR = listVx[vIdx+1];
+            tile->vxTR = listVx[vIdx+lonSegments+2];
+            tile->vxTL = listVx[vIdx+lonSegments+1];
+            listTiles.push_back(tile);
+            vIdx++;
+        }
+        vIdx++;
+    }
+}
+
+void GetTilesAboveLevel(Tile * root, double const maxLevel,
+                        std::vector<Tile*> &listTiles)
+{
+    if(root)   {
+        if(root->level > maxLevel)   {
+            listTiles.push_back(root);
+        }
+        GetTilesAboveLevel(root->subtileTL,maxLevel,listTiles);
+        GetTilesAboveLevel(root->subtileBL,maxLevel,listTiles);
+        GetTilesAboveLevel(root->subtileBR,maxLevel,listTiles);
+        GetTilesAboveLevel(root->subtileTR,maxLevel,listTiles);
+    }
+}
+
+void BuildQuadtreeFromCamera(Vec3 const &eye,
+                             std::vector<double> const &listDist2ByLevel,
+                             Tile * tile)
+{
+    // generate tile center
+    PointLLA cenLLA((tile->vxTL->lat + tile->vxBR->lat)/2.0,
+                    (tile->vxTL->lon + tile->vxBR->lon)/2.0);
+
+    Vec3 cenECEF = ConvLLAToECEF(cenLLA);
+
+    if(cenECEF.Distance2To(eye) < listDist2ByLevel[tile->level])   {
+        // build subtiles
+
+        // center vx
+        Vertex * vxC = new Vertex;
+        vxC->lon = cenLLA.lon;
+        vxC->lat = cenLLA.lat;
+        vxC->alt = cenLLA.alt;
+        vxC->x = cenECEF.x;
+        vxC->y = cenECEF.y;
+        vxC->z = cenECEF.z;
+        g_LIST_TEMP_VERTICES.push_back(vxC);
+
+        // center-left vx
+        PointLLA llaCL(cenLLA.lat,tile->vxTL->lon);
+        Vec3 ecefCL = ConvLLAToECEF(llaCL);
+        Vertex * vxCL = new Vertex;
+        vxCL->lon = llaCL.lon;
+        vxCL->lat = llaCL.lat;
+        vxCL->alt = llaCL.alt;
+        vxCL->x = ecefCL.x;
+        vxCL->y = ecefCL.y;
+        vxCL->z = ecefCL.z;
+        g_LIST_TEMP_VERTICES.push_back(vxCL);
+
+        // center-right vx
+        PointLLA llaCR(cenLLA.lat,tile->vxTR->lon);
+        Vec3 ecefCR = ConvLLAToECEF(llaCR);
+        Vertex * vxCR = new Vertex;
+        vxCR->lon = llaCR.lon;
+        vxCR->lat = llaCR.lat;
+        vxCR->alt = llaCR.alt;
+        vxCR->x = ecefCR.x;
+        vxCR->y = ecefCR.y;
+        vxCR->z = ecefCR.z;
+        g_LIST_TEMP_VERTICES.push_back(vxCR);
+
+        // center-top vx
+        PointLLA llaCT(tile->vxTL->lat,cenLLA.lon);
+        Vec3 ecefCT = ConvLLAToECEF(llaCT);
+        Vertex * vxCT = new Vertex;
+        vxCT->lon = llaCT.lon;
+        vxCT->lat = llaCT.lat;
+        vxCT->alt = llaCT.alt;
+        vxCT->x = ecefCT.x;
+        vxCT->y = ecefCT.y;
+        vxCT->z = ecefCT.z;
+        g_LIST_TEMP_VERTICES.push_back(vxCT);
+
+        // center-btm vx
+        PointLLA llaCB(tile->vxBL->lat,cenLLA.lon);
+        Vec3 ecefCB = ConvLLAToECEF(llaCB);
+        Vertex * vxCB = new Vertex;
+        vxCB->lon = llaCB.lon;
+        vxCB->lat = llaCB.lat;
+        vxCB->alt = llaCB.alt;
+        vxCB->x = ecefCB.x;
+        vxCB->y = ecefCB.y;
+        vxCB->z = ecefCB.z;
+        g_LIST_TEMP_VERTICES.push_back(vxCB);
+
+        tile->subtileTL = new Tile;
+        tile->subtileTL->vxTL = tile->vxTL;
+        tile->subtileTL->vxBL = vxCL;
+        tile->subtileTL->vxBR = vxC;
+        tile->subtileTL->vxTR = vxCT;
+        tile->subtileTL->level = tile->level+1;
+        BuildQuadtreeFromCamera(eye,listDist2ByLevel,tile->subtileTL);
+
+        tile->subtileBL = new Tile;
+        tile->subtileBL->vxTL = vxCL;
+        tile->subtileBL->vxBL = tile->vxBL;
+        tile->subtileBL->vxBR = vxCB;
+        tile->subtileBL->vxTR = vxC;
+        tile->subtileBL->level = tile->level+1;
+        BuildQuadtreeFromCamera(eye,listDist2ByLevel,tile->subtileBL);
+
+        tile->subtileBR = new Tile;
+        tile->subtileBR->vxTL = vxC;
+        tile->subtileBR->vxBL = vxCB;
+        tile->subtileBR->vxBR = tile->vxBR;
+        tile->subtileBR->vxTR = vxCR;
+        tile->subtileBR->level = tile->level+1;
+        BuildQuadtreeFromCamera(eye,listDist2ByLevel,tile->subtileBR);
+
+        tile->subtileTR = new Tile;
+        tile->subtileTR->vxTL = vxCT;
+        tile->subtileTR->vxBL = vxC;
+        tile->subtileTR->vxBR = vxCR;
+        tile->subtileTR->vxTR = tile->vxTR;
+        tile->subtileTR->level = tile->level+1;
+        BuildQuadtreeFromCamera(eye,listDist2ByLevel,tile->subtileTR);
+
+        tile->hasSubtiles = true;
+    }
+}
+
+void BuildTilesFromCameraLOD(Vec3 const &eye)
+{
+//    std::vector<Tile*> lsTiles = g_LIST_BASE_TILES;
+
+//    // closest lod ranges first
+//    for(size_t i=0; i < g_LIST_LOD_RANGES.size(); i++)   {
+//        double maxDist2 = g_LIST_LOD_RANGES[i].max*
+//                          g_LIST_LOD_RANGES[i].max;
+
+//        std::vector<Tile*>::iterator it;
+//        for(it = lsTiles.begin(); it != lsTiles.end();)   {
+
+//            if((*it)->hasSubtiles)
+//            {   it = lsTiles.erase(it);   }
+//            else   {
+//                BuildQuadtreeFromCamera(eye,
+//                                        maxDist2,
+//                                        g_LIST_LOD_RANGES[i].level,
+//                                        (*it));
+//                ++it;
+//            }
+//        }
+//    }
+
+    std::vector<double> listMaxDist2(g_LIST_LOD_RANGES[0].level+1,-1.0);
+    for(size_t i=0; i < listMaxDist2.size(); i++)   {
+        for(size_t j=0; j < g_LIST_LOD_RANGES.size(); j++)   {
+            if(g_LIST_LOD_RANGES[j].level == i)   {
+                listMaxDist2[i] = g_LIST_LOD_RANGES[j].max*g_LIST_LOD_RANGES[j].max;
+            }
+        }
+        std::cout << "LEVEL: " << i << ", DIST2: " << listMaxDist2[i] << std::endl;
+    }
+
+    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
+        BuildQuadtreeFromCamera(eye,listMaxDist2,g_LIST_BASE_TILES[i]);
+    }
+
+
+
+//    for(size_t i=0; i < g_LIST_LOD_RANGES.size(); i++)
+//    {
+//        size_t idx = g_LIST_LOD_RANGES.size()-1-i;
+//        double maxDist2 = g_LIST_LOD_RANGES[idx].max*
+//                          g_LIST_LOD_RANGES[idx].max;
+
+//        std::cout << "LEVEL : " << g_LIST_LOD_RANGES[idx].level << std::endl;
+
+//        std::vector<Tile*>::iterator it;
+//        for(it = lsTiles.begin(); it != lsTiles.end();)   {
+//            if((*it)->hasSubtiles)   {
+//                it = lsTiles.erase(it);
+//            }
+//            else   {
+//                BuildQuadtreeFromCamera(eye,maxDist2,
+//                                        g_LIST_LOD_RANGES[idx].level,
+//                                        (*it));
+//                ++it;
+//            }
+//        }
+//    }
+}
+
+osg::Program * g_VERTEX_ATTR_FLAT_SHADER;
+
+void SetupShaders()
+{
+    std::string verStr,vShader,fShader;
+    verStr = "#version 120\n";    // desktop opengl 2
+
+    g_VERTEX_ATTR_FLAT_SHADER = new osg::Program;
+    g_VERTEX_ATTR_FLAT_SHADER->setName("DefaultShader");
+
+    vShader = ReadFileAsString("default_vert.glsl");
+    g_VERTEX_ATTR_FLAT_SHADER->addShader(
+                new osg::Shader(osg::Shader::VERTEX,verStr+vShader));
+
+    fShader = ReadFileAsString("default_frag.glsl");
+    g_VERTEX_ATTR_FLAT_SHADER->addShader(
+                new osg::Shader(osg::Shader::FRAGMENT,verStr+fShader));
+}
+
+void BuildListVxFromTiles(Tile * root, std::vector<osg::Vec3d> &listVx)
+{
+    if(root)   {
+        osg::Vec3d vxTL(root->vxTL->x,root->vxTL->y,root->vxTL->z);
+        osg::Vec3d vxBL(root->vxBL->x,root->vxBL->y,root->vxBL->z);
+        osg::Vec3d vxBR(root->vxBR->x,root->vxBR->y,root->vxBR->z);
+        osg::Vec3d vxTR(root->vxTR->x,root->vxTR->y,root->vxTR->z);
+
+        // TL<->BL
+        listVx.push_back(vxTL);
+        listVx.push_back(vxBL);
+
+        // BL<->BR
+        listVx.push_back(vxBL);
+        listVx.push_back(vxBR);
+
+        // BR<->TR
+        listVx.push_back(vxBR);
+        listVx.push_back(vxTR);
+
+        // TR<->TL
+        listVx.push_back(vxTR);
+        listVx.push_back(vxTL);
+
+        BuildListVxFromTiles(root->subtileTL,listVx);
+        BuildListVxFromTiles(root->subtileBL,listVx);
+        BuildListVxFromTiles(root->subtileBR,listVx);
+        BuildListVxFromTiles(root->subtileTR,listVx);
+    }
+}
+
+osg::Geode * BuildGdEarthFromCamera(Vec3 const &eye)
+{
+    // generate the tiles
+    BuildTilesFromCameraLOD(eye);
+
+    std::vector<osg::Vec3d> listTileLineVx;
+    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
+        BuildListVxFromTiles(g_LIST_BASE_TILES[i],listTileLineVx);
+    }
+
+
+    // [earth geometry]
+    osg::ref_ptr<osg::Vec3dArray> listVx = new osg::Vec3dArray;
+    osg::ref_ptr<osg::Vec4Array>  listCx = new osg::Vec4Array;
+    for(size_t i=0; i < listTileLineVx.size(); i++)   {
+        listVx->push_back(listTileLineVx[i]);
+        listCx->push_back(osg::Vec4(1.0,1.0,1.0,1.0));
+    }
+
+    osg::ref_ptr<osg::Geometry> gmEarth = new osg::Geometry;
+    gmEarth->setVertexArray(listVx);
+    gmEarth->setColorArray(listCx);
+    gmEarth->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+    gmEarth->addPrimitiveSet(new osg::DrawArrays(GL_LINES,0,listVx->size()));
+
+    // [earth geode]
+    osg::ref_ptr<osg::Geode> gdEarth = new osg::Geode;
+    gdEarth->setName("gdEarth");
+    gdEarth->addDrawable(gmEarth);
+
+    osg::StateSet * ss = gdEarth->getOrCreateStateSet();
+    ss->setAttributeAndModes(g_VERTEX_ATTR_FLAT_SHADER);
+
+
+    // clean up
+    std::vector<Tile*> listTiles;
+    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
+        GetTilesAboveLevel(g_LIST_BASE_TILES[i],4,listTiles);
+    }
+
+    for(size_t i=0; i < listTiles.size(); i++)   {
+        delete listTiles[i];
+    }
+
+    for(size_t i=0; i < g_LIST_TEMP_VERTICES.size(); i++)   {
+        delete g_LIST_TEMP_VERTICES[i];
+    }
+
+    return gdEarth.release();
+}
+
+osg::MatrixTransform * BuildFrustumFromCamera(osg::Camera * camera)
+{
+    osg::Matrixd proj = camera->getProjectionMatrix();
+    osg::Matrixd mv = camera->getViewMatrix();
+
+    // Get near and far from the Projection matrix.
+//    const double near = proj(3,2) / (proj(2,2)-1.0);
+//    const double far = proj(3,2) / (1.0+proj(2,2));
+
+    double near = 500;
+    double far = ELL_SEMI_MAJOR*4;
+
+    // Get the sides of the near plane.
+    const double nLeft = near * (proj(2,0)-1.0) / proj(0,0);
+    const double nRight = near * (1.0+proj(2,0)) / proj(0,0);
+    const double nTop = near * (1.0+proj(2,1)) / proj(1,1);
+    const double nBottom = near * (proj(2,1)-1.0) / proj(1,1);
+
+    // Get the sides of the far plane.
+    const double fLeft = far * (proj(2,0)-1.0) / proj(0,0);
+    const double fRight = far * (1.0+proj(2,0)) / proj(0,0);
+    const double fTop = far * (1.0+proj(2,1)) / proj(1,1);
+    const double fBottom = far * (proj(2,1)-1.0) / proj(1,1);
+
+    // Our vertex array needs only 9 vertices: The origin, and the
+    // eight corners of the near and far planes.
+    osg::ref_ptr<osg::Vec3dArray> v = new osg::Vec3dArray;
+    v->resize( 9 );
+    (*v)[0].set( 0., 0., 0. );
+    (*v)[1].set( nLeft, nBottom, -near );
+    (*v)[2].set( nRight, nBottom, -near );
+    (*v)[3].set( nRight, nTop, -near );
+    (*v)[4].set( nLeft, nTop, -near );
+    (*v)[5].set( fLeft, fBottom, -far );
+    (*v)[6].set( fRight, fBottom, -far );
+    (*v)[7].set( fRight, fTop, -far );
+    (*v)[8].set( fLeft, fTop, -far );
+
+    osg::ref_ptr<osg::Geometry> geom = new osg::Geometry;
+    geom->setUseDisplayList( false );
+    geom->setVertexArray( v );
+
+    osg::ref_ptr<osg::Vec4Array> c = new osg::Vec4Array;
+    for(size_t i=0; i < v->size(); i++)   {
+        c->push_back(osg::Vec4(0.6,0.6,0.6,1.0));
+    }
+    geom->setColorArray(c);
+    geom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+
+    GLushort idxLines[8] = {
+        0, 5, 0, 6, 0, 7, 0, 8 };
+    GLushort idxLoops0[4] = {
+        1, 2, 3, 4 };
+    GLushort idxLoops1[4] = {
+        5, 6, 7, 8 };
+    geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINES, 8, idxLines ) );
+    geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINE_LOOP, 4, idxLoops0 ) );
+    geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINE_LOOP, 4, idxLoops1 ) );
+
+    osg::ref_ptr<osg::Geode> geode = new osg::Geode;
+    geode->addDrawable(geom);
+
+    osg::StateSet * ss = geode->getOrCreateStateSet();
+    ss->setAttributeAndModes(g_VERTEX_ATTR_FLAT_SHADER);
+
+    // Create parent MatrixTransform to transform the view volume by
+    // the inverse ModelView matrix.
+    osg::ref_ptr<osg::MatrixTransform> mt = new osg::MatrixTransform;
+    mt->setMatrix( osg::Matrixd::inverse( mv ) );
+    mt->addChild( geode );
+    mt->setName("xfCameraFrustum");
+
+    return mt.release();
+}
+
+osg::Geode * BuildOctahedron(osg::Vec3d const &center,
+                             osg::Vec4 const &color,
+                             double const size)
+{
+    double ppushsz = size/2;
+    double npushsz = ppushsz*-1.0;
+    osg::ref_ptr<osg::Vec3dArray> gmListVx = new osg::Vec3dArray;
+    gmListVx->push_back(center + osg::Vec3(ppushsz,0,0));     // 0 +x
+    gmListVx->push_back(center + osg::Vec3(0,ppushsz,0));     // 1 +y
+    gmListVx->push_back(center + osg::Vec3(0,0,ppushsz));     // 2 +z
+    gmListVx->push_back(center + osg::Vec3(npushsz,0,0));     // 3 -x
+    gmListVx->push_back(center + osg::Vec3(0,npushsz,0));     // 4 -y
+    gmListVx->push_back(center + osg::Vec3(0,0,npushsz));     // 5 -z
+
+    osg::ref_ptr<osg::Vec4Array> gmListCx = new osg::Vec4Array;
+    gmListCx->push_back(color);
+    gmListCx->push_back(color);
+    gmListCx->push_back(color);
+    gmListCx->push_back(color);
+    gmListCx->push_back(color);
+    gmListCx->push_back(color);
+
+    osg::ref_ptr<osg::DrawElementsUByte> gmListIx =
+            new osg::DrawElementsUByte(GL_TRIANGLES);
+    gmListIx->push_back(0);
+    gmListIx->push_back(1);
+    gmListIx->push_back(2);
+
+    gmListIx->push_back(1);
+    gmListIx->push_back(3);
+    gmListIx->push_back(2);
+
+    gmListIx->push_back(3);
+    gmListIx->push_back(4);
+    gmListIx->push_back(2);
+
+    gmListIx->push_back(4);
+    gmListIx->push_back(0);
+    gmListIx->push_back(2);
+
+    gmListIx->push_back(1);
+    gmListIx->push_back(0);
+    gmListIx->push_back(5);
+
+    gmListIx->push_back(3);
+    gmListIx->push_back(1);
+    gmListIx->push_back(5);
+
+    gmListIx->push_back(4);
+    gmListIx->push_back(3);
+    gmListIx->push_back(5);
+
+    gmListIx->push_back(0);
+    gmListIx->push_back(4);
+    gmListIx->push_back(5);
+
+    osg::ref_ptr<osg::Geometry> gmOct = new osg::Geometry;
+    gmOct->setVertexArray(gmListVx);
+    gmOct->setColorArray(gmListCx);
+    gmOct->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+    gmOct->addPrimitiveSet(gmListIx);
+
+    osg::ref_ptr<osg::Geode> gdOct = new osg::Geode;
+    gdOct->addDrawable(gmOct);
+
+    osg::StateSet * ss = gdOct->getOrCreateStateSet();
+    ss->setAttributeAndModes(g_VERTEX_ATTR_FLAT_SHADER);
+
+    return gdOct.release();
+}

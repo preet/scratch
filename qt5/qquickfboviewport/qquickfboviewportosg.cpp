@@ -232,7 +232,14 @@ void QSGFBONodeOSG::initOSG()
 
 
     // shaders
-    QString shaderPrefix = "#version 120\n";
+    QString shaderPrefix;
+#ifdef DEV_DESKTOP
+    shaderPrefix = "#version 120\n";
+#endif
+#ifdef DEV_PLAYBOOK
+    shaderPrefix = "#version 100\n";
+#endif
+
     osg::ref_ptr<osg::Program> shProgram = new osg::Program;
 
     QString vShader(vertex_shader);
@@ -244,6 +251,53 @@ void QSGFBONodeOSG::initOSG()
     shProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT,fShader.toStdString()));
 
     // geometry
+    osg::ref_ptr<osg::Geometry> gmOct = new osg::Geometry;
+    buildGeometryOct(gmOct.get());
+
+    // geode
+    osg::ref_ptr<osg::Geode> gdOct = new osg::Geode;
+    gdOct->addDrawable(gmOct);
+
+    // xf
+    osg::ref_ptr<osg::MatrixTransform> xfOct = new osg::MatrixTransform;
+    xfOct->setMatrix(osg::Matrix::identity());
+    xfOct->setUpdateCallback(new RotateCB);
+    xfOct->addChild(gdOct);
+
+    // state
+    osg::StateSet * ss = gdOct->getOrCreateStateSet();
+    ss->setAttributeAndModes(shProgram);
+
+    // scene
+    osg::ref_ptr<osg::Group> groupRoot = new osg::Group;
+    groupRoot->addChild(xfOct);
+
+    // create viewer and embedded window
+    m_osg_viewer = new osgViewer::Viewer;
+    m_osg_window = m_osg_viewer->setUpViewerAsEmbeddedInWindow(0,0,size.width(),size.height());
+
+    // tell osg to insert uniforms and attributes in shaders
+    m_osg_window->getState()->setUseModelViewAndProjectionUniforms(true);
+    m_osg_window->getState()->setUseVertexAttributeAliasing(true);
+
+    // config viewer
+    m_osg_viewer->setCameraManipulator(new osgGA::TrackballManipulator);
+    m_osg_viewer->setThreadingModel(osgViewer::Viewer::SingleThreaded);
+    m_osg_viewer->setSceneData(groupRoot);
+    m_osg_viewer->realize();
+
+    // setup state
+    m_osg_stateset = new osg::StateSet;
+
+//    m_osg_viewer->getCamera()->getGraphicsContext()->getState()->setCheckForGLErrors(osg::State::ONCE_PER_ATTRIBUTE);
+
+    // setup camera
+//    m_osg_viewer->getCamera()->setClearColor(osg::Vec4(0,0,0,0));
+//    m_osg_viewer->getCamera()->setClearMask(GL_DEPTH_BUFFER_BIT);
+}
+
+void QSGFBONodeOSG::buildGeometryOct(osg::Geometry * gmNode)
+{
     double ppushsz = 1.0/2;
     double npushsz = ppushsz*-1.0;
     osg::ref_ptr<osg::Vec3Array> gmListVx = new osg::Vec3Array;
@@ -303,55 +357,26 @@ void QSGFBONodeOSG::initOSG()
     gmListCx->push_back(osg::Vec4(0,1,1,1));
     gmListCx->push_back(osg::Vec4(1,0,1,1));
 
-    osg::ref_ptr<osg::Geometry> gmOct = new osg::Geometry;
-    gmOct->setVertexArray(gmListVx);
-    gmOct->setNormalArray(gmListNx);
-    gmOct->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
-    gmOct->setColorArray(gmListCx);
-    gmOct->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
-    gmOct->addPrimitiveSet(gmListIx);
+    // add data to geometry node
+    gmNode->setVertexArray(gmListVx);
 
+    // pre osg-3.1.8
+    gmNode->setNormalArray(gmListNx);
+    gmNode->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
+    gmNode->setColorArray(gmListCx);
+    gmNode->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
 
-    osg::ref_ptr<osg::Geode> gdOct = new osg::Geode;
-    gdOct->addDrawable(gmOct);
-
-
-    osg::ref_ptr<osg::MatrixTransform> xfOct = new osg::MatrixTransform;
-    xfOct->setMatrix(osg::Matrix::identity());
-    xfOct->setUpdateCallback(new RotateCB);
-    xfOct->addChild(gdOct);
-
-    // state
-    osg::StateSet * ss = gdOct->getOrCreateStateSet();
-    ss->setAttributeAndModes(shProgram);
-
-    // scene
-    osg::ref_ptr<osg::Group> groupRoot = new osg::Group;
-    groupRoot->addChild(xfOct);
-
-    // create viewer and embedded window
-    m_osg_viewer = new osgViewer::Viewer;
-    m_osg_window = m_osg_viewer->setUpViewerAsEmbeddedInWindow(0,0,size.width(),size.height());
-
-    // tell osg to insert uniforms and attributes in shaders
-    m_osg_window->getState()->setUseModelViewAndProjectionUniforms(true);
-    m_osg_window->getState()->setUseVertexAttributeAliasing(true);
-
-    // config viewer
-    m_osg_viewer->setCameraManipulator(new osgGA::TrackballManipulator);
-    m_osg_viewer->setThreadingModel(osgViewer::Viewer::SingleThreaded);
-    m_osg_viewer->setSceneData(groupRoot);
-    m_osg_viewer->realize();
-
-    // setup state
-    m_osg_stateset = new osg::StateSet;
-
-//    m_osg_viewer->getCamera()->getGraphicsContext()->getState()->setCheckForGLErrors(osg::State::ONCE_PER_ATTRIBUTE);
-
-    // setup camera
-//    m_osg_viewer->getCamera()->setClearColor(osg::Vec4(0,0,0,0));
-//    m_osg_viewer->getCamera()->setClearMask(GL_DEPTH_BUFFER_BIT);
+    // osg-3.1.8
+//    gmOct->setNormalArray(gmListNx,osg::Array::BIND_PER_VERTEX);
+//    gmOct->setColorArray(gmListCx,osg::Array::BIND_PER_VERTEX);
+    gmNode->addPrimitiveSet(gmListIx);
 }
+
+void QSGFBONodeOSG::buildGeometrySphere(osg::Geometry *gmNode)
+{
+
+}
+
 
 // ============================================================== //
 // ============================================================== //

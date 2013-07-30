@@ -60,6 +60,10 @@ private:
     void initNode();
     void initOSG();
 
+    void buildGeometryOct(osg::Geometry * gmNode);
+    void buildGeometrySphere(osg::Geometry * gmNode);
+
+
     QOpenGLFramebufferObject    * m_fbo;
     QSGTexture                  * m_texture;
     QQuickWindow                * m_window;
