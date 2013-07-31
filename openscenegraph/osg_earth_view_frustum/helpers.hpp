@@ -86,7 +86,7 @@ struct Tile
         subtileBR(NULL),
         subtileTR(NULL),
         level(0),
-        hasSubtiles(false)
+        keep(true)
     {}
 
     Vertex  * vxTL;
@@ -100,7 +100,7 @@ struct Tile
     Tile * subtileTR;
 
     size_t level;
-    bool hasSubtiles;
+    bool keep;
 };
 
 std::vector<Vertex*> g_LIST_BASE_VERTICES;
@@ -168,6 +168,26 @@ PointLLA ConvECEFToLLA(const Vec3 &pointECEF)
     pointLLA.lat = pointLLA.lat * K_RAD2DEG;
 
     return pointLLA;
+}
+
+bool CalcPointBeyondHorizonPlane(Vec3 const &scaledSpaceEye,
+                                 Vec3 const &scaledSpaceCenter)
+{
+    // ref: http://cesium.agi.com/2013/04/25/Horizon-culling/
+
+    // camera in scaled space
+    Vec3 cv = scaledSpaceEye;
+
+    // object to be tested in scaled space
+    Vec3 t = scaledSpaceCenter;
+
+    // camera to object vector
+    Vec3 vt = t - cv;
+
+    double vh_mag_2 = (cv.x*cv.x + cv.y*cv.y + cv.z*cv.z) - 1.0;
+    double vt_dot_vc = vt.Dot(cv.ScaledBy(-1.0));
+
+    return (vt_dot_vc > vh_mag_2);
 }
 
 std::string ReadFileAsString(std::string const &fileName)
@@ -300,6 +320,26 @@ void BuildBaseTileList(double minLon, double minLat,
     }
 }
 
+void CountSubTiles(Tile * tile, size_t &count)   {
+    if(tile)   {
+        count++;
+        CountSubTiles(tile->subtileBL,count);
+        CountSubTiles(tile->subtileBR,count);
+        CountSubTiles(tile->subtileTL,count);
+        CountSubTiles(tile->subtileTR,count);
+    }
+}
+
+
+size_t CountBaseTiles()
+{
+    size_t count=0;
+    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
+        CountSubTiles(g_LIST_BASE_TILES[i],count);
+    }
+    return count;
+}
+
 void GetTilesAboveLevel(Tile * root, double const maxLevel,
                         std::vector<Tile*> &listTiles)
 {
@@ -324,7 +364,8 @@ void BuildQuadtreeFromCamera(Vec3 const &eye,
 
     Vec3 cenECEF = ConvLLAToECEF(cenLLA);
 
-    if(cenECEF.Distance2To(eye) < listDist2ByLevel[tile->level])   {
+    if((listDist2ByLevel[tile->level] < 0) ||
+       (cenECEF.Distance2To(eye) < listDist2ByLevel[tile->level]))   {
         // build subtiles
 
         // center vx
@@ -416,34 +457,59 @@ void BuildQuadtreeFromCamera(Vec3 const &eye,
         tile->subtileTR->vxTR = tile->vxTR;
         tile->subtileTR->level = tile->level+1;
         BuildQuadtreeFromCamera(eye,listDist2ByLevel,tile->subtileTR);
+    }
+}
 
-        tile->hasSubtiles = true;
+void CullTilesAgainstHorizon(Vec3 const &scaledSpaceEye,
+                             Tile * tile)
+{
+    if(tile)   {
+        // if any of the four corner vertices
+        // of these tiles are in front of the
+        // horizon plane, we save the tile
+
+        Vec3 ssvx_bl,ssvx_br,ssvx_tr,ssvx_tl; // scaled ellipsoid space vertex
+
+        // bottom left
+        ssvx_bl = Vec3(tile->vxBL->x/ELL_SEMI_MAJOR,
+                       tile->vxBL->y/ELL_SEMI_MAJOR,
+                       tile->vxBL->z/ELL_SEMI_MINOR);
+
+        ssvx_br = Vec3(tile->vxBR->x/ELL_SEMI_MAJOR,
+                       tile->vxBR->y/ELL_SEMI_MAJOR,
+                       tile->vxBR->z/ELL_SEMI_MINOR);
+
+        ssvx_tr = Vec3(tile->vxTR->x/ELL_SEMI_MAJOR,
+                       tile->vxTR->y/ELL_SEMI_MAJOR,
+                       tile->vxTR->z/ELL_SEMI_MINOR);
+
+        ssvx_tl = Vec3(tile->vxTL->x/ELL_SEMI_MAJOR,
+                       tile->vxTL->y/ELL_SEMI_MAJOR,
+                       tile->vxTL->z/ELL_SEMI_MINOR);
+
+
+        if(CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_bl) &&
+           CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_br) &&
+           CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_tr) &&
+           CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_tl))
+        {
+            tile->keep = false;
+        }
+        else   {
+            tile->keep = true;
+        }
+
+        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileBL);
+        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileBR);
+        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileTR);
+        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileTL);
     }
 }
 
 void BuildTilesFromCameraLOD(Vec3 const &eye)
 {
-//    std::vector<Tile*> lsTiles = g_LIST_BASE_TILES;
-
-//    // closest lod ranges first
-//    for(size_t i=0; i < g_LIST_LOD_RANGES.size(); i++)   {
-//        double maxDist2 = g_LIST_LOD_RANGES[i].max*
-//                          g_LIST_LOD_RANGES[i].max;
-
-//        std::vector<Tile*>::iterator it;
-//        for(it = lsTiles.begin(); it != lsTiles.end();)   {
-
-//            if((*it)->hasSubtiles)
-//            {   it = lsTiles.erase(it);   }
-//            else   {
-//                BuildQuadtreeFromCamera(eye,
-//                                        maxDist2,
-//                                        g_LIST_LOD_RANGES[i].level,
-//                                        (*it));
-//                ++it;
-//            }
-//        }
-//    }
+    std::cout << "SZ LIST BASE TILES BEF: "
+              << CountBaseTiles() << std::endl;
 
     std::vector<double> listMaxDist2(g_LIST_LOD_RANGES[0].level+1,-1.0);
     for(size_t i=0; i < listMaxDist2.size(); i++)   {
@@ -452,36 +518,21 @@ void BuildTilesFromCameraLOD(Vec3 const &eye)
                 listMaxDist2[i] = g_LIST_LOD_RANGES[j].max*g_LIST_LOD_RANGES[j].max;
             }
         }
-        std::cout << "LEVEL: " << i << ", DIST2: " << listMaxDist2[i] << std::endl;
     }
 
     for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
         BuildQuadtreeFromCamera(eye,listMaxDist2,g_LIST_BASE_TILES[i]);
     }
 
+    Vec3 scaledSpaceEye(eye.x / ELL_SEMI_MAJOR,
+                        eye.y / ELL_SEMI_MAJOR,
+                        eye.z / ELL_SEMI_MINOR);
+    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
+        CullTilesAgainstHorizon(scaledSpaceEye,g_LIST_BASE_TILES[i]);
+    }
 
-
-//    for(size_t i=0; i < g_LIST_LOD_RANGES.size(); i++)
-//    {
-//        size_t idx = g_LIST_LOD_RANGES.size()-1-i;
-//        double maxDist2 = g_LIST_LOD_RANGES[idx].max*
-//                          g_LIST_LOD_RANGES[idx].max;
-
-//        std::cout << "LEVEL : " << g_LIST_LOD_RANGES[idx].level << std::endl;
-
-//        std::vector<Tile*>::iterator it;
-//        for(it = lsTiles.begin(); it != lsTiles.end();)   {
-//            if((*it)->hasSubtiles)   {
-//                it = lsTiles.erase(it);
-//            }
-//            else   {
-//                BuildQuadtreeFromCamera(eye,maxDist2,
-//                                        g_LIST_LOD_RANGES[idx].level,
-//                                        (*it));
-//                ++it;
-//            }
-//        }
-//    }
+    std::cout << "SZ LIST BASE TILES AFT: "
+              << CountBaseTiles() << std::endl;
 }
 
 osg::Program * g_VERTEX_ATTR_FLAT_SHADER;
@@ -506,26 +557,33 @@ void SetupShaders()
 void BuildListVxFromTiles(Tile * root, std::vector<osg::Vec3d> &listVx)
 {
     if(root)   {
-        osg::Vec3d vxTL(root->vxTL->x,root->vxTL->y,root->vxTL->z);
-        osg::Vec3d vxBL(root->vxBL->x,root->vxBL->y,root->vxBL->z);
-        osg::Vec3d vxBR(root->vxBR->x,root->vxBR->y,root->vxBR->z);
-        osg::Vec3d vxTR(root->vxTR->x,root->vxTR->y,root->vxTR->z);
+        if(root->keep)   {
+            osg::Vec3d vxBL(root->vxBL->x,root->vxBL->y,root->vxBL->z);
+            osg::Vec3d vxBR(root->vxBR->x,root->vxBR->y,root->vxBR->z);
+            osg::Vec3d vxTR(root->vxTR->x,root->vxTR->y,root->vxTR->z);
 
-        // TL<->BL
-        listVx.push_back(vxTL);
-        listVx.push_back(vxBL);
+            double butts = 0;
+            butts = root->vxTL->x;
+            butts = root->vxTL->y;
+            butts = root->vxTL->z;
+            osg::Vec3d vxTL(root->vxTL->x,root->vxTL->y,root->vxTL->z);
 
-        // BL<->BR
-        listVx.push_back(vxBL);
-        listVx.push_back(vxBR);
+            // TL<->BL
+            listVx.push_back(vxTL);
+            listVx.push_back(vxBL);
 
-        // BR<->TR
-        listVx.push_back(vxBR);
-        listVx.push_back(vxTR);
+            // BL<->BR
+            listVx.push_back(vxBL);
+            listVx.push_back(vxBR);
 
-        // TR<->TL
-        listVx.push_back(vxTR);
-        listVx.push_back(vxTL);
+            // BR<->TR
+            listVx.push_back(vxBR);
+            listVx.push_back(vxTR);
+
+            // TR<->TL
+            listVx.push_back(vxTR);
+            listVx.push_back(vxTL);
+        }
 
         BuildListVxFromTiles(root->subtileTL,listVx);
         BuildListVxFromTiles(root->subtileBL,listVx);
@@ -534,10 +592,15 @@ void BuildListVxFromTiles(Tile * root, std::vector<osg::Vec3d> &listVx)
     }
 }
 
-osg::Geode * BuildGdEarthFromCamera(Vec3 const &eye)
+osg::Geode * BuildGdEarthFromCamera(osg::Camera * camera)
 {
-    // generate the tiles
-    BuildTilesFromCameraLOD(eye);
+
+    if(camera)   {
+        // generate the tiles
+        osg::Vec3d veye,vvpt,vup;
+        camera->getViewMatrixAsLookAt(veye,vvpt,vup);
+        BuildTilesFromCameraLOD(Vec3(veye.x(),veye.y(),veye.z()));
+    }
 
     std::vector<osg::Vec3d> listTileLineVx;
     for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
@@ -572,15 +635,18 @@ osg::Geode * BuildGdEarthFromCamera(Vec3 const &eye)
     std::vector<Tile*> listTiles;
     for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
         GetTilesAboveLevel(g_LIST_BASE_TILES[i],4,listTiles);
+        g_LIST_BASE_TILES[i]->subtileBL = NULL;
+        g_LIST_BASE_TILES[i]->subtileBR = NULL;
+        g_LIST_BASE_TILES[i]->subtileTR = NULL;
+        g_LIST_BASE_TILES[i]->subtileTL = NULL;
     }
-
     for(size_t i=0; i < listTiles.size(); i++)   {
         delete listTiles[i];
     }
-
     for(size_t i=0; i < g_LIST_TEMP_VERTICES.size(); i++)   {
         delete g_LIST_TEMP_VERTICES[i];
     }
+    g_LIST_TEMP_VERTICES.clear();
 
     return gdEarth.release();
 }

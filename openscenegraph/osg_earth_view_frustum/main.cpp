@@ -5,8 +5,6 @@ int main(int argc, char *argv[])
     // set debug severity
     //osg::setNotifyLevel(osg::DEBUG_INFO);
 
-
-
     // [base tiles]
     BuildBaseTileList(-180,-86,0,86,8,16,
                       g_LIST_BASE_VERTICES,
@@ -15,6 +13,10 @@ int main(int argc, char *argv[])
         g_LIST_BASE_TILES[i]->level = 4;
     }
 
+    std::cout << "SZ LIST BASE TILES: "
+              << CountBaseTiles() << std::endl;
+
+
     // [shaders]
     SetupShaders();
 
@@ -22,21 +24,7 @@ int main(int argc, char *argv[])
     g_LIST_LOD_RANGES = BuildLODRanges();
 
     // [earth node]
-    PointLLA lla(43,-79,100);
-    Vec3 eye = ConvLLAToECEF(lla);
-
-    // [poi node]
-    osg::Vec3d c(eye.x,eye.y,eye.z);
-    osg::ref_ptr<osg::Geode> gdPoi =
-            BuildOctahedron(osg::Vec3d(eye.x,eye.y,eye.z),
-                            osg::Vec4(1,0,0,0.5),
-                            1000000);
-
-    osg::ref_ptr<osg::Geode> gdEarth = BuildGdEarthFromCamera(eye);
-
-//    PointLLA tlla(48.375,-78.75,0);
-//    Vec3 t = ConvLLAToECEF(tlla);
-//    std::cout << "Distance: " << t.DistanceTo(eye) << std::endl;
+    osg::ref_ptr<osg::Geode> gdEarth = BuildGdEarthFromCamera(NULL);
 
     // [camera node]
     osg::ref_ptr<osg::MatrixTransform> xfCameraFrustum
@@ -45,13 +33,15 @@ int main(int argc, char *argv[])
 
     // [root group]
     osg::ref_ptr<osg::Group> gpRoot = new osg::Group;
-    gpRoot->addChild(gdPoi);
+    gpRoot->getOrCreateStateSet()->setMode(GL_BLEND,osg::StateAttribute::ON);
+
     gpRoot->addChild(gdEarth);
     gpRoot->addChild(xfCameraFrustum);
 
 
     // composite viewer
     osgViewer::CompositeViewer cviewer;
+    cviewer.setThreadingModel(osgViewer::Viewer::SingleThreaded);
 
     {   // add view 0
         osgViewer::View * view = new osgViewer::View;
@@ -81,27 +71,63 @@ int main(int argc, char *argv[])
         (*itr)->getState()->setUseVertexAttributeAliasing(true);
     }
 
-    while(!cviewer.done())   {
-        // update camera frustum
+    size_t nf = 30;
+    size_t fc = 0;
 
-        size_t numChildren = gpRoot->getNumChildren();
+    while(!cviewer.done())   {
+
+        size_t numChildren =
+                gpRoot->getNumChildren();
+
+        // update earth node
+        if(fc%nf == 0)   {
+            for(size_t i=0; i < numChildren; i++)   {
+                osg::Node * child = gpRoot->getChild(i);
+                if(child->getName() == "gdEarth")   {
+                    gpRoot->removeChild(child);
+                    osg::ref_ptr<osg::Geode> earth =
+                        BuildGdEarthFromCamera(cviewer.getView(0)->getCamera());
+                    gpRoot->addChild(earth);
+                    break;
+                }
+            }
+        }
+
+
+
+        // update camera frustum
         for(size_t i=0; i < numChildren; i++)   {
             osg::Node * child = gpRoot->getChild(i);
-//            if(child->getName() == "gdEarth")   {
-//                gpRoot->removeChild(child);
-//                //
-
-//            }
             if(child->getName() == "xfCameraFrustum")   {
                 gpRoot->removeChild(child);
                 osg::ref_ptr<osg::MatrixTransform> cameraFrustum =
                         BuildFrustumFromCamera(cviewer.getView(0)->getCamera());
                 gpRoot->addChild(cameraFrustum);
+                break;
             }
         }
+
+        fc++;
+        if(fc > 30)
+        { fc = 1; }
+
+//        std::cout << fc << "," << fc%nf << std::endl;
 
         cviewer.frame();
     }
 
     return 0;
 }
+
+//PointLLA lla(43,-79,10000);
+//Vec3 eye = ConvLLAToECEF(lla);
+
+//    // [poi node]
+//    osg::Vec3d c(eye.x,eye.y,eye.z);
+//    osg::ref_ptr<osg::Geode> gdPoi =
+//            BuildOctahedron(osg::Vec3d(eye.x,eye.y,eye.z),
+//                            osg::Vec4(1,0,0,0.5),
+//                            1000);
+
+    //    gpRoot->addChild(gdPoi);
+
