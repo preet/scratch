@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
         osgViewer::View * view = new osgViewer::View;
         cviewer.addView(view);
 
-        view->setUpViewInWindow(1000,0,640,480);
+        view->setUpViewInWindow(0,0,640,360);
         view->setSceneData(gpRoot.get());
         view->setCameraManipulator(new osgGA::TrackballManipulator);
     }
@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
         osgViewer::View * view = new osgViewer::View;
         cviewer.addView(view);
 
-        view->setUpViewInWindow(1000,500,640,480);
+        view->setUpViewInWindow(0,450,640,360);
         view->setSceneData(gpRoot.get());
         view->setCameraManipulator(new osgGA::TrackballManipulator);
     }

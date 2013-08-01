@@ -86,7 +86,8 @@ struct Tile
         subtileBR(NULL),
         subtileTR(NULL),
         level(0),
-        keep(true)
+        inFrustum(true),
+        inFrontOfHorizon(true)
     {}
 
     Vertex  * vxTL;
@@ -100,7 +101,9 @@ struct Tile
     Tile * subtileTR;
 
     size_t level;
-    bool keep;
+    bool inFrustum;
+    bool inFrontOfHorizon;
+
 };
 
 std::vector<Vertex*> g_LIST_BASE_VERTICES;
@@ -493,10 +496,10 @@ void CullTilesAgainstHorizon(Vec3 const &scaledSpaceEye,
            CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_tr) &&
            CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_tl))
         {
-            tile->keep = false;
+            tile->inFrontOfHorizon = false;
         }
         else   {
-            tile->keep = true;
+            tile->inFrontOfHorizon = true;
         }
 
         CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileBL);
@@ -506,10 +509,68 @@ void CullTilesAgainstHorizon(Vec3 const &scaledSpaceEye,
     }
 }
 
-void BuildTilesFromCameraLOD(Vec3 const &eye)
+void CullTilesAgainstFrustum(std::vector<Vec3> const &listFPlaneNorms,
+                             std::vector<Vec3> const &listFPlanePoints,
+                             Tile * tile)
 {
-    std::cout << "SZ LIST BASE TILES BEF: "
-              << CountBaseTiles() << std::endl;
+    // normal vectors are pointing outside the frustum
+
+    if(tile)   {
+        Vec3 vx_bl(tile->vxBL->x,tile->vxBL->y,tile->vxBL->z);
+        Vec3 vx_br(tile->vxBR->x,tile->vxBR->y,tile->vxBR->z);
+        Vec3 vx_tr(tile->vxTR->x,tile->vxTR->y,tile->vxTR->z);
+        Vec3 vx_tl(tile->vxTL->x,tile->vxTL->y,tile->vxTL->z);
+
+        std::vector<Vec3> listCornerVx;
+        listCornerVx.push_back(vx_bl);
+        listCornerVx.push_back(vx_br);
+        listCornerVx.push_back(vx_tr);
+        listCornerVx.push_back(vx_tl);
+
+        std::vector<bool> listCornerInFrustum(4,true);
+
+        // !! All four should have to be out of the frustum
+        //    to completely discard the tile
+
+        for(size_t i=0; i < listCornerVx.size(); i++)   {
+            // if any of the four corner vertices of the tile are
+            // within all six planes of the frustum, keep the tile
+
+            for(size_t j=0; j < listFPlanePoints.size(); j++)   {
+                // vector from point on plane to tile corner vx
+                Vec3 p_to_vx = listCornerVx[i]-listFPlanePoints[j];
+                if(p_to_vx.Dot(listFPlaneNorms[j]) > 0)   {
+                    // a positive dot product indicates the point is
+                    // outside the given plane wrt to the frustum
+                    listCornerInFrustum[i] = false;
+                    break;
+                }
+            }
+        }
+
+        tile->inFrustum =
+                (listCornerInFrustum[0] ||
+                 listCornerInFrustum[1] ||
+                 listCornerInFrustum[2] ||
+                 listCornerInFrustum[3]);
+
+        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileBL);
+        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileBR);
+        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileTR);
+        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileTL);
+    }
+}
+
+void BuildTilesFromCameraLOD(Vec3 const &eye,
+                             Vec3 const &vpt,
+                             Vec3 const &up,
+                             double const fovy,
+                             double const ar,
+                             double const znear,
+                             double const zfar)
+{
+//    std::cout << "SZ LIST BASE TILES BEF: "
+//              << CountBaseTiles() << std::endl;
 
     std::vector<double> listMaxDist2(g_LIST_LOD_RANGES[0].level+1,-1.0);
     for(size_t i=0; i < listMaxDist2.size(); i++)   {
@@ -531,8 +592,64 @@ void BuildTilesFromCameraLOD(Vec3 const &eye)
         CullTilesAgainstHorizon(scaledSpaceEye,g_LIST_BASE_TILES[i]);
     }
 
-    std::cout << "SZ LIST BASE TILES AFT: "
-              << CountBaseTiles() << std::endl;
+    // build frustum
+
+    // calculate the four edge vectors of the view frustum
+    double fovy_rad_bi  = (fovy*K_PI/180.0)/2.0;
+    double dAlongViewPt = cos(fovy_rad_bi);
+    double dAlongUp     = sin(fovy_rad_bi);
+    double dAlongRight  = dAlongUp*ar;
+
+    Vec3 camRight     = (vpt-eye).Cross(up);
+    Vec3 vAlongUp     = up.Normalized().ScaledBy(dAlongUp);
+    Vec3 vAlongRight  = camRight.Normalized().ScaledBy(dAlongRight);
+    Vec3 vAlongViewPt = (vpt-eye).Normalized().ScaledBy(dAlongViewPt);
+
+    std::vector<Vec3> listProjVec(9);
+    listProjVec[0] = vAlongViewPt - vAlongUp - vAlongRight;     // bottom left
+    listProjVec[1] = vAlongViewPt - vAlongUp;                   // bottom
+    listProjVec[2] = vAlongViewPt - vAlongUp + vAlongRight;     // bottom right
+    listProjVec[3] = vAlongViewPt + vAlongRight;                // right
+    listProjVec[4] = vAlongViewPt + vAlongUp + vAlongRight;     // top right
+    listProjVec[5] = vAlongViewPt + vAlongUp;                   // top
+    listProjVec[6] = vAlongViewPt + vAlongUp - vAlongRight;     // top left
+    listProjVec[7] = vAlongViewPt - vAlongRight;                // left
+    listProjVec[8] = vAlongViewPt;                              // center
+
+    double nearDist = 10.0;
+    double farDist  = eye.Magnitude()*2.0;
+    Vec3 nearBL = eye + listProjVec[0].Normalized().ScaledBy(nearDist);
+    Vec3 nearTR = eye + listProjVec[4].Normalized().ScaledBy(nearDist);
+    Vec3 farBL  = eye + listProjVec[0].Normalized().ScaledBy(farDist);
+
+    // frustum plane normals (these point outside
+    // according to right hand rule)
+    std::vector<Vec3> listFPlaneNorms(6);
+    listFPlaneNorms[0] = listProjVec[0].Cross(listProjVec[2]);  // bottom
+    listFPlaneNorms[1] = listProjVec[2].Cross(listProjVec[4]);  // right
+    listFPlaneNorms[2] = listProjVec[4].Cross(listProjVec[6]);  // top
+    listFPlaneNorms[3] = listProjVec[6].Cross(listProjVec[0]);  // left
+    listFPlaneNorms[4] = vAlongViewPt.Normalized();             // far
+    listFPlaneNorms[5] = listFPlaneNorms[4].ScaledBy(-1.0);     // near
+
+    // frustum plane points
+    std::vector<Vec3> listFPlanePoints(6);
+    listFPlanePoints[0] = nearBL;           // bottom
+    listFPlanePoints[1] = nearTR;           // right
+    listFPlanePoints[2] = nearTR;           // top
+    listFPlanePoints[3] = nearBL;           // left
+    listFPlanePoints[4] = farBL;            // far
+    listFPlanePoints[5] = nearBL;           // near
+
+    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
+        CullTilesAgainstFrustum(listFPlaneNorms,
+                                listFPlanePoints,
+                                g_LIST_BASE_TILES[i]);
+    }
+
+
+//    std::cout << "SZ LIST BASE TILES AFT: "
+//              << CountBaseTiles() << std::endl;
 }
 
 osg::Program * g_VERTEX_ATTR_FLAT_SHADER;
@@ -557,15 +674,10 @@ void SetupShaders()
 void BuildListVxFromTiles(Tile * root, std::vector<osg::Vec3d> &listVx)
 {
     if(root)   {
-        if(root->keep)   {
+        if(root->inFrustum && root->inFrontOfHorizon)   {
             osg::Vec3d vxBL(root->vxBL->x,root->vxBL->y,root->vxBL->z);
             osg::Vec3d vxBR(root->vxBR->x,root->vxBR->y,root->vxBR->z);
             osg::Vec3d vxTR(root->vxTR->x,root->vxTR->y,root->vxTR->z);
-
-            double butts = 0;
-            butts = root->vxTL->x;
-            butts = root->vxTL->y;
-            butts = root->vxTL->z;
             osg::Vec3d vxTL(root->vxTL->x,root->vxTL->y,root->vxTL->z);
 
             // TL<->BL
@@ -598,8 +710,13 @@ osg::Geode * BuildGdEarthFromCamera(osg::Camera * camera)
     if(camera)   {
         // generate the tiles
         osg::Vec3d veye,vvpt,vup;
+        double fovy,ar,znear,zfar;
         camera->getViewMatrixAsLookAt(veye,vvpt,vup);
-        BuildTilesFromCameraLOD(Vec3(veye.x(),veye.y(),veye.z()));
+        camera->getProjectionMatrixAsPerspective(fovy,ar,znear,zfar);
+        BuildTilesFromCameraLOD(Vec3(veye.x(),veye.y(),veye.z()),
+                                Vec3(vvpt.x(),vvpt.y(),vvpt.z()),
+                                Vec3(vup.x(),vup.y(),vup.z()),
+                                fovy,ar,znear,zfar);
     }
 
     std::vector<osg::Vec3d> listTileLineVx;
