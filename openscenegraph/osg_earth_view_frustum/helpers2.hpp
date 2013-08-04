@@ -63,71 +63,6 @@
 #define CIR_MD 40007860.0   // around meridian (meters)
 #define CIR_AV 40041438.0   // average (meters)
 
-struct LODRange
-{
-    LODRange() :
-        min(0),max(0),level(0)
-    {}
-
-    double min;
-    double max;
-    size_t level;
-};
-
-struct Vertex
-{
-    Vertex() :
-        x(0),y(0),z(0),
-        lon(0),lat(0),alt(0),
-        distToEye(0),
-        hasBeenTested(false),
-        inFrustum(false)
-    {}
-
-    double x,y,z;
-    double lon,lat,alt;
-    double distToEye;
-    bool hasBeenTested;
-    bool inFrustum;
-};
-
-struct Tile
-{
-    Tile() :
-        vxTL(NULL),
-        vxBL(NULL),
-        vxBR(NULL),
-        vxTR(NULL),
-        subtileTL(NULL),
-        subtileBL(NULL),
-        subtileBR(NULL),
-        subtileTR(NULL),
-        level(0),
-        inFrustum(true),
-        inFrontOfHorizon(true)
-    {}
-
-    Vertex  * vxTL;
-    Vertex  * vxBL;
-    Vertex  * vxBR;
-    Vertex  * vxTR;
-
-    Tile * subtileTL;
-    Tile * subtileBL;
-    Tile * subtileBR;
-    Tile * subtileTR;
-
-    size_t level;
-    bool inFrustum;
-    bool inFrontOfHorizon;
-
-};
-
-std::vector<Vertex*> g_LIST_BASE_VERTICES;
-std::vector<Tile*>   g_LIST_BASE_TILES;
-
-std::vector<Vertex*> g_LIST_TEMP_VERTICES;
-
 struct PointLLA
 {
     PointLLA() :
@@ -143,6 +78,76 @@ struct PointLLA
     double lat;
     double alt;
 };
+
+
+struct LODRange
+{
+    LODRange() :
+        min(0),max(0),level(0)
+    {}
+
+    double min;
+    double max;
+    size_t level;
+};
+
+struct Vertex
+{
+    Vertex() {}
+//        :
+//        x(0),y(0),z(0),
+//        lon(0),lat(0),alt(0),
+//        distToEye(0),
+//        hasBeenTested(false),
+//        inFrustum(false)
+//    {}
+
+//    double x,y,z;
+//    double lon,lat,alt;
+//    double distToEye;
+//    bool hasBeenTested;
+//    bool inFrustum;
+
+    Vec3 ecef;
+    PointLLA lla;
+    bool visible;
+    bool outsideFrustum;
+    bool beyondHorizon;
+};
+
+struct Tile
+{
+    Tile() :
+        vxTL(NULL),
+        vxBL(NULL),
+        vxBR(NULL),
+        vxTR(NULL),
+        subtileTL(NULL),
+        subtileBL(NULL),
+        subtileBR(NULL),
+        subtileTR(NULL),
+        level(0)
+    {}
+
+    Vertex * vxTL;
+    Vertex * vxBL;
+    Vertex * vxBR;
+    Vertex * vxTR;
+    Vertex * vxCN;
+
+    Tile * subtileTL;
+    Tile * subtileBL;
+    Tile * subtileBR;
+    Tile * subtileTR;
+
+    size_t level;
+};
+
+std::vector<Vertex*> g_LIST_BASE_VERTICES;
+std::vector<Tile*>   g_LIST_BASE_TILES;
+
+std::vector<Vertex*> g_LIST_TEMP_VERTICES;
+std::vector<Tile*>   g_LIST_TEMP_TILES;
 
 Vec3 ConvLLAToECEF(const PointLLA &pointLLA)
 {
@@ -310,15 +315,11 @@ void BuildBaseTileList(double minLon, double minLat,
     // build vertices
     for(size_t i=0; i <= latSegments; i++)   {
         for(size_t j=0; j <= lonSegments; j++)   {
-            Vec3 temp = ConvLLAToECEF(PointLLA((i*latStep)+minLat,
-                                               (j*lonStep)+minLon,0.0));
             Vertex * vx = new Vertex;
-            vx->lon = (j*lonStep)+minLon;
-            vx->lat = (i*latStep)+minLat;
-            vx->alt = 0;
-            vx->x = temp.x;
-            vx->y = temp.y;
-            vx->z = temp.z;
+            vx->lla.lat = (i*latStep)+minLat;
+            vx->lla.lon = (j*lonStep)+minLon;
+            vx->lla.alt = 0.0;
+            vx->ecef = ConvLLAToECEF(vx->lla);
 
             listVx.push_back(vx);
         }
@@ -328,11 +329,22 @@ void BuildBaseTileList(double minLon, double minLat,
     size_t vIdx=0;
     for(size_t i=0; i < latSegments; i++)   {
         for(size_t j=0; j < lonSegments; j++)   {
+
             Tile * tile = new Tile;
+
             tile->vxBL = listVx[vIdx];
             tile->vxBR = listVx[vIdx+1];
             tile->vxTR = listVx[vIdx+lonSegments+2];
             tile->vxTL = listVx[vIdx+lonSegments+1];
+
+            // center
+            tile->vxCN = new Vertex;
+            tile->vxCN->lla.lon = (tile->vxBL->lla.lon + tile->vxTR->lla.lon)/2.0;
+            tile->vxCN->lla.lat = (tile->vxBL->lla.lat + tile->vxTR->lla.lat)/2.0;
+            tile->vxCN->lla.alt = 0.0;
+            tile->vxCN->ecef = ConvLLAToECEF(tile->vxCN->lla);
+            listVx.push_back(tile->vxCN);
+
             listTiles.push_back(tile);
             vIdx++;
         }
@@ -374,209 +386,254 @@ void GetTilesAboveLevel(Tile * root, double const maxLevel,
     }
 }
 
-void BuildQuadtreeFromCamera(Vec3 const &eye,
-                             std::vector<double> const &listDist2ByLevel,
-                             Tile * tile)
+void BuildQuadTilesFromCam(Vec3 const &eye,Tile * tile,
+                           std::vector<double> const &listDist2ByLevel,
+                           std::vector<Tile*> &listNewTiles,
+                           std::vector<Vertex*> &listNewVx)
 {
-    // generate tile center
-    PointLLA cenLLA((tile->vxTL->lat + tile->vxBR->lat)/2.0,
-                    (tile->vxTL->lon + tile->vxBR->lon)/2.0);
+    double dist2 = tile->vxCN->ecef.Distance2To(eye);
 
-    Vec3 cenECEF = ConvLLAToECEF(cenLLA);
-
-    if((listDist2ByLevel[tile->level] < 0) ||
-       (cenECEF.Distance2To(eye) < listDist2ByLevel[tile->level]))   {
-        // build subtiles
-
-        // center vx
-        Vertex * vxC = new Vertex;
-        vxC->lon = cenLLA.lon;
-        vxC->lat = cenLLA.lat;
-        vxC->alt = cenLLA.alt;
-        vxC->x = cenECEF.x;
-        vxC->y = cenECEF.y;
-        vxC->z = cenECEF.z;
-        g_LIST_TEMP_VERTICES.push_back(vxC);
-
-        // center-left vx
-        PointLLA llaCL(cenLLA.lat,tile->vxTL->lon);
-        Vec3 ecefCL = ConvLLAToECEF(llaCL);
+    if((dist2 < listDist2ByLevel[tile->level]) ||
+       (listDist2ByLevel[tile->level] < 0))
+    {
+        // center-left vertex
         Vertex * vxCL = new Vertex;
-        vxCL->lon = llaCL.lon;
-        vxCL->lat = llaCL.lat;
-        vxCL->alt = llaCL.alt;
-        vxCL->x = ecefCL.x;
-        vxCL->y = ecefCL.y;
-        vxCL->z = ecefCL.z;
-        g_LIST_TEMP_VERTICES.push_back(vxCL);
+        vxCL->lla = PointLLA(tile->vxCN->lla.lat,tile->vxTL->lla.lon);
+        vxCL->ecef = ConvLLAToECEF(vxCL->lla);
+        listNewVx.push_back(vxCL);
 
-        // center-right vx
-        PointLLA llaCR(cenLLA.lat,tile->vxTR->lon);
-        Vec3 ecefCR = ConvLLAToECEF(llaCR);
+        // center-right vertex
         Vertex * vxCR = new Vertex;
-        vxCR->lon = llaCR.lon;
-        vxCR->lat = llaCR.lat;
-        vxCR->alt = llaCR.alt;
-        vxCR->x = ecefCR.x;
-        vxCR->y = ecefCR.y;
-        vxCR->z = ecefCR.z;
-        g_LIST_TEMP_VERTICES.push_back(vxCR);
+        vxCR->lla = PointLLA(tile->vxCN->lla.lat,tile->vxTR->lla.lon);
+        vxCR->ecef = ConvLLAToECEF(vxCR->lla);
+        listNewVx.push_back(vxCR);
 
-        // center-top vx
-        PointLLA llaCT(tile->vxTL->lat,cenLLA.lon);
-        Vec3 ecefCT = ConvLLAToECEF(llaCT);
+        // center-top vertex
         Vertex * vxCT = new Vertex;
-        vxCT->lon = llaCT.lon;
-        vxCT->lat = llaCT.lat;
-        vxCT->alt = llaCT.alt;
-        vxCT->x = ecefCT.x;
-        vxCT->y = ecefCT.y;
-        vxCT->z = ecefCT.z;
-        g_LIST_TEMP_VERTICES.push_back(vxCT);
+        vxCT->lla = PointLLA(tile->vxTL->lla.lat,tile->vxCN->lla.lon);
+        vxCT->ecef = ConvLLAToECEF(vxCT->lla);
+        listNewVx.push_back(vxCT);
 
-        // center-btm vx
-        PointLLA llaCB(tile->vxBL->lat,cenLLA.lon);
-        Vec3 ecefCB = ConvLLAToECEF(llaCB);
+        // center-bottom vertex
         Vertex * vxCB = new Vertex;
-        vxCB->lon = llaCB.lon;
-        vxCB->lat = llaCB.lat;
-        vxCB->alt = llaCB.alt;
-        vxCB->x = ecefCB.x;
-        vxCB->y = ecefCB.y;
-        vxCB->z = ecefCB.z;
-        g_LIST_TEMP_VERTICES.push_back(vxCB);
+        vxCB->lla = PointLLA(tile->vxBL->lla.lat,tile->vxCN->lla.lon);
+        vxCB->ecef = ConvLLAToECEF(vxCB->lla);
+        listNewVx.push_back(vxCB);
 
-        tile->subtileTL = new Tile;
-        tile->subtileTL->vxTL = tile->vxTL;
-        tile->subtileTL->vxBL = vxCL;
-        tile->subtileTL->vxBR = vxC;
-        tile->subtileTL->vxTR = vxCT;
-        tile->subtileTL->level = tile->level+1;
-        BuildQuadtreeFromCamera(eye,listDist2ByLevel,tile->subtileTL);
+        Tile * st;
 
-        tile->subtileBL = new Tile;
-        tile->subtileBL->vxTL = vxCL;
-        tile->subtileBL->vxBL = tile->vxBL;
-        tile->subtileBL->vxBR = vxCB;
-        tile->subtileBL->vxTR = vxC;
-        tile->subtileBL->level = tile->level+1;
-        BuildQuadtreeFromCamera(eye,listDist2ByLevel,tile->subtileBL);
+        // top-left subtile
+        st = new Tile;
+        st->level = tile->level+1;
+        listNewTiles.push_back(st);
 
-        tile->subtileBR = new Tile;
-        tile->subtileBR->vxTL = vxC;
-        tile->subtileBR->vxBL = vxCB;
-        tile->subtileBR->vxBR = tile->vxBR;
-        tile->subtileBR->vxTR = vxCR;
-        tile->subtileBR->level = tile->level+1;
-        BuildQuadtreeFromCamera(eye,listDist2ByLevel,tile->subtileBR);
+        st->vxTL = tile->vxTL;
+        st->vxBL = vxCL;
+        st->vxBR = tile->vxCN;
+        st->vxTR = vxCT;
 
-        tile->subtileTR = new Tile;
-        tile->subtileTR->vxTL = vxCT;
-        tile->subtileTR->vxBL = vxC;
-        tile->subtileTR->vxBR = vxCR;
-        tile->subtileTR->vxTR = tile->vxTR;
-        tile->subtileTR->level = tile->level+1;
-        BuildQuadtreeFromCamera(eye,listDist2ByLevel,tile->subtileTR);
+        st->vxCN = new Vertex;
+        st->vxCN->lla.lat = (st->vxTL->lla.lat + st->vxBR->lla.lat)/2.0;
+        st->vxCN->lla.lon = (st->vxTL->lla.lon + st->vxBR->lla.lon)/2.0;
+        st->vxCN->ecef = ConvLLAToECEF(st->vxCN->lla);
+        listNewVx.push_back(st->vxCN);
+
+        tile->subtileTL = st;
+        BuildQuadTilesFromCam(eye,st,listDist2ByLevel,listNewTiles,listNewVx);
+
+
+        // bottom-left subtile
+        st = new Tile;
+        st->level = tile->level+1;
+        listNewTiles.push_back(st);
+
+        st->vxTL = vxCL;
+        st->vxBL = tile->vxBL;
+        st->vxBR = vxCB;
+        st->vxTR = tile->vxCN;
+
+        st->vxCN = new Vertex;
+        st->vxCN->lla.lat = (st->vxTL->lla.lat + st->vxBR->lla.lat)/2.0;
+        st->vxCN->lla.lon = (st->vxTL->lla.lon + st->vxBR->lla.lon)/2.0;
+        st->vxCN->ecef = ConvLLAToECEF(st->vxCN->lla);
+        listNewVx.push_back(st->vxCN);
+
+        tile->subtileBL = st;
+        BuildQuadTilesFromCam(eye,st,listDist2ByLevel,listNewTiles,listNewVx);
+
+
+        // bottom-right subtile
+        st = new Tile;
+        st->level = tile->level+1;
+        listNewTiles.push_back(st);
+
+        st->vxTL = tile->vxCN;
+        st->vxBL = vxCB;
+        st->vxBR = tile->vxBR;
+        st->vxTR = vxCR;
+
+        st->vxCN = new Vertex;
+        st->vxCN->lla.lat = (st->vxTL->lla.lat + st->vxBR->lla.lat)/2.0;
+        st->vxCN->lla.lon = (st->vxTL->lla.lon + st->vxBR->lla.lon)/2.0;
+        st->vxCN->ecef = ConvLLAToECEF(st->vxCN->lla);
+        listNewVx.push_back(st->vxCN);
+
+        tile->subtileBR = st;
+        BuildQuadTilesFromCam(eye,st,listDist2ByLevel,listNewTiles,listNewVx);
+
+
+        // top-right subtile
+        st = new Tile;
+        st->level = tile->level+1;
+        listNewTiles.push_back(st);
+
+        st->vxTL = vxCT;
+        st->vxBL = tile->vxCN;
+        st->vxBR = vxCR;
+        st->vxTR = tile->vxTR;
+
+        st->vxCN = new Vertex;
+        st->vxCN->lla.lat = (st->vxTL->lla.lat + st->vxBR->lla.lat)/2.0;
+        st->vxCN->lla.lon = (st->vxTL->lla.lon + st->vxBR->lla.lon)/2.0;
+        st->vxCN->ecef = ConvLLAToECEF(st->vxCN->lla);
+        listNewVx.push_back(st->vxCN);
+
+        tile->subtileTR = st;
+        BuildQuadTilesFromCam(eye,st,listDist2ByLevel,listNewTiles,listNewVx);
     }
 }
 
-void CullTilesAgainstHorizon(Vec3 const &scaledSpaceEye,
-                             Tile * tile)
+void CullPointsAgainstHorizon(Vec3 const &scaledSpaceEye,
+                              std::vector<Vertex*> &listVx)
 {
-    if(tile)   {
-        // if any of the four corner vertices
-        // of these tiles are in front of the
-        // horizon plane, we save the tile
+    // transform the vertex into scaled space
+    for(size_t i=0; i < listVx.size(); i++)   {
+        Vec3 scaledSpaceVx(listVx[i]->ecef.x/ELL_SEMI_MAJOR,
+                           listVx[i]->ecef.y/ELL_SEMI_MAJOR,
+                           listVx[i]->ecef.z/ELL_SEMI_MINOR);
 
-        Vec3 ssvx_bl,ssvx_br,ssvx_tr,ssvx_tl; // scaled ellipsoid space vertex
-
-        // bottom left
-        ssvx_bl = Vec3(tile->vxBL->x/ELL_SEMI_MAJOR,
-                       tile->vxBL->y/ELL_SEMI_MAJOR,
-                       tile->vxBL->z/ELL_SEMI_MINOR);
-
-        ssvx_br = Vec3(tile->vxBR->x/ELL_SEMI_MAJOR,
-                       tile->vxBR->y/ELL_SEMI_MAJOR,
-                       tile->vxBR->z/ELL_SEMI_MINOR);
-
-        ssvx_tr = Vec3(tile->vxTR->x/ELL_SEMI_MAJOR,
-                       tile->vxTR->y/ELL_SEMI_MAJOR,
-                       tile->vxTR->z/ELL_SEMI_MINOR);
-
-        ssvx_tl = Vec3(tile->vxTL->x/ELL_SEMI_MAJOR,
-                       tile->vxTL->y/ELL_SEMI_MAJOR,
-                       tile->vxTL->z/ELL_SEMI_MINOR);
-
-
-        if(CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_bl) &&
-           CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_br) &&
-           CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_tr) &&
-           CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_tl))
-        {
-            tile->inFrontOfHorizon = false;
-        }
-        else   {
-            tile->inFrontOfHorizon = true;
-        }
-
-        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileBL);
-        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileBR);
-        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileTR);
-        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileTL);
+        listVx[i]->beyondHorizon = false;
+        if(CalcPointBeyondHorizonPlane(scaledSpaceEye,scaledSpaceVx))
+        {   listVx[i]->beyondHorizon = true;   }
     }
 }
 
-void CullTilesAgainstFrustum(std::vector<Vec3> const &listFPlaneNorms,
-                             std::vector<Vec3> const &listFPlanePoints,
-                             Tile * tile)
+//void CullTilesAgainstHorizon(Vec3 const &scaledSpaceEye,
+//                             Tile * tile)
+//{
+//    if(tile)   {
+//        // if any of the four corner vertices
+//        // of these tiles are in front of the
+//        // horizon plane, we save the tile
+
+//        Vec3 ssvx_bl,ssvx_br,ssvx_tr,ssvx_tl; // scaled ellipsoid space vertex
+
+//        // bottom left
+//        ssvx_bl = Vec3(tile->vxBL->x/ELL_SEMI_MAJOR,
+//                       tile->vxBL->y/ELL_SEMI_MAJOR,
+//                       tile->vxBL->z/ELL_SEMI_MINOR);
+
+//        ssvx_br = Vec3(tile->vxBR->x/ELL_SEMI_MAJOR,
+//                       tile->vxBR->y/ELL_SEMI_MAJOR,
+//                       tile->vxBR->z/ELL_SEMI_MINOR);
+
+//        ssvx_tr = Vec3(tile->vxTR->x/ELL_SEMI_MAJOR,
+//                       tile->vxTR->y/ELL_SEMI_MAJOR,
+//                       tile->vxTR->z/ELL_SEMI_MINOR);
+
+//        ssvx_tl = Vec3(tile->vxTL->x/ELL_SEMI_MAJOR,
+//                       tile->vxTL->y/ELL_SEMI_MAJOR,
+//                       tile->vxTL->z/ELL_SEMI_MINOR);
+
+
+//        if(CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_bl) &&
+//           CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_br) &&
+//           CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_tr) &&
+//           CalcPointBeyondHorizonPlane(scaledSpaceEye,ssvx_tl))
+//        {
+//            tile->inFrontOfHorizon = false;
+//        }
+//        else   {
+//            tile->inFrontOfHorizon = true;
+//        }
+
+//        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileBL);
+//        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileBR);
+//        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileTR);
+//        CullTilesAgainstHorizon(scaledSpaceEye,tile->subtileTL);
+//    }
+//}
+
+void CullPointsAgainstFrustum(std::vector<Vec3> const &listFPlaneNorms,
+                              std::vector<Vec3> const &listFPlanePoints,
+                              std::vector<Vertex*> &listVx)
 {
-    // normal vectors are pointing outside the frustum
-
-    if(tile)   {
-        Vec3 vx_bl(tile->vxBL->x,tile->vxBL->y,tile->vxBL->z);
-        Vec3 vx_br(tile->vxBR->x,tile->vxBR->y,tile->vxBR->z);
-        Vec3 vx_tr(tile->vxTR->x,tile->vxTR->y,tile->vxTR->z);
-        Vec3 vx_tl(tile->vxTL->x,tile->vxTL->y,tile->vxTL->z);
-
-        std::vector<Vec3> listCornerVx;
-        listCornerVx.push_back(vx_bl);
-        listCornerVx.push_back(vx_br);
-        listCornerVx.push_back(vx_tr);
-        listCornerVx.push_back(vx_tl);
-
-        std::vector<bool> listCornerInFrustum(4,true);
-
-        // !! All four should have to be out of the frustum
-        //    to completely discard the tile
-
-        for(size_t i=0; i < listCornerVx.size(); i++)   {
-            // if any of the four corner vertices of the tile are
-            // within all six planes of the frustum, keep the tile
-
-            for(size_t j=0; j < listFPlanePoints.size(); j++)   {
-                // vector from point on plane to tile corner vx
-                Vec3 p_to_vx = listCornerVx[i]-listFPlanePoints[j];
-                if(p_to_vx.Dot(listFPlaneNorms[j]) > 0)   {
-                    // a positive dot product indicates the point is
-                    // outside the given plane wrt to the frustum
-                    listCornerInFrustum[i] = false;
-                    break;
-                }
+    for(size_t i=0; i < listVx.size(); i++)   {
+        listVx[i]->outsideFrustum = false;
+        for(size_t j=0; j < listFPlanePoints.size(); j++)   {
+            // vector from point on plane to vertex
+            Vec3 p_to_vx = listVx[i]->ecef-listFPlanePoints[j];
+            if(p_to_vx.Dot(listFPlaneNorms[j]) > 0)   {
+                // a positive dot product indicates the point is
+                // outside the given plane wrt to the frustum
+                listVx[i]->outsideFrustum = true;
+                break;
             }
         }
-
-        tile->inFrustum =
-                (listCornerInFrustum[0] ||
-                 listCornerInFrustum[1] ||
-                 listCornerInFrustum[2] ||
-                 listCornerInFrustum[3]);
-
-        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileBL);
-        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileBR);
-        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileTR);
-        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileTL);
     }
 }
+
+//void CullTilesAgainstFrustum(std::vector<Vec3> const &listFPlaneNorms,
+//                             std::vector<Vec3> const &listFPlanePoints,
+//                             Tile * tile)
+//{
+//    // normal vectors are pointing outside the frustum
+
+//    if(tile)   {
+//        Vec3 vx_bl(tile->vxBL->x,tile->vxBL->y,tile->vxBL->z);
+//        Vec3 vx_br(tile->vxBR->x,tile->vxBR->y,tile->vxBR->z);
+//        Vec3 vx_tr(tile->vxTR->x,tile->vxTR->y,tile->vxTR->z);
+//        Vec3 vx_tl(tile->vxTL->x,tile->vxTL->y,tile->vxTL->z);
+
+//        std::vector<Vec3> listCornerVx;
+//        listCornerVx.push_back(vx_bl);
+//        listCornerVx.push_back(vx_br);
+//        listCornerVx.push_back(vx_tr);
+//        listCornerVx.push_back(vx_tl);
+
+//        std::vector<bool> listCornerInFrustum(4,true);
+
+//        // !! All four should have to be out of the frustum
+//        //    to completely discard the tile
+
+//        for(size_t i=0; i < listCornerVx.size(); i++)   {
+//            // if any of the four corner vertices of the tile are
+//            // within all six planes of the frustum, keep the tile
+
+//            for(size_t j=0; j < listFPlanePoints.size(); j++)   {
+//                // vector from point on plane to tile corner vx
+//                Vec3 p_to_vx = listCornerVx[i]-listFPlanePoints[j];
+//                if(p_to_vx.Dot(listFPlaneNorms[j]) > 0)   {
+//                    // a positive dot product indicates the point is
+//                    // outside the given plane wrt to the frustum
+//                    listCornerInFrustum[i] = false;
+//                    break;
+//                }
+//            }
+//        }
+
+//        tile->inFrustum =
+//                (listCornerInFrustum[0] ||
+//                 listCornerInFrustum[1] ||
+//                 listCornerInFrustum[2] ||
+//                 listCornerInFrustum[3]);
+
+//        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileBL);
+//        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileBR);
+//        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileTR);
+//        CullTilesAgainstFrustum(listFPlaneNorms,listFPlanePoints,tile->subtileTL);
+//    }
+//}
 
 void BuildTilesFromCameraLOD(Vec3 const &eye,
                              Vec3 const &vpt,
@@ -586,28 +643,35 @@ void BuildTilesFromCameraLOD(Vec3 const &eye,
                              double const znear,
                              double const zfar)
 {
-//    std::cout << "SZ LIST BASE TILES BEF: "
-//              << CountBaseTiles() << std::endl;
+//    std::cout << "SZ LIST BASE TILES BEF/AFT: "
+//              << CountBaseTiles();
 
     std::vector<double> listMaxDist2(g_LIST_LOD_RANGES[0].level+1,-1.0);
     for(size_t i=0; i < listMaxDist2.size(); i++)   {
         for(size_t j=0; j < g_LIST_LOD_RANGES.size(); j++)   {
             if(g_LIST_LOD_RANGES[j].level == i)   {
-                listMaxDist2[i] = g_LIST_LOD_RANGES[j].max*g_LIST_LOD_RANGES[j].max;
+                listMaxDist2[i] = g_LIST_LOD_RANGES[j].max*
+                                  g_LIST_LOD_RANGES[j].max;
             }
         }
+//        std::cout << i << ": " << listMaxDist2[i] << std::endl;
     }
 
     for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
-        BuildQuadtreeFromCamera(eye,listMaxDist2,g_LIST_BASE_TILES[i]);
+        BuildQuadTilesFromCam(eye,
+                              g_LIST_BASE_TILES[i],
+                              listMaxDist2,
+                              g_LIST_TEMP_TILES,
+                              g_LIST_TEMP_VERTICES);
     }
 
+    // cull tile vertices against horizon
     Vec3 scaledSpaceEye(eye.x / ELL_SEMI_MAJOR,
                         eye.y / ELL_SEMI_MAJOR,
                         eye.z / ELL_SEMI_MINOR);
-    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
-        CullTilesAgainstHorizon(scaledSpaceEye,g_LIST_BASE_TILES[i]);
-    }
+
+    CullPointsAgainstHorizon(scaledSpaceEye,g_LIST_BASE_VERTICES);
+    CullPointsAgainstHorizon(scaledSpaceEye,g_LIST_TEMP_VERTICES);
 
     // build frustum
 
@@ -658,15 +722,17 @@ void BuildTilesFromCameraLOD(Vec3 const &eye,
     listFPlanePoints[4] = farBL;            // far
     listFPlanePoints[5] = nearBL;           // near
 
-    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
-        CullTilesAgainstFrustum(listFPlaneNorms,
-                                listFPlanePoints,
-                                g_LIST_BASE_TILES[i]);
-    }
+    CullPointsAgainstFrustum(listFPlaneNorms,listFPlanePoints,g_LIST_BASE_VERTICES);
+    CullPointsAgainstFrustum(listFPlaneNorms,listFPlanePoints,g_LIST_TEMP_VERTICES);
+
+//    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
+//        CullTilesAgainstFrustum(listFPlaneNorms,
+//                                listFPlanePoints,
+//                                g_LIST_BASE_TILES[i]);
+//    }
 
 
-//    std::cout << "SZ LIST BASE TILES AFT: "
-//              << CountBaseTiles() << std::endl;
+//    std::cout << "/" << CountBaseTiles() << std::endl;
 }
 
 osg::Program * g_VERTEX_ATTR_FLAT_SHADER;
@@ -691,11 +757,32 @@ void SetupShaders()
 void BuildListVxFromTiles(Tile * root, std::vector<osg::Vec3d> &listVx)
 {
     if(root)   {
-        if(root->inFrustum && root->inFrontOfHorizon)   {
-            osg::Vec3d vxBL(root->vxBL->x,root->vxBL->y,root->vxBL->z);
-            osg::Vec3d vxBR(root->vxBR->x,root->vxBR->y,root->vxBR->z);
-            osg::Vec3d vxTR(root->vxTR->x,root->vxTR->y,root->vxTR->z);
-            osg::Vec3d vxTL(root->vxTL->x,root->vxTL->y,root->vxTL->z);
+
+        bool tileBeforeHorizon =
+                !(root->vxTL->beyondHorizon &&
+                  root->vxBL->beyondHorizon &&
+                  root->vxBR->beyondHorizon &&
+                  root->vxTR->beyondHorizon);
+
+        bool tileInFrustum =
+                !(root->vxTL->outsideFrustum &&
+                  root->vxBL->outsideFrustum &&
+                  root->vxBR->outsideFrustum &&
+                  root->vxTR->outsideFrustum);
+
+        if(tileInFrustum && tileBeforeHorizon)   {
+            osg::Vec3d vxBL(root->vxBL->ecef.x,
+                            root->vxBL->ecef.y,
+                            root->vxBL->ecef.z);
+            osg::Vec3d vxBR(root->vxBR->ecef.x,
+                            root->vxBR->ecef.y,
+                            root->vxBR->ecef.z);
+            osg::Vec3d vxTR(root->vxTR->ecef.x,
+                            root->vxTR->ecef.y,
+                            root->vxTR->ecef.z);
+            osg::Vec3d vxTL(root->vxTL->ecef.x,
+                            root->vxTL->ecef.y,
+                            root->vxTL->ecef.z);
 
             // TL<->BL
             listVx.push_back(vxTL);
@@ -747,7 +834,7 @@ osg::Geode * BuildGdEarthFromCamera(osg::Camera * camera)
     osg::ref_ptr<osg::Vec4Array>  listCx = new osg::Vec4Array;
     for(size_t i=0; i < listTileLineVx.size(); i++)   {
         listVx->push_back(listTileLineVx[i]);
-        listCx->push_back(osg::Vec4(1.0,1.0,1.0,1.0));
+        listCx->push_back(osg::Vec4(0.5,0.5,0.5,1.0));
     }
 
     osg::ref_ptr<osg::Geometry> gmEarth = new osg::Geometry;
@@ -766,21 +853,20 @@ osg::Geode * BuildGdEarthFromCamera(osg::Camera * camera)
 
 
     // clean up
-    std::vector<Tile*> listTiles;
+    for(size_t i=0; i < g_LIST_TEMP_TILES.size(); i++)   {
+        delete g_LIST_TEMP_TILES[i];
+    } g_LIST_TEMP_TILES.clear();
+
+    for(size_t i=0; i < g_LIST_TEMP_VERTICES.size(); i++)   {
+        delete g_LIST_TEMP_VERTICES[i];
+    } g_LIST_TEMP_VERTICES.clear();
+
     for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
-        GetTilesAboveLevel(g_LIST_BASE_TILES[i],4,listTiles);
         g_LIST_BASE_TILES[i]->subtileBL = NULL;
         g_LIST_BASE_TILES[i]->subtileBR = NULL;
         g_LIST_BASE_TILES[i]->subtileTR = NULL;
         g_LIST_BASE_TILES[i]->subtileTL = NULL;
     }
-    for(size_t i=0; i < listTiles.size(); i++)   {
-        delete listTiles[i];
-    }
-    for(size_t i=0; i < g_LIST_TEMP_VERTICES.size(); i++)   {
-        delete g_LIST_TEMP_VERTICES[i];
-    }
-    g_LIST_TEMP_VERTICES.clear();
 
     return gdEarth.release();
 }
