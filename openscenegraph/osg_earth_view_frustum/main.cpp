@@ -23,36 +23,28 @@ int main(int argc, char *argv[])
     // set debug severity
     //osg::setNotifyLevel(osg::DEBUG_INFO);
 
-    std::vector<PointLLA> listPLLA;
-    listPLLA.push_back(PointLLA(75,-135));
-    listPLLA.push_back(PointLLA(65,-90));
-    listPLLA.push_back(PointLLA(-43,45));
-    listPLLA.push_back(PointLLA(-63,90));
+//    std::vector<PointLLA> listPLLA;
+//    listPLLA.push_back(PointLLA(89,-90));
+//    listPLLA.push_back(PointLLA(1,-0.1));
+//    listPLLA.push_back(PointLLA(-90,-90));
+//    listPLLA.push_back(PointLLA(-1,-179));
 
-    PointLLA camLLA(PointLLA(77,90,25000));
-    Vec3 ceye = ConvLLAToECEF(camLLA);
+//    PointLLA camLLA(PointLLA(77,90,25000));
+//    Vec3 ceye = ConvLLAToECEF(camLLA);
 
-    std::vector<GeoBounds> listBounds;
-    CalcLonRangeFromLLAPoly(camLLA,listPLLA,listBounds);
+//    std::vector<GeoBounds> listBounds;
+//    CalcGeoBoundsFromLLAPoly(camLLA,listPLLA,listBounds);
 
-    for(size_t i=0; i < listBounds.size(); i++)   {
-        std::cout << i
-                  << ": minLat: " << listBounds[i].minLat
-                  << ", maxLat: " << listBounds[i].maxLat
-                  << ", minLon: " << listBounds[i].minLon
-                  << ", maxLon: " << listBounds[i].maxLon
-                  << std::endl;
-    }
+//    for(size_t i=0; i < listBounds.size(); i++)   {
+//        std::cout << i
+//                  << ": minLat: " << listBounds[i].minLat
+//                  << ", maxLat: " << listBounds[i].maxLat
+//                  << ", minLon: " << listBounds[i].minLon
+//                  << ", maxLon: " << listBounds[i].maxLon
+//                  << std::endl;
+//    }
 
-    return 0;
-
-    // [base tiles]
-    BuildBaseTileList(-180,-86,180,86,16,16,
-                      g_LIST_BASE_VERTICES,
-                      g_LIST_BASE_TILES);
-    for(size_t i=0; i < g_LIST_BASE_TILES.size(); i++)   {
-        g_LIST_BASE_TILES[i]->level = 4;
-    }
+//    return 0;
 
     // [shaders]
     SetupShaders();
@@ -61,19 +53,19 @@ int main(int argc, char *argv[])
     g_LIST_LOD_RANGES = BuildLODRanges();
 
     // [earth node]
-    osg::ref_ptr<osg::Geode> gdEarth = BuildGdEarthFromCamera(NULL);
+    osg::ref_ptr<osg::Group> gpEarth =
+        BuildGpEarthFromCamera(NULL,g_LIST_LOD_RANGES);
 
     // [camera node]
-    osg::ref_ptr<osg::MatrixTransform> xfCameraFrustum
-            = new osg::MatrixTransform; // empty
-    xfCameraFrustum->setName("gpCamera");
+    osg::ref_ptr<osg::Group> gpCamera =
+        BuildFrustumFromCamera(NULL,g_LIST_LOD_RANGES);
 
     // [root group]
     osg::ref_ptr<osg::Group> gpRoot = new osg::Group;
     gpRoot->getOrCreateStateSet()->setMode(GL_BLEND,osg::StateAttribute::ON);
 
-    gpRoot->addChild(gdEarth);
-    gpRoot->addChild(xfCameraFrustum);
+    gpRoot->addChild(gpEarth);
+    gpRoot->addChild(gpCamera);
 
 
     // composite viewer
@@ -110,24 +102,28 @@ int main(int argc, char *argv[])
         (*itr)->getState()->setUseVertexAttributeAliasing(true);
     }
 
+    size_t nf = 120;
+    size_t fc = 0;
+
     while(!cviewer.done())   {
 
-        size_t numChildren =
-                gpRoot->getNumChildren();
+        size_t numChildren = gpRoot->getNumChildren();
 
-//        // update earth node
-//        if(fc%nf == 0)   {
-//            for(size_t i=0; i < numChildren; i++)   {
-//                osg::Node * child = gpRoot->getChild(i);
-//                if(child->getName() == "gdEarth")   {
-//                    gpRoot->removeChild(child);
-//                    osg::ref_ptr<osg::Geode> earth =
-//                        BuildGdEarthFromCamera(cviewer.getView(0)->getCamera());
-//                    gpRoot->addChild(earth);
-//                    break;
-//                }
-//            }
-//        }
+        // update earth node
+        if(fc%nf == 0)   {
+            for(size_t i=0; i < numChildren; i++)   {
+                osg::Node * child = gpRoot->getChild(i);
+                if(child->getName() == "gpEarth")   {
+                    gpRoot->removeChild(child);
+                    osg::ref_ptr<osg::Group> earth =
+                        BuildGpEarthFromCamera(cviewer.getView(0)->getCamera(),
+                                               g_LIST_LOD_RANGES);
+                    gpRoot->addChild(earth);
+                    std::cout << "ping" << std::endl;
+                    break;
+                }
+            }
+        }
 
 
         // update camera frustum
@@ -142,6 +138,10 @@ int main(int argc, char *argv[])
                 break;
             }
         }
+
+        fc++;
+        if(fc > 120)
+        { fc = 1; }
 
         cviewer.frame();
     }
