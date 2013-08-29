@@ -1,5 +1,7 @@
 ###libosmscout build-qmake
-*last tested libosmscout rev: 3588c8e944afe0d99074e5c98059f588326c4bee, Jul 21 2013 *
+*last tested libosmscout rev:* 
+*3588c8e944afe0d99074e5c98059f588326c4bee, Jul 21 2013*
+
 Notes for building libosmscout with qmake. Libosmscout uses libtools to configure the build process based on the current environment, ie:
 
 `[user@box libosmscout]: ./autogen.sh && ./configure`
