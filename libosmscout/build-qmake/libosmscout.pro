@@ -142,14 +142,11 @@ src/osmscout/DebugDatabase.cpp \
 src/osmscout/NumericIndex.cpp
 
 PATH_INSTALL = /home/preet/Dev/env/sys/libosmscout
-
+target.path = $${PATH_INSTALL}/lib
 header_files.files = include/osmscout/*
 header_files.path = $${PATH_INSTALL}/include/osmscout
 
-lib_files.files = $${OUT_PWD}/libosmscout.so
-lib_files.path = $${PATH_INSTALL}/lib
-
-INSTALLS += header_files lib_files
+INSTALLS += header_files target
 
 
 #depc
