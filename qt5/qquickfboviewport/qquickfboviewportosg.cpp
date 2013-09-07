@@ -198,6 +198,7 @@ void QSGFBONodeOSG::renderFrame()
 
     // qt passes values to VertexAttrib 3,4,5 manually
     // so we should disable them when we use em
+    glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
     glDisableVertexAttribArray(2);
     glDisableVertexAttribArray(3);

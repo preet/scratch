@@ -1,0 +1,42 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<qnx xmlns="http://www.qnx.com/schemas/application/1.0">
+    <id>com.example.helloworld</id>
+    <name>helloworld</name>
+    <versionNumber>1.0.0</versionNumber>
+    <description>DESCRIPTION</description>
+   <initialWindow>
+       <aspectRatio>landscape</aspectRatio>
+       <autoOrients>true</autoOrients>
+       <systemChrome>none</systemChrome>
+       <transparent>false</transparent>
+   </initialWindow>
+    <author>Individual</author>
+    <copyright>COPYRIGHT</copyright>
+    
+    <env var="QT_PLUGIN_PATH"   value="app/native/env/plugins:shared/documents/dev/qt-5.1-git-rel/plugins"/>
+    <env var="LD_LIBRARY_PATH"  value="app/native/env/lib:shared/documents/dev/qt-5.1-git-rel/lib"/>    
+    <env var="QML2_IMPORT_PATH" value="app/native/env/qml:shared/documents/dev/qt-5.1-git-rel/qml"/>
+   
+    <!--
+    <env value="app/native/qml" var="QML2_IMPORT_PATH"/>
+    <env value="app/native/plugins" var="QT_PLUGIN_PATH"/>
+    <env value="app/native/lib" var="LD_LIBRARY_PATH"/>
+    -->
+    
+    <env value="no" var="QML_FIXED_ANIMATION_STEP"/>
+    <env value="1" var="QML_FORCE_THREADED_RENDER"/>
+    
+    <!-- <arg>-style</arg> -->
+    <!-- <arg>qnxlight</arg> -->
+       <!-- access to user documents -->
+    <action>access_shared</action>
+    <action system="true">run_native</action>
+    <!-- textureinsgnode should point to the project binary, path can be relative -->
+    <asset entry="true" type="Qnx/Elf" path="helloworld">qquick_helloworld_embedded</asset>
+    <!-- <asset path="%QT_INSTALL_LIBS%">lib</asset>
+    <asset path="%QT_INSTALL_PLUGINS%">plugins</asset>
+    <asset path="%QT_INSTALL_QML%">imports</asset> -->
+    <!-- <asset path="main.qml">res/main.qml</asset> -->
+    <!-- These values will be replaced when deploying in Qt Creator -->
+    <authorId>gYAAgOTuT0B9ytlqvWI4hESaSfo</authorId>
+</qnx>

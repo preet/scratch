@@ -1,6 +1,5 @@
 QT += quick
 
-
 HEADERS += \
     qquickfboviewportosg.h
 
@@ -10,20 +9,49 @@ SOURCES += \
 
 OTHER_FILES += \
     main.qml \
-    bar-descriptor.xml
+    bar-descriptor.xml \
+    android/AndroidManifest.xml \
+    android/version.xml \
+    android/res/values-id/strings.xml \
+    android/res/values-pl/strings.xml \
+    android/res/values-ms/strings.xml \
+    android/res/values-rs/strings.xml \
+    android/res/values-nl/strings.xml \
+    android/res/values-ru/strings.xml \
+    android/res/values-fr/strings.xml \
+    android/res/values-zh-rCN/strings.xml \
+    android/res/values-pt-rBR/strings.xml \
+    android/res/values-zh-rTW/strings.xml \
+    android/res/values-es/strings.xml \
+    android/res/layout/splash.xml \
+    android/res/values-de/strings.xml \
+    android/res/values-it/strings.xml \
+    android/res/values-fa/strings.xml \
+    android/res/values-nb/strings.xml \
+    android/res/values-el/strings.xml \
+    android/res/values-ro/strings.xml \
+    android/res/values-et/strings.xml \
+    android/res/values-ja/strings.xml \
+    android/res/values/libs.xml \
+    android/res/values/strings.xml \
+    android/src/org/kde/necessitas/ministro/IMinistroCallback.aidl \
+    android/src/org/kde/necessitas/ministro/IMinistro.aidl \
+    android/src/org/qtproject/qt5/android/bindings/QtApplication.java \
+    android/src/org/qtproject/qt5/android/bindings/QtActivity.java
 
 qmlfiles.path = $${OUT_PWD}
 qmlfiles.files = main.qml
 
-INSTALLS += qmlfiles
+#INSTALLS += qmlfiles
 
-!qnx {
-    DEFINES += DEV_DESKTOP
-#    OSGDIR = /home/preet/Dev/env/sys/osg-3.1.8
-#    OSGLIBDIR = /home/preet/Dev/env/sys/osg-3.1.8/lib64
+env_dev   {
+    DEFINES += ENV_DEV
+    DEFINES += ENV_GL   # desktop gl
+    OSGDIR = /home/preet/Dev/env/sys/osg-3.1.8
+    OSGLIBDIR = /home/preet/Dev/env/sys/osg-3.1.8/lib64
 
-    OSGDIR = /home/preet/Dev/env/sys/osg-modern
-    OSGLIBDIR = /home/preet/Dev/env/sys/osg-modern/lib64
+#    OSGDIR = /home/preet/Dev/env/sys/osg-modern
+#    OSGLIBDIR = /home/preet/Dev/env/sys/osg-modern/lib64
 
     INCLUDEPATH += $${OSGDIR}/include
     LIBS += -L$${OSGLIBDIR} -losgViewerrd
@@ -35,8 +63,26 @@ INSTALLS += qmlfiles
     LIBS += -L$${OSGLIBDIR} -lOpenThreadsrd
 }
 
-qnx {
-    DEFINES += DEV_PLAYBOOK
+env_android   {
+    DEFINES += ENV_ANDROID
+    DEFINES += ENV_GLES2
+
+    OSGDIR = /home/preet/Dev/env/android/osg-git-debug
+    OSGLIBDIR = /home/preet/Dev/env/android/osg-git-debug/lib
+
+    INCLUDEPATH += $${OSGDIR}/include
+    LIBS += -L$${OSGLIBDIR} -losgViewer
+    LIBS += -L$${OSGLIBDIR} -losgText
+    LIBS += -L$${OSGLIBDIR} -losgGA
+    LIBS += -L$${OSGLIBDIR} -losgUtil
+    LIBS += -L$${OSGLIBDIR} -losgDB
+    LIBS += -L$${OSGLIBDIR} -losg
+    LIBS += -L$${OSGLIBDIR} -lOpenThreads
+}
+
+env_blackberry   {
+    DEFINES += ENV_BLACKBERRY
+    DEFINES += ENV_GLES2
 
     #
     # note:
@@ -98,3 +144,6 @@ qnx {
 
     OTHER_FILES += bar-descriptor.xml
 }
+
+RESOURCES += \
+    ui.qrc

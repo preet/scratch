@@ -3,8 +3,8 @@ import ViewportItems 1.0
 
 Rectangle {
     id:root;
-    width: 1024;
-    height: 600;
+    width: 854;
+    height: 480;
     color: "black";
 
     ViewportItem {

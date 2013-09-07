@@ -1,13 +1,13 @@
 #ifndef QQUICKFBOVIEWPORTOSG_H
 #define QQUICKFBOVIEWPORTOSG_H
 
-#ifdef DEV_DESKTOP
+#ifdef ENV_GL
     #define GL_GLEXT_PROTOTYPES
     #include <GL/gl.h>
     #include <GL/glext.h>
 #endif
 
-#ifdef DEV_PLAYBOOK
+#ifdef ENV_GLES2
     #define GL_RGBA8 GL_RGBA
     #include <GLES2/gl2.h>
 #endif

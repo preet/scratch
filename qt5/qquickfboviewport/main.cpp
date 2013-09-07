@@ -52,17 +52,16 @@ int main(int argc, char **argv)
 
     QQuickView view;
     view.setResizeMode(QQuickView::SizeRootObjectToView);
-
-#ifdef DEV_DESKTOP
-    view.setSource(QUrl("main.qml"));
-#endif
-
-#ifdef DEV_PLAYBOOK
-    view.setSource(QUrl("app/native/res/main.qml"));
-#endif
-
-
+    view.setSource(QUrl("qrc:/main.qml"));
     view.show();
+
+//#ifdef ENV_DEV
+//    view.show();
+//#endif
+
+//#ifdef ENV_ANDROID
+//    view.showFullScreen();
+//#endif
 
     return app.exec();
 }
