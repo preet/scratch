@@ -11,5 +11,12 @@ Rectangle {
         id: renderer
         width: parent.width;
         height: parent.height;
+
+        // flip-y
+        // BUG: disable in Qt 5.1+
+        transform: Scale   {
+            origin.y: renderer.height/2;
+            yScale: -1.0;
+        }
     }
 }

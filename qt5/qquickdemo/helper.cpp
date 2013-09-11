@@ -4,67 +4,67 @@
 
 // ref: Qt, qandroidstandardpaths
 
-//static QString GetAbsolutePath(QJNILocalRef<jobject> const &fileRef)
-//{
-//    QJNIObject file(fileRef.object());
-//    QJNILocalRef<jstring> pathFile =
-//            file.callObjectMethod<jstring>("getAbsolutePath",
-//                                           "()Ljava/lang/String;");
+static QString GetAbsolutePath(QJNILocalRef<jobject> const &fileRef)
+{
+    QJNIObject file(fileRef.object());
+    QJNILocalRef<jstring> pathFile =
+            file.callObjectMethod<jstring>("getAbsolutePath",
+                                           "()Ljava/lang/String;");
 
-//    if(pathFile.isNull())   {
-//        return QString();
-//    }
+    if(pathFile.isNull())   {
+        return QString();
+    }
 
-//    return QString(qt_convertJString(pathFile.object())+"/");
-//}
+    return QString(qt_convertJString(pathFile.object())+"/");
+}
 
-//static bool GetExternalStorageWriteable()
-//{
-//    // MEDIA_MOUNTED: read write to external storage available
-//    // MEDIA_MOUNTED_READ_ONLY: read-only to external storate
-//    QJNILocalRef<jstring> mediaMountedField =
-//            QJNIObject::getStaticObjectField<jstring>("android/os/Environment",
-//                                                      "MEDIA_MOUNTED");
-//    if(mediaMountedField.isNull())   {
-//        return false;
-//    }
+static bool GetExternalStorageWriteable()
+{
+    // MEDIA_MOUNTED: read write to external storage available
+    // MEDIA_MOUNTED_READ_ONLY: read-only to external storate
+    QJNILocalRef<jstring> mediaMountedField =
+            QJNIObject::getStaticObjectField<jstring>("android/os/Environment",
+                                                      "MEDIA_MOUNTED");
+    if(mediaMountedField.isNull())   {
+        return false;
+    }
 
-//    // current external storage state
-//    QJNILocalRef<jstring> extStorageState =
-//            QJNIObject::callStaticObjectMethod<jstring>("android/os/Environment",
-//                                                       "getExternalStorageState",
-//                                                       "()Ljava/lang/String;");
-//    if(extStorageState.isNull())   {
-//        return false;
-//    }
+    // current external storage state
+    QJNILocalRef<jstring> extStorageState =
+            QJNIObject::callStaticObjectMethod<jstring>("android/os/Environment",
+                                                       "getExternalStorageState",
+                                                       "()Ljava/lang/String;");
+    if(extStorageState.isNull())   {
+        return false;
+    }
 
-//    // check if state == MEDIA_MOUNTED
-//    bool const writeable =
-//            (qt_convertJString(extStorageState.object()) ==
-//             qt_convertJString(mediaMountedField.object()));
+    // check if state == MEDIA_MOUNTED
+    bool const writeable =
+            (qt_convertJString(extStorageState.object()) ==
+             qt_convertJString(mediaMountedField.object()));
 
-//    return writeable;
-//}
+    return writeable;
+}
 
-//static QString GetExternalStoragePath()
-//{
-//    // ref: http://developer.android.com/reference/android/
-//    //      os/Environment.html#getExternalStorageDirectory()
+static QString GetExternalStoragePath()
+{
+    // ref: http://developer.android.com/reference/android/
+    //      os/Environment.html#getExternalStorageDirectory()
 
-//    if(!GetExternalStorageWriteable())   {
-//        return QString();
-//    }
+    if(!GetExternalStorageWriteable())   {
+        return QString();
+    }
 
-//    QJNILocalRef<jobject> fileRef =
-//            QJNIObject::callStaticObjectMethod<jobject>("android/os/Environment",
-//                                                        "getExternalStorageDirectory",
-//                                                        "()Ljava/io/File;");
-//    if(fileRef.isNull())   {
-//        return QString();
-//    }
+    QJNILocalRef<jobject> fileRef =
+            QJNIObject::callStaticObjectMethod<jobject>("android/os/Environment",
+                                                        "getExternalStorageDirectory",
+                                                        "()Ljava/io/File;");
+    if(fileRef.isNull())   {
+        return QString();
+    }
 
-//    return GetAbsolutePath(fileRef);
-//}
+    return GetAbsolutePath(fileRef);
+}
 
 //static QString GetInternalStoragePath()
 //{
@@ -94,7 +94,7 @@ Helper::Helper(QQuickView *qqview, QObject *parent) :
 //    // we use external storage (user rw) for
 //    // user
 
-    QString path_ext;// = GetExternalStoragePath();
+    path_ext = GetExternalStoragePath();
     QString path_int;
 
     path_ui         = path_ext + "ui/";
@@ -145,6 +145,23 @@ QString Helper::getPathUser()
 
 QString Helper::getQuote()
 {
-    QString quote = QString::fromStdString(m_helloworld.getQuote());
-    return quote;
+    QDir extdir(path_app);
+    QStringList filters;
+    filters.append("*");
+
+    QStringList listFiles = extdir.entryList();
+
+//    QString quote = "Hello"; //QString::fromStdString(m_helloworld.getQuote());
+    if(listFiles.size() > 0)   {
+        QString allFiles;
+        for(int i=0; i < listFiles.size(); i++)   {
+            allFiles.append(listFiles[i]);
+            allFiles.append(" \n");
+        }
+        return allFiles;
+    }
+    else   {
+        return QString("Nope!");
+    }
+
 }

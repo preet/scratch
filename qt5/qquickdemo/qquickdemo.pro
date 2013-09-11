@@ -42,9 +42,9 @@ INCLUDEPATH += /home/preet/Dev/scratch/android/libhelloworld
 
 android {
     DEFINES += ENV_ANDROID
-    #LIBS += -lQt5PlatformSupport
+    LIBS += -lQt5PlatformSupport
     #LIBS += -L/home/preet/Dev/env/android/qt-5-git-debug/plugins/platforms/android -lqtforandroid
-    LIBS += -L/home/preet/Dev/build/android/libhelloworld/ -lhelloworld
+#    LIBS += -L/home/preet/Dev/build/android/libhelloworld/ -lhelloworld
 }
 else {
     DEFINES += ENV_DEV

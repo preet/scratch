@@ -42,6 +42,9 @@ OTHER_FILES += \
 qmlfiles.path = $${OUT_PWD}
 qmlfiles.files = main.qml
 
+resfiles.path = $${OUT_PWD}
+resfiles.files = res/*
+
 #INSTALLS += qmlfiles
 
 env_dev   {
@@ -54,6 +57,9 @@ env_dev   {
 #    OSGLIBDIR = /home/preet/Dev/env/sys/osg-modern/lib64
 
     INCLUDEPATH += $${OSGDIR}/include
+    #LIBS += -L$${OSGLIBDIR}/osgdb_freetyperd.so
+    #LIBS += -L$${OSGLIBDIR}/osgdb_jpegrd.so
+    #LIBS += -L$${OSGLIBDIR}/osgdb_pngrd.so
     LIBS += -L$${OSGLIBDIR} -losgViewerrd
     LIBS += -L$${OSGLIBDIR} -losgTextrd
     LIBS += -L$${OSGLIBDIR} -losgGArd
@@ -71,6 +77,9 @@ env_android   {
     OSGLIBDIR = /home/preet/Dev/env/android/osg-git-debug/lib
 
     INCLUDEPATH += $${OSGDIR}/include
+    LIBS += -L$${OSGLIBDIR} -losgdb_freetype
+    LIBS += -L$${OSGLIBDIR} -losgdb_jpeg
+    LIBS += -L$${OSGLIBDIR} -losgdb_png
     LIBS += -L$${OSGLIBDIR} -losgViewer
     LIBS += -L$${OSGLIBDIR} -losgText
     LIBS += -L$${OSGLIBDIR} -losgGA

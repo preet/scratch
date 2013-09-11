@@ -1,16 +1,88 @@
 #include "qquickfboviewportosg.h"
 
-const char * vertex_shader =
+#ifdef ENV_DEV
+const char * path_osg_logo = "/home/preet/Dev/scratch/qt5/qquickfboviewport/res/osglogo.png";
+const char * path_qt_logo = "/home/preet/Dev/scratch/qt5/qquickfboviewport/res/qtlogo.jpg";
+const char * path_font = "/home/preet/Dev/scratch/qt5/qquickfboviewport/res/DroidSans-Bold.ttf";
+#endif
+
+#ifdef ENV_ANDROID
+const char * path_osg_logo = "/storage/emulated/0/stuff/osglogo.png";
+const char * path_qt_logo = "/storage/emulated/0/stuff/qtlogo.jpg";
+const char * path_font = "/storage/emulated/0/stuff/DroidSans-Bold.ttf";
+#endif
+
+// http://tomeko.net/online_tools/cpp_text_escape.php?lang=en
+const char * vertex_shader_tex =
         "// VERTEX SHADER\n"
         "\n"
-        "// notes:\n"
-        "// to maintain compatibility, the version\n"
-        "// preprocessor call needs to be added to the\n"
-        "// beginning of this file by the (cpu) compiler:\n"
-        "//\n"
-        "// \"#version 100\" for OpenGL ES 2 and\n"
-        "// \"#version 120\" (or higher) for desktop OpenGL\n"
+        "#ifdef GL_ES\n"
+        "    // vertex shader defaults for types are:\n"
+        "    // precision highp float;\n"
+        "    // precision highp int;\n"
+        "    // precision lowp sampler2D;\n"
+        "    // precision lowp samplerCube;\n"
+        "#else\n"
+        "    // with default (non ES) OpenGL shaders, precision\n"
+        "    // qualifiers aren't used -- we explicitly set them\n"
+        "    // to be defined as 'nothing' so they are ignored\n"
+        "    #define lowp\n"
+        "    #define mediump\n"
+        "    #define highp\n"
+        "#endif\n"
         "\n"
+        "varying mediump vec2 TexCoord0;\n"
+        "\n"
+        "void main()\n"
+        "{\n"
+        "    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;\n"
+        "    TexCoord0 = gl_MultiTexCoord0.xy;\n"
+        "}\n"
+        "";
+
+const char * frag_shader_tex =
+        "// FRAGMENT SHADER\n"
+        "\n"
+        "#ifdef GL_ES\n"
+        "    // the fragment shader in ES 2 doesn't have a\n"
+        "    // default precision qualifier for floats so\n"
+        "    // it needs to be explicitly specified\n"
+        "    precision mediump float;\n"
+        "\n"
+        "    // note: highp may not be available for float types in\n"
+        "    // the fragment shader -- use the following to set it:\n"
+        "    // #ifdef GL_FRAGMENT_PRECISION_HIGH\n"
+        "    // precision highp float;\n"
+        "    // #else\n"
+        "    // precision mediump float;\n"
+        "    // #endif\n"
+        "\n"
+        "    // fragment shader defaults for other types are:\n"
+        "    // precision mediump int;\n"
+        "    // precision lowp sampler2D;\n"
+        "    // precision lowp samplerCube;\n"
+        "#else\n"
+        "    // with default (non ES) OpenGL shaders, precision\n"
+        "    // qualifiers aren't used -- we explicitly set them\n"
+        "    // to be defined as 'nothing' so they are ignored\n"
+        "    #define lowp\n"
+        "    #define mediump\n"
+        "    #define highp\n"
+        "#endif\n"
+        "\n"
+        "varying vec2 TexCoord0;\n"
+        "\n"
+        "// set to zero by default\n"
+        "uniform sampler2D Texture;\n"
+        "\n"
+        "void main()\n"
+        "{\n"
+        "    gl_FragColor = vec4(texture2D(Texture,TexCoord0));\n"
+        "    //gl_FragColor = vec4(1.0,1.0,1.0,1.0);\n"
+        "}\n"
+        "";
+
+const char * vertex_shader_text =
         "#ifdef GL_ES\n"
         "    // vertex shader defaults for types are:\n"
         "    // precision highp float;\n"
@@ -28,40 +100,19 @@ const char * vertex_shader =
         "\n"
         "// varyings\n"
         "varying mediump vec4 VertexColor;\n"
+        "varying mediump vec2 TexCoord0;\n"
+        "\n"
+        "// uniforms\n"
+        "uniform vec4 Color;\n"
         "\n"
         "void main()\n"
         "{\n"
-        "   // default params\n"
-        "   vec4 LightPosition = vec4(0.0, 0.0, 0.0, 1.0);\n"
-        "   vec3 LightColor = vec3(1.0, 1.0, 1.0);\n"
-        "   vec3 DiffuseColor = vec3(gl_Color);\n"
-        "//   vec3 DiffuseColor = abs(normalize(vec3(gl_Vertex)));\n"
-        "   float Alpha = gl_Color.w;\n"
-        "\n"
-        "   // find the vector from the given vertex to the light source\n"
-        "   vec4 vertexInWorldSpace = gl_ModelViewMatrix * vec4(gl_Vertex);\n"
-        "   vec3 normalInWorldSpace = normalize(gl_NormalMatrix * gl_Normal);\n"
-        "   vec3 lightDirn = normalize(vec3(LightPosition-vertexInWorldSpace));\n"
-        "\n"
-        "   // calculate final vertex color\n"
-        "   VertexColor = vec4(DiffuseColor * max(dot(lightDirn,normalInWorldSpace),0.0), Alpha);\n"
-        "\n"
-        "   // calculate projected vertex position\n"
-        "   gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;\n"
-        "}\n"
-        "";
+        "    VertexColor = Color;\n"
+        "    TexCoord0 = gl_MultiTexCoord0.xy;\n"
+        "    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;\n"
+        "}";
 
-const char * frag_shader =
-        "// FRAGMENT SHADER\n"
-        "\n"
-        "// notes:\n"
-        "// to maintain compatibility, the version\n"
-        "// preprocessor call needs to be added to the\n"
-        "// beginning of this file by the (cpu) compiler:\n"
-        "//\n"
-        "// \"#version 100\" for OpenGL ES 2 and\n"
-        "// \"#version 120\" (or higher) for desktop OpenGL\n"
-        "\n"
+const char * frag_shader_text =
         "#ifdef GL_ES\n"
         "    // the fragment shader in ES 2 doesn't have a\n"
         "    // default precision qualifier for floats so\n"
@@ -91,14 +142,17 @@ const char * frag_shader =
         "\n"
         "// varyings\n"
         "varying vec4 VertexColor;\n"
+        "varying vec2 TexCoord0;\n"
         "\n"
         "// uniforms\n"
+        "uniform sampler2D GlyphTexture;\n"
         "\n"
         "void main()\n"
         "{\n"
-        "    gl_FragColor = VertexColor;\n"
-        "}\n"
-        "";
+        "    gl_FragColor = VertexColor * texture2D(GlyphTexture,TexCoord0).aaaa;\n"
+        "}";
+
+
 
 
 class RotateCB : public osg::NodeCallback
@@ -232,46 +286,147 @@ void QSGFBONodeOSG::initOSG()
     QSize size = rect().size().toSize();
 
 
+////    osgDB::Registry::instance()->setLibraryFilePathList("/home/preet/Dev/env/sys/osg-3.1.8/lib64/somepath");
+//    osgDB::Registry::instance()->setLibraryFilePathList("/data/app-lib/org.qtproject.example.qquickfboviewport-1");
+
+
+//    osgDB::Registry::instance()->setLibraryFilePathList(
+//                "/storage/emulated/0/stuff");
+
+//    QString path_app = QCoreApplication::applicationDirPath() + "/";
+//    QDir appdir(path_app);
+//    QStringList listFiles = appdir.entryList();
+
+//    if(listFiles.size() > 0)   {
+//        for(int i=0; i < listFiles.size(); i++)   {
+//            qDebug() << "##: " << listFiles[i];
+//        }
+//    }
+//    else   {
+//        qDebug() << "##: Nope!";
+//    }
+
+
+//    osgDB::Registry::instance()->setLibraryFilePathList(".");
+
+//    osgDB::FilePathList filePathList
+//            = osgDB::Registry::instance()->getLibraryFilePathList();
+
+//    for(size_t i=0; i < filePathList.size(); i++)    {
+//        qDebug() << "#: " << QString::fromStdString(filePathList[i]);
+//    }
+
+//    osg::setNotifyLevel(osg::INFO);
+//    osg::setNotifyHandler(new DebugRedirect());
+
     // shaders
     QString shaderPrefix;
-#ifdef DEV_DESKTOP
+#ifdef ENV_GL
     shaderPrefix = "#version 120\n";
 #endif
-#ifdef DEV_PLAYBOOK
+#ifdef ENV_GLES2
     shaderPrefix = "#version 100\n";
 #endif
 
+    // model shader
     osg::ref_ptr<osg::Program> shProgram = new osg::Program;
 
-    QString vShader(vertex_shader);
+    QString vShader(vertex_shader_tex);
     vShader.prepend(shaderPrefix);
     shProgram->addShader(new osg::Shader(osg::Shader::VERTEX,vShader.toStdString()));
 
-    QString fShader(frag_shader);
+    QString fShader(frag_shader_tex);
     fShader.prepend(shaderPrefix);
     shProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT,fShader.toStdString()));
 
-    // geometry
-    osg::ref_ptr<osg::Geometry> gmOct = new osg::Geometry;
-    buildGeometryOct(gmOct.get());
-
-    // geode
-    osg::ref_ptr<osg::Geode> gdOct = new osg::Geode;
-    gdOct->addDrawable(gmOct);
-
-    // xf
-    osg::ref_ptr<osg::MatrixTransform> xfOct = new osg::MatrixTransform;
-    xfOct->setMatrix(osg::Matrix::identity());
-    xfOct->setUpdateCallback(new RotateCB);
-    xfOct->addChild(gdOct);
-
-    // state
-    osg::StateSet * ss = gdOct->getOrCreateStateSet();
-    ss->setAttributeAndModes(shProgram);
+    // text shader
+    osg::ref_ptr<osg::Program> shText = new osg::Program;
+    vShader = QString(vertex_shader_text);
+    vShader.prepend(shaderPrefix);
+    fShader = QString(frag_shader_text);
+    fShader.prepend(shaderPrefix);
+    shText->addShader(new osg::Shader(osg::Shader::VERTEX,vShader.toStdString()));
+    shText->addShader(new osg::Shader(osg::Shader::FRAGMENT,fShader.toStdString()));
 
     // scene
     osg::ref_ptr<osg::Group> groupRoot = new osg::Group;
-    groupRoot->addChild(xfOct);
+    groupRoot->getOrCreateStateSet()->setMode(GL_BLEND,osg::StateAttribute::ON);
+
+    // image
+    osg::ref_ptr<osg::Image> imgOsgLogo = new osg::Image;
+    imgOsgLogo = osgDB::readImageFile(path_osg_logo);
+    bool imgOk = imgOsgLogo.valid() && imgOsgLogo->valid();
+    if(!imgOk)   {
+        qDebug() << "ERROR: Image Invalid!";
+    }
+    else   {
+        // texture
+        osg::ref_ptr<osg::Texture2D> txOsgLogo = new osg::Texture2D;
+        txOsgLogo->setImage(imgOsgLogo);
+        txOsgLogo->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
+        txOsgLogo->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
+        txOsgLogo->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
+        txOsgLogo->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+
+        // geometry
+        osg::ref_ptr<osg::Geometry> gmPlane = new osg::Geometry;
+        buildGeometryPlane(gmPlane.get());
+
+        // geode
+        osg::ref_ptr<osg::Geode> gdPlane = new osg::Geode;
+        gdPlane->addDrawable(gmPlane);
+
+        // xf
+        osg::ref_ptr<osg::MatrixTransform> xfPlane = new osg::MatrixTransform;
+        xfPlane->setMatrix(osg::Matrix::identity());
+        xfPlane->setUpdateCallback(new RotateCB);
+        xfPlane->addChild(gdPlane);
+
+        // state
+        osg::ref_ptr<osg::Uniform> uTexSampler =
+                new osg::Uniform("Texture",0);
+
+        osg::StateSet * ss = gdPlane->getOrCreateStateSet();
+        ss->setAttributeAndModes(shProgram);
+        ss->addUniform(uTexSampler);
+        #ifdef ENV_GLES2
+        ss->setTextureAttributeAndModes(0,txOsgLogo);
+        #endif
+
+        groupRoot->addChild(xfPlane);
+    }
+
+    // text
+    {
+        QString textMessage("Qt+OSG on \nAndroid!");
+
+        // text
+        osg::ref_ptr<osgText::Text> gmText = new osgText::Text;
+        gmText->setFont(path_font);
+        gmText->setCharacterSize(0.25f);
+        gmText->setPosition(osg::Vec3(0,0,-1.5));
+        gmText->setAlignment(osgText::TextBase::CENTER_CENTER);
+        gmText->setAxisAlignment(osgText::TextBase::SCREEN);
+        gmText->setText(textMessage.toStdString());
+
+        // geode
+        osg::ref_ptr<osg::Geode> gdText = new osg::Geode;
+        gdText->addDrawable(gmText);
+
+        // state
+        osg::ref_ptr<osg::Uniform> textColor =
+                new osg::Uniform("Color",osg::Vec4(0.37,0.77,0.35,1));
+
+        osg::ref_ptr<osg::Uniform> textTexture =
+                new osg::Uniform("GlyphTexture",0);
+
+        osg::StateSet * ss = gdText->getOrCreateStateSet();
+        ss->addUniform(textColor);
+        ss->addUniform(textTexture);
+        ss->setAttributeAndModes(shText);
+
+        groupRoot->addChild(gdText);
+    }
 
     // create viewer and embedded window
     m_osg_viewer = new osgViewer::Viewer;
@@ -285,97 +440,57 @@ void QSGFBONodeOSG::initOSG()
     m_osg_viewer->setCameraManipulator(new osgGA::TrackballManipulator);
     m_osg_viewer->setThreadingModel(osgViewer::Viewer::SingleThreaded);
     m_osg_viewer->setSceneData(groupRoot);
+    m_osg_viewer->getCamera()->setClearColor(osg::Vec4(0.17,0.17,0.17,1.0));
     m_osg_viewer->realize();
 
     // setup state
     m_osg_stateset = new osg::StateSet;
 
-//    m_osg_viewer->getCamera()->getGraphicsContext()->getState()->setCheckForGLErrors(osg::State::ONCE_PER_ATTRIBUTE);
+    m_osg_viewer->getCamera()->getGraphicsContext()->getState()->setCheckForGLErrors(osg::State::ONCE_PER_ATTRIBUTE);
 
     // setup camera
 //    m_osg_viewer->getCamera()->setClearColor(osg::Vec4(0,0,0,0));
 //    m_osg_viewer->getCamera()->setClearMask(GL_DEPTH_BUFFER_BIT);
 }
 
-void QSGFBONodeOSG::buildGeometryOct(osg::Geometry * gmNode)
+void QSGFBONodeOSG::buildGeometryPlane(osg::Geometry * gmNode)
 {
-    double ppushsz = 1.0/2;
-    double npushsz = ppushsz*-1.0;
     osg::ref_ptr<osg::Vec3Array> gmListVx = new osg::Vec3Array;
-    gmListVx->push_back(osg::Vec3(ppushsz,0,0));     // 0 +x
-    gmListVx->push_back(osg::Vec3(0,ppushsz,0));     // 1 +y
-    gmListVx->push_back(osg::Vec3(0,0,ppushsz));     // 2 +z
-    gmListVx->push_back(osg::Vec3(npushsz,0,0));     // 3 -x
-    gmListVx->push_back(osg::Vec3(0,npushsz,0));     // 4 -y
-    gmListVx->push_back(osg::Vec3(0,0,npushsz));     // 5 -z
+    gmListVx->push_back(osg::Vec3(-1,0,1));  // top left
+    gmListVx->push_back(osg::Vec3(-1,0,-1)); // bottom left
+    gmListVx->push_back(osg::Vec3(1,0,-1));  // bottom right
+    gmListVx->push_back(osg::Vec3(1,0,1));   // top right
 
-    osg::ref_ptr<osg::Vec3Array> gmListNx = new osg::Vec3Array;
-    for(size_t i=0; i < gmListVx->size(); i++)   {
-        osg::Vec3 nx = gmListVx->at(i);
-        nx.normalize();
-        gmListNx->push_back(nx);
-    }
+    osg::ref_ptr<osg::Vec2Array> gmListTx = new osg::Vec2Array;
+    gmListTx->push_back(osg::Vec2(0,1));     // top left
+    gmListTx->push_back(osg::Vec2(0,0));     // bottom left
+    gmListTx->push_back(osg::Vec2(1,0));     // bottom right
+    gmListTx->push_back(osg::Vec2(1,1));     // top right
 
     osg::ref_ptr<osg::DrawElementsUByte> gmListIx =
-            new osg::DrawElementsUByte(GL_TRIANGLES);
-    gmListIx->push_back(0);
-    gmListIx->push_back(1);
-    gmListIx->push_back(2);
+            new osg::DrawElementsUByte(GL_TRIANGLES,6);
+    gmListIx->at(0) = 0;
+    gmListIx->at(1) = 1;
+    gmListIx->at(2) = 2;
 
-    gmListIx->push_back(1);
-    gmListIx->push_back(3);
-    gmListIx->push_back(2);
+    gmListIx->at(3) = 0;
+    gmListIx->at(4) = 2;
+    gmListIx->at(5) = 3;
 
-    gmListIx->push_back(3);
-    gmListIx->push_back(4);
-    gmListIx->push_back(2);
-
-    gmListIx->push_back(4);
-    gmListIx->push_back(0);
-    gmListIx->push_back(2);
-
-    gmListIx->push_back(1);
-    gmListIx->push_back(0);
-    gmListIx->push_back(5);
-
-    gmListIx->push_back(3);
-    gmListIx->push_back(1);
-    gmListIx->push_back(5);
-
-    gmListIx->push_back(4);
-    gmListIx->push_back(3);
-    gmListIx->push_back(5);
-
-    gmListIx->push_back(0);
-    gmListIx->push_back(4);
-    gmListIx->push_back(5);
-
-    osg::ref_ptr<osg::Vec4Array> gmListCx = new osg::Vec4Array;
-    gmListCx->push_back(osg::Vec4(1,0,0,1));
-    gmListCx->push_back(osg::Vec4(0,1,0,1));
-    gmListCx->push_back(osg::Vec4(0,0,1,1));
-    gmListCx->push_back(osg::Vec4(1,1,0,1));
-    gmListCx->push_back(osg::Vec4(0,1,1,1));
-    gmListCx->push_back(osg::Vec4(1,0,1,1));
-
-    // add data to geometry node
     gmNode->setVertexArray(gmListVx);
+    gmNode->setTexCoordArray(0,gmListTx);
+    gmNode->addPrimitiveSet(gmListIx);
 
-    // pre osg-3.1.8
-    gmNode->setNormalArray(gmListNx);
-    gmNode->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
-    gmNode->setColorArray(gmListCx);
-    gmNode->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+//    // pre osg-3.1.8
+//    gmNode->setNormalArray(gmListNx);
+//    gmNode->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
+//    gmNode->setColorArray(gmListCx);
+//    gmNode->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
 
     // osg-3.1.8
 //    gmOct->setNormalArray(gmListNx,osg::Array::BIND_PER_VERTEX);
 //    gmOct->setColorArray(gmListCx,osg::Array::BIND_PER_VERTEX);
-    gmNode->addPrimitiveSet(gmListIx);
-}
-
-void QSGFBONodeOSG::buildGeometrySphere(osg::Geometry *gmNode)
-{
-
+//    gmNode->addPrimitiveSet(gmListIx);
 }
 
 

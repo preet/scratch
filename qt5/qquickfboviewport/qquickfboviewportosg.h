@@ -12,6 +12,8 @@
     #include <GLES2/gl2.h>
 #endif
 
+#include <QCoreApplication>
+#include <QDir>
 #include <QTimer>
 #include <QMutex>
 #include <QString>
@@ -30,6 +32,18 @@
 #include <osg/Program>
 #include <osg/Shader>
 #include <osg/Uniform>
+#include <osgDB/Registry>
+
+class DebugRedirect : public osg::NotifyHandler
+{
+public:
+    DebugRedirect() {}
+    void notify(osg::NotifySeverity severity, const char *message)
+    {
+        QString debugMessage(message);
+        qDebug() << debugMessage.simplified();
+    }
+};
 
 class QSGFBONodeOSG : public QObject, public QSGSimpleTextureNode
 {
@@ -60,8 +74,7 @@ private:
     void initNode();
     void initOSG();
 
-    void buildGeometryOct(osg::Geometry * gmNode);
-    void buildGeometrySphere(osg::Geometry * gmNode);
+    void buildGeometryPlane(osg::Geometry * gmNode);
 
 
     QOpenGLFramebufferObject    * m_fbo;

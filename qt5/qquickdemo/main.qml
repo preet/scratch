@@ -25,7 +25,7 @@ Rectangle
         height: parent.height-20;
         spacing: 20;
 
-        property real fontpixelsize: root.height/30;
+        property real fontpixelsize: root.height/80;
         property real textwidth: root.width-40;
 
         Text {
@@ -37,60 +37,60 @@ Rectangle
             color: "#1eb53a";
             text: Helper.getPathApp();
         }
-        Text {
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#5bbf21";
-            text: Helper.getPathUi();
-        }
-        Text {
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#8cd600";
-            text: Helper.getPathPlugins();
-        }
-        Text {
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#bad80a";
-            text: Helper.getPathData();
-        }
-        Text {
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#cee007";
-            text: Helper.getPathLogs();
-        }
-        Text {
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#e0e20c";
-            text: Helper.getPathSettings();
-        }
-        Text {
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#e8dd11";
-            text: Helper.getPathUser();
-        }
+//        Text {
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#5bbf21";
+//            text: Helper.getPathUi();
+//        }
+//        Text {
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#8cd600";
+//            text: Helper.getPathPlugins();
+//        }
+//        Text {
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#bad80a";
+//            text: Helper.getPathData();
+//        }
+//        Text {
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#cee007";
+//            text: Helper.getPathLogs();
+//        }
+//        Text {
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#e0e20c";
+//            text: Helper.getPathSettings();
+//        }
+//        Text {
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#e8dd11";
+//            text: Helper.getPathUser();
+//        }
         Text {
             id: quote;
             x:20;

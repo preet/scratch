@@ -1127,22 +1127,6 @@ if( BUILD_WITH_ANDROID_NDK )
  endif()
 endif()
 
-
-## case of shared STL linkage
-#if( ANDROID_STL MATCHES "shared" AND DEFINED __libstl )
- #string( REPLACE "_static.a" "_shared.so" __libstl "${__libstl}" )
- #if( NOT _CMAKE_IN_TRY_COMPILE AND __libstl MATCHES "[.]so$" )
-  #get_filename_component( __libstlname "${__libstl}" NAME )
-  #execute_process( COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${__libstl}" "${LIBRARY_OUTPUT_PATH}/${__libstlname}" RESULT_VARIABLE __fileCopyProcess )
-  #if( NOT __fileCopyProcess EQUAL 0 OR NOT EXISTS "${LIBRARY_OUTPUT_PATH}/${__libstlname}")
-   #message( SEND_ERROR "Failed copying of ${__libstl} to the ${LIBRARY_OUTPUT_PATH}/${__libstlname}" )
-  #endif()
-  #unset( __fileCopyProcess )
-  #unset( __libstlname )
- #endif()
-#endif()
-
-
 # ccache support
 __INIT_VARIABLE( _ndk_ccache NDK_CCACHE ENV_NDK_CCACHE )
 if( _ndk_ccache )
@@ -1571,8 +1555,9 @@ if( ANDROID_STL MATCHES "shared" AND DEFINED __libstl )
 endif()
 
 # set these global flags for cmake client scripts to change behavior
-#set( ANDROID True ) # Temp!
-set( BUILD_ANDROID True )
+# set( ANDROID True )
+# set( BUILD_ANDROID True )
+set( ANDROID_SHARED True )
 
 # where is the target environment
 set( CMAKE_FIND_ROOT_PATH "${ANDROID_TOOLCHAIN_ROOT}/bin" "${ANDROID_TOOLCHAIN_ROOT}/${ANDROID_TOOLCHAIN_MACHINE_NAME}" "${ANDROID_SYSROOT}" "${CMAKE_INSTALL_PREFIX}" "${CMAKE_INSTALL_PREFIX}/share" )

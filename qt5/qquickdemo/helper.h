@@ -7,12 +7,13 @@
 #include <QObject>
 #include <QDebug>
 #include <QThread>
+#include <QDir>
 
-//#include "QtPlatformSupport/5.1.2/QtPlatformSupport/private/qjniobject_p.h"
-//#include "QtPlatformSupport/5.1.2/QtPlatformSupport/private/qjnihelpers_p.h"
+#include "QtPlatformSupport/5.1.2/QtPlatformSupport/private/qjniobject_p.h"
+#include "QtPlatformSupport/5.1.2/QtPlatformSupport/private/qjnihelpers_p.h"
 //#include "androidjnimain.h"
 
-#include "helloworld.h"
+//#include "helloworld.h"
 
 class Helper : public QObject
 {
@@ -32,14 +33,15 @@ public:
     Q_INVOKABLE QString getQuote();
 
 private:
+    QString path_ext;
     QString path_app;
     QString path_ui;
-    QString path_plugins;
-    QString path_data;
     QString path_logs;
     QString path_settings;
+    QString path_plugins;
+    QString path_data;
     QString path_user;
-    HelloWorld m_helloworld;
+    //HelloWorld m_helloworld;
 };
 
 #endif // HELPER_H

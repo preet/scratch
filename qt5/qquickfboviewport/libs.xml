@@ -8,11 +8,14 @@
     <array name="osg_libs">
         <item>OpenThreads</item>
         <item>osg</item>
-        <item>osgDB</item>
         <item>osgUtil</item>
+        <item>osgDB</item>
         <item>osgGA</item>
         <item>osgText</item>
         <item>osgViewer</item>
+        <item>freetype</item>
+        <item>jpeg</item>
+        <item>png</item>        
     </array>
     <array name="bundled_in_lib">
         <item>lib--Managed_by_Qt_Creator--plugins_platforms_libqeglfs.so:plugins/platforms/libqeglfs.so</item>
