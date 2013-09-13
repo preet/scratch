@@ -77,9 +77,9 @@ env_android   {
     OSGLIBDIR = /home/preet/Dev/env/android/osg-git-debug/lib
 
     INCLUDEPATH += $${OSGDIR}/include
-    LIBS += -L$${OSGLIBDIR} -losgdb_freetype
-    LIBS += -L$${OSGLIBDIR} -losgdb_jpeg
-    LIBS += -L$${OSGLIBDIR} -losgdb_png
+    LIBS += -L$${OSGLIBDIR}/osgPlugins-3.3.0 -losgdb_freetype
+    LIBS += -L$${OSGLIBDIR}/osgPlugins-3.3.0 -losgdb_jpeg
+    LIBS += -L$${OSGLIBDIR}/osgPlugins-3.3.0 -losgdb_png
     LIBS += -L$${OSGLIBDIR} -losgViewer
     LIBS += -L$${OSGLIBDIR} -losgText
     LIBS += -L$${OSGLIBDIR} -losgGA

@@ -387,10 +387,14 @@ void QSGFBONodeOSG::initOSG()
                 new osg::Uniform("Texture",0);
 
         osg::StateSet * ss = gdPlane->getOrCreateStateSet();
-        ss->setAttributeAndModes(shProgram);
         ss->addUniform(uTexSampler);
+        ss->setAttributeAndModes(shProgram);
         #ifdef ENV_GLES2
-        ss->setTextureAttributeAndModes(0,txOsgLogo);
+            ss->setTextureAttribute(0,txOsgLogo,osg::StateAttribute::ON);
+        #endif
+
+        #ifdef ENV_GL
+            ss->setTextureAttributeAndModes(0,txOsgLogo);
         #endif
 
         groupRoot->addChild(xfPlane);
