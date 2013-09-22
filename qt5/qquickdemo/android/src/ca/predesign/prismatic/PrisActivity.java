@@ -1,9 +1,10 @@
-package org.qtproject.qt5.android.bindings;
+package ca.predesign.prismatic;
 
+import org.qtproject.qt5.android.bindings.QtActivity;
 import android.os.Bundle;
 import android.util.Log;
 
-public class MyQtActivity extends QtActivity
+public class PrisActivity extends QtActivity
 {
 //---------------------------------------------------------------------------
     public native void activityReady();
@@ -12,7 +13,7 @@ public class MyQtActivity extends QtActivity
     public void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
-        Log.i("My_Activity: ","####: onCreate After");
+        Log.i("PrisActivity: ","####: onCreate After\n\n\n");
 
         activityReady();
     }

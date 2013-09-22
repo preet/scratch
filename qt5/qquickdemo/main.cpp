@@ -1,8 +1,12 @@
 #include <QGuiApplication>
 #include <QQuickView>
 #include <QTimer>
-#include "anjni.h"
-#include "helper.h"
+#include <QMutex>
+//#include "anjni.h"
+//#include "helper.h"
+
+#include <jni.h>
+#include "geolocation.h"
 
 
 JavaVM *    g_java_vm = 0;
@@ -10,25 +14,82 @@ jclass      g_myQtActivityClassID = 0;
 jobject     g_myQtActivityInstance = 0;
 
 
+jclass j_classid_prisActivity = 0;
+jclass j_classid_prisLocationListener = 0;
+jclass j_classid_context = 0;
+jclass j_classid_activity = 0;
+jclass j_classid_locationManager = 0;
+jclass j_classid_handlerThread = 0;
+jobject j_ref_prisActivityInstance = 0;
 
-//
+
+bool g_activityReady=false;
+QMutex g_mutex_activityReady;
+
+// ref:
+// android sample "SimpleJNI"
+
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM * vm,void * reserved)
 {
-    Q_UNUSED(vm);
+    g_java_vm = vm;
     Q_UNUSED(reserved);
 
-    qDebug() << "####: JNI_onLoad";
+    qDebug() << "####: JNI_onLoad\n\n\n";
 
     return JNI_VERSION_1_6;
 }
+
+jclass FindClass(JNIEnv * env, char const * className)
+{
+    jclass temp = env->FindClass(className);
+    if(temp)   {
+        qDebug() << "####: Found class " << QString(className);
+       return (jclass)env->NewGlobalRef(temp);
+    }
+    else   {
+        qDebug() << "####: Failed to find class " << QString(className);
+        return 0;
+    }
+}
+
+
 extern "C" {
-    JNIEXPORT void JNICALL Java_org_qtproject_qt5_android_bindings_MyQtActivity_activityReady
+    JNIEXPORT void JNICALL Java_ca_predesign_prismatic_PrisActivity_activityReady
     (JNIEnv *env, jobject obj)
     {
         Q_UNUSED(env);
         Q_UNUSED(obj);
 
-        qDebug() << "####: activityReady";
+
+        // find classes
+        j_classid_prisActivity =
+                FindClass(env,"ca/predesign/prismatic/PrisActivity");
+
+        j_classid_prisLocationListener =
+                FindClass(env,"ca/predesign/prismatic/PrisLocationListener");
+
+        j_classid_context =
+                FindClass(env,"android/content/Context");
+
+        j_classid_activity =
+                FindClass(env,"android/app/Activity");
+
+        j_classid_locationManager =
+                FindClass(env,"android/location/LocationManager");
+
+        j_classid_handlerThread =
+                FindClass(env,"android/os/HandlerThread");
+
+        j_ref_prisActivityInstance = env->NewGlobalRef(obj);
+
+
+        qDebug() << "####: activityReady\n\n\n";
+
+        //
+        jclass prisActivityClassId =
+                env->FindClass("ca/predesign/prismatic/PrisActivity");
+
+        g_myQtActivityClassID = (jclass)env->NewGlobalRef(prisActivityClassId);
 
         // obj = MyQtActivity instance; save it
         g_myQtActivityInstance = env->NewGlobalRef(obj);
@@ -79,23 +140,55 @@ extern "C" {
         // do I need to clean up GetStringUTFChars somehow?
         const char * jstr = env->GetStringUTFChars(jstring(stringRef),NULL);
         qDebug() << "####: Internal Storage Path: "
-                 << QString(jstr);
+                 << QString(jstr) << "\n\n\n";
+
+        while(1)   {
+            if(g_mutex_activityReady.tryLock())   {
+                g_activityReady = true;
+                g_mutex_activityReady.unlock();
+                break;
+            }
+        }
     }
 }
 
 int main(int argc, char **argv)
 {
-    qDebug() << "####: main()";
+    qDebug() << "####: main()\n\n\n";
+
+    // this is an extremely evil hack:
+    while(1)   {
+        if(g_mutex_activityReady.tryLock())   {
+            bool activityReady = g_activityReady;
+            g_mutex_activityReady.unlock();
+            if(activityReady)   {
+                break;
+            }
+        }
+    }
+
+    qDebug() << "####: main after activityReady\n\n\n";
 
     QGuiApplication app(argc, argv);
     QQuickView * view = new QQuickView;
-    Helper * helper = new Helper(view);
+    GeoLocation * geoloc = new GeoLocation(view,
+                                           g_java_vm,
+                                           j_classid_prisActivity,
+                                           j_classid_prisLocationListener,
+                                           j_classid_context,
+                                           j_classid_activity,
+                                           j_classid_locationManager,
+                                           j_classid_handlerThread,
+                                           j_ref_prisActivityInstance);
+
     view->setResizeMode(QQuickView::SizeRootObjectToView);
     view->setSource(QUrl("qrc:/main.qml"));
 
 //    view->showFullScreen();
 //    view->showMaximized();
     view->show();
+
+    QTimer::singleShot(2000,geoloc,SLOT(Initialize()));
 
     return app.exec();
 }

@@ -5,7 +5,7 @@ Rectangle
     id: root;
     color: "#333333";
 
-    width: 500;
+    width:  500;
     height: 500;
 
 //    Image  {
@@ -19,23 +19,82 @@ Rectangle
 //        source: "qrc:/img.png";
 //    }
 
+    Connections   {
+        target: GeoLocation;
+
+        onLocationChanged:   {
+
+            var pTime = utc_time;
+            var pLon = lon;
+            var pLat = lat;
+
+            tlocation.text =
+                    pTime + "," +
+                    pLon.toString() + "," +
+                    pLat.toString();
+        }
+
+        onStatusChanged:   {
+            tstatus.text = status;
+        }
+
+        onProviderEnabled:   {
+            tproviderEnabled.text = provider + " was enabled";
+        }
+
+        onProviderDisabled:   {
+            tproviderDisabled.text = provider + " was disabled";
+        }
+    }
+
     Column   {
         y:20;
         width:  parent.width;
         height: parent.height-20;
         spacing: 20;
 
-        property real fontpixelsize: root.height/80;
+        property real fontpixelsize: root.height/40;
         property real textwidth: root.width-40;
 
         Text {
+            id: tlocation;
             x:20;
             width: parent.textwidth;
             wrapMode: Text.WrapAnywhere;
             font.pixelSize: parent.fontpixelsize;
             font.bold: true;
             color: "#1eb53a";
-            text: Helper.getPathApp();
+            text: "location";
+        }
+        Text {
+            id: tstatus;
+            x:20;
+            width: parent.textwidth;
+            wrapMode: Text.WrapAnywhere;
+            font.pixelSize: parent.fontpixelsize;
+            font.bold: true;
+            color: "#1eb53a";
+            text: "status";
+        }
+        Text {
+            id: tproviderEnabled;
+            x:20;
+            width: parent.textwidth;
+            wrapMode: Text.WrapAnywhere;
+            font.pixelSize: parent.fontpixelsize;
+            font.bold: true;
+            color: "#1eb53a";
+            text: "providerEnabled";
+        }
+        Text {
+            id: tproviderDisabled;
+            x:20;
+            width: parent.textwidth;
+            wrapMode: Text.WrapAnywhere;
+            font.pixelSize: parent.fontpixelsize;
+            font.bold: true;
+            color: "#1eb53a";
+            text: "providerDisabled";
         }
 //        Text {
 //            x:20;
@@ -91,26 +150,26 @@ Rectangle
 //            color: "#e8dd11";
 //            text: Helper.getPathUser();
 //        }
-        Text {
-            id: quote;
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#00c993";
-        }
-        Rectangle   {
-            x: 20;
-            height: root.height/10;
-            width:  height;
-            color: "white";
-            MouseArea   {
-                anchors.fill: parent;
-                onClicked:    {
-                    quote.text = Helper.getQuote();
-                }
-            }
-        }
+//        Text {
+//            id: quote;
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#00c993";
+//        }
+//        Rectangle   {
+//            x: 20;
+//            height: root.height/10;
+//            width:  height;
+//            color: "white";
+//            MouseArea   {
+//                anchors.fill: parent;
+//                onClicked:    {
+//                    quote.text = Helper.getQuote();
+//                }
+//            }
+//        }
     }
 }
