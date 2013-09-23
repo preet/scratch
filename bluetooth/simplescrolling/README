@@ -1,0 +1,32 @@
+ref: http://android.serverbox.ch/?p=334
+
+Creating a remote Scroll Wheel for your Linux Machine using Android, Bluetooth and uinput
+
+Scrolling long documents can be tiring for your index finger on a mouse wheel or on a touch pad. What if you could use your phones touch screen to scroll a document on your computer? While maybe not the most ergonomically solution it may well be a good example of how to work with bluetooth, uinput and Android.
+
+Setup
+Android Phone ( >= 2.1)
+Ubuntu Laptop with Bluetooth
+Two great Tutorials:
+Bluez: http://people.csail.mit.edu/albert/bluez-intro/x604.html
+uinput: http://thiemonge.org/getting-started-with-uinput
+
+Concept
+The application consists of two parts:
+
+A client side on the phone that serves as touch pad to scroll.
+A server part on the computer that receives commands from the phone and emulates scroll movement for uinput.
+The Client is a simple Android Activity spawning a Bluetooth Thread. Touch events then result in a Bluetooth packet that tell the server if the user moved up or down. The source code is very straight forward; only Thread synchronization is a bit tricky as well as the way how the application is stopped (locks etc.).
+
+The Server application connects the world of Bluetooth (RFCOMM/SDP) with the uinput event input system. Basically the server registers an SDP entry and then listens on an RFCOMM channel for incoming connections. As soon as a connection is established a new input device is created and scroll events are sent. Note that you probably need to be root (or use sudo) on the Linux machine to feed uinput new events.
+
+Instructions
+
+Pair your Android phone with the Linux device
+Start the server on your Linux device: $ sudo ./btserver (make sure BT is turned on, else there could be a segfault -> working on that)
+Install and start the app on the phone. In the menus select your Linux device.
+Building Dependencies
+To build the dev-libbluetooth package was necessary on our Ubuntu machine.
+
+The code is available under GPL. Have fun playing around with it 
+Note: It’s very straight forward to create a remote control for your Linux machine with the sources. Key presses can be emulated very easily with uinput.
