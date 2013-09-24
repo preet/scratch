@@ -6,7 +6,8 @@
 //#include "helper.h"
 
 #include <jni.h>
-#include "geolocation.h"
+//#include "geolocation.h"
+#include "bluetoothserial.h"
 
 
 JavaVM *    g_java_vm = 0;
@@ -15,11 +16,17 @@ jobject     g_myQtActivityInstance = 0;
 
 
 jclass j_classid_prisActivity = 0;
-jclass j_classid_prisLocationListener = 0;
 jclass j_classid_context = 0;
 jclass j_classid_activity = 0;
-jclass j_classid_locationManager = 0;
 jclass j_classid_handlerThread = 0;
+
+jclass j_classid_prisLocationListener = 0;
+jclass j_classid_locationManager = 0;
+
+jclass j_classid_bluetoothAdapter=0;
+jclass j_classid_bluetoothDevice=0;
+jclass j_classid_prisBluetoothStatusReceiver=0;
+
 jobject j_ref_prisActivityInstance = 0;
 
 
@@ -81,6 +88,17 @@ extern "C" {
                 FindClass(env,"android/os/HandlerThread");
 
         j_ref_prisActivityInstance = env->NewGlobalRef(obj);
+
+
+        // bluetooth
+        j_classid_bluetoothAdapter =
+                FindClass(env,"android/bluetooth/BluetoothAdapter");
+
+        j_classid_bluetoothDevice =
+                FindClass(env,"android/bluetooth/BluetoothDevice");
+
+        j_classid_prisBluetoothStatusReceiver =
+                FindClass(env,"ca/predesign/prismatic/PrisBluetoothStatusReceiver");
 
 
         qDebug() << "####: activityReady\n\n\n";
@@ -171,15 +189,28 @@ int main(int argc, char **argv)
 
     QGuiApplication app(argc, argv);
     QQuickView * view = new QQuickView;
-    GeoLocation * geoloc = new GeoLocation(view,
-                                           g_java_vm,
-                                           j_classid_prisActivity,
-                                           j_classid_prisLocationListener,
-                                           j_classid_context,
-                                           j_classid_activity,
-                                           j_classid_locationManager,
-                                           j_classid_handlerThread,
-                                           j_ref_prisActivityInstance);
+//    GeoLocation * geoloc = new GeoLocation(view,
+//                                           g_java_vm,
+//                                           j_classid_prisActivity,
+//                                           j_classid_prisLocationListener,
+//                                           j_classid_context,
+//                                           j_classid_activity,
+//                                           j_classid_locationManager,
+//                                           j_classid_handlerThread,
+//                                           j_ref_prisActivityInstance);
+
+    BluetoothSerial * bluetoothserial =
+            new BluetoothSerial(view,
+                                g_java_vm,
+                                j_classid_prisActivity,
+                                j_classid_prisLocationListener,
+                                j_classid_context,
+                                j_classid_activity,
+                                j_classid_handlerThread,
+                                j_classid_bluetoothAdapter,
+                                j_classid_bluetoothDevice,
+                                j_classid_prisBluetoothStatusReceiver,
+                                j_ref_prisActivityInstance);
 
     view->setResizeMode(QQuickView::SizeRootObjectToView);
     view->setSource(QUrl("qrc:/main.qml"));
@@ -188,7 +219,7 @@ int main(int argc, char **argv)
 //    view->showMaximized();
     view->show();
 
-    QTimer::singleShot(2000,geoloc,SLOT(Initialize()));
+    QTimer::singleShot(2000,bluetoothserial,SLOT(Initialize()));
 
     return app.exec();
 }

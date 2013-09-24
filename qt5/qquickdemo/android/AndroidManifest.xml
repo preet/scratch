@@ -30,9 +30,17 @@
             <meta-data android:name="android.app.splash_screen" android:resource="@layout/splash"/>
             <!-- Splash screen -->
         </activity>
+        <!-- bluetooth status receiver -->
+        <receiver android:name="ca.predesign.prismatic.PrisBluetoothStatusReceiver">
+             <intent-filter>
+                 <action android:name="android.bluetooth.adapter.action.STATE_CHANGED" />
+             </intent-filter>
+        </receiver>
     </application>
     <supports-screens android:anyDensity="true" android:smallScreens="true" android:normalScreens="true" android:largeScreens="true"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
 </manifest>

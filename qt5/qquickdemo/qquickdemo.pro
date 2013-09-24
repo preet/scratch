@@ -2,11 +2,13 @@ QT += core quick
 
 HEADERS += \
     #helper.h \
-    geolocation.h
+#    geolocation.h
+    bluetoothserial.h
 
 SOURCES += \
     #helper.cpp \
-    geolocation.cpp \
+#    geolocation.cpp \
+    bluetoothserial.cpp \
     main.cpp
 
 OTHER_FILES += \

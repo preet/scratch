@@ -20,30 +20,41 @@ Rectangle
 //    }
 
     Connections   {
-        target: GeoLocation;
+//        target: GeoLocation;
 
-        onLocationChanged:   {
+//        onLocationChanged:   {
 
-            var pTime = utc_time;
-            var pLon = lon;
-            var pLat = lat;
+//            var pTime = utc_time;
+//            var pLon = lon;
+//            var pLat = lat;
 
-            tlocation.text =
-                    pTime + "," +
-                    pLon.toString() + "," +
-                    pLat.toString();
-        }
+//            tlocation.text =
+//                    pTime + "," +
+//                    pLon.toString() + "," +
+//                    pLat.toString();
+//        }
 
-        onStatusChanged:   {
-            tstatus.text = status;
-        }
+//        onStatusChanged:   {
+//            tstatus.text = status;
+//        }
 
-        onProviderEnabled:   {
-            tproviderEnabled.text = provider + " was enabled";
-        }
+//        onProviderEnabled:   {
+//            tproviderEnabled.text = provider + " was enabled";
+//        }
 
-        onProviderDisabled:   {
-            tproviderDisabled.text = provider + " was disabled";
+//        onProviderDisabled:   {
+//            tproviderDisabled.text = provider + " was disabled";
+//        }
+
+        target: BluetoothSerial;
+
+        onBluetoothAdapterStatusChanged:   {
+            if(status)   {
+                tbluetoothstatus.text = "ON";
+            }
+            else   {
+                tbluetoothstatus.text = "OFF";
+            }
         }
     }
 
@@ -57,45 +68,56 @@ Rectangle
         property real textwidth: root.width-40;
 
         Text {
-            id: tlocation;
+            id: tbluetoothstatus;
             x:20;
             width: parent.textwidth;
             wrapMode: Text.WrapAnywhere;
             font.pixelSize: parent.fontpixelsize;
             font.bold: true;
             color: "#1eb53a";
-            text: "location";
+            text: "unknown";
         }
-        Text {
-            id: tstatus;
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#1eb53a";
-            text: "status";
-        }
-        Text {
-            id: tproviderEnabled;
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#1eb53a";
-            text: "providerEnabled";
-        }
-        Text {
-            id: tproviderDisabled;
-            x:20;
-            width: parent.textwidth;
-            wrapMode: Text.WrapAnywhere;
-            font.pixelSize: parent.fontpixelsize;
-            font.bold: true;
-            color: "#1eb53a";
-            text: "providerDisabled";
-        }
+
+//        Text {
+//            id: tlocation;
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#1eb53a";
+//            text: "location";
+//        }
+//        Text {
+//            id: tstatus;
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#1eb53a";
+//            text: "status";
+//        }
+//        Text {
+//            id: tproviderEnabled;
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#1eb53a";
+//            text: "providerEnabled";
+//        }
+//        Text {
+//            id: tproviderDisabled;
+//            x:20;
+//            width: parent.textwidth;
+//            wrapMode: Text.WrapAnywhere;
+//            font.pixelSize: parent.fontpixelsize;
+//            font.bold: true;
+//            color: "#1eb53a";
+//            text: "providerDisabled";
+//        }
 //        Text {
 //            x:20;
 //            width: parent.textwidth;
