@@ -2,6 +2,7 @@ package ca.predesign.prismatic;
 
 import android.util.Log;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 
 public class PrisBluetoothManager
 {
@@ -13,18 +14,9 @@ public class PrisBluetoothManager
 
     public PrisBluetoothManager()
     {
-       m_init = false;
        m_bluetoothAvailable = false;
-    }
 
-    public void Initialize()
-    {
-       if(m_init)   {
-          Log.i("PrisBluetoothManager","WARN: Reinit attempt!");
-          return;
-       }
-
-       // Get the Bluetooth Adapter
+       // Get this device's bluetooth Adapter
        m_bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
        if(m_bluetoothAdapter == null)   {
           // device does not support bluetooth
@@ -35,14 +27,28 @@ public class PrisBluetoothManager
        m_init = true;
     }
 
-    public BluetoothAdapter GetDeviceAdapter()
+    public boolean GetBluetoothAvailable()
+    {
+       return m_bluetoothAvailable;
+    }
+
+    public boolean GetBluetoothEnabled()
+    {
+       return m_bluetoothAdapter.isEnabled();
+    }
+
+    public BluetoothAdapter GetAdapter()
     {
        return m_bluetoothAdapter;
     }
 
-    public boolean CheckIfAdapterEnabled()
-    {
-       return m_bluetoothAdapter.isEnabled();
-    }
+//    public Set<BluetoothDevice> GetPairedDevices()
+//    {
+//       return m_bluetoothAdapter.getBondedDevices();
+//    }
+
+
+
+
 //---------------------------------------------------------------------------
 }

@@ -25,6 +25,7 @@ jclass j_classid_locationManager = 0;
 
 jclass j_classid_bluetoothAdapter=0;
 jclass j_classid_bluetoothDevice=0;
+jclass j_classid_prisBluetoothManager=0;
 jclass j_classid_prisBluetoothStatusReceiver=0;
 
 jobject j_ref_prisActivityInstance = 0;
@@ -96,6 +97,9 @@ extern "C" {
 
         j_classid_bluetoothDevice =
                 FindClass(env,"android/bluetooth/BluetoothDevice");
+
+        j_classid_prisBluetoothManager =
+                FindClass(env,"ca/predesign/prismatic/PrisBluetoothManager");
 
         j_classid_prisBluetoothStatusReceiver =
                 FindClass(env,"ca/predesign/prismatic/PrisBluetoothStatusReceiver");
@@ -209,11 +213,12 @@ int main(int argc, char **argv)
                                 j_classid_handlerThread,
                                 j_classid_bluetoothAdapter,
                                 j_classid_bluetoothDevice,
+                                j_classid_prisBluetoothManager,
                                 j_classid_prisBluetoothStatusReceiver,
                                 j_ref_prisActivityInstance);
 
     view->setResizeMode(QQuickView::SizeRootObjectToView);
-    view->setSource(QUrl("qrc:/main.qml"));
+    view->setSource(QUrl("assets:/main.qml"));
 
 //    view->showFullScreen();
 //    view->showMaximized();

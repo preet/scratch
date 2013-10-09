@@ -25,6 +25,7 @@ public:
                              jclass j_classid_handlerThread,
                              jclass j_classid_bluetoothAdapter,
                              jclass j_classid_bluetoothDevice,
+                             jclass j_classid_prisBluetoothManager,
                              jclass j_classid_prisBluetoothStatusReceiver,
                              jobject j_ref_prisActivityInstance,
                              QObject * parent=0);
@@ -44,6 +45,7 @@ private:
     jclass m_j_classid_bluetoothAdapter;
     jclass m_j_classid_bluetoothDevice;
     jclass m_j_classid_prisBluetoothStatusReceive;
+    jclass m_j_classid_prisBluetoothManager;
     jobject m_j_ref_prisActivityInstance;
 
     bool m_init;

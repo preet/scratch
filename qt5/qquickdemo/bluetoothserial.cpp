@@ -28,6 +28,7 @@ BluetoothSerial::BluetoothSerial(QQuickView * qqview,
                                  jclass j_classid_handlerThread,
                                  jclass j_classid_bluetoothAdapter,
                                  jclass j_classid_bluetoothDevice,
+                                 jclass j_classid_prisBluetoothManager,
                                  jclass j_classid_prisBluetoothStatusReceiver,
                                  jobject j_ref_prisActivityInstance,
                                  QObject * parent) :
@@ -42,6 +43,7 @@ BluetoothSerial::BluetoothSerial(QQuickView * qqview,
     m_j_classid_handlerThread           = j_classid_handlerThread;
     m_j_classid_bluetoothAdapter        = j_classid_bluetoothAdapter;
     m_j_classid_bluetoothDevice         = j_classid_bluetoothDevice;
+    m_j_classid_prisBluetoothManager    = j_classid_prisBluetoothManager;
     m_j_classid_prisBluetoothStatusReceive =
             j_classid_prisBluetoothStatusReceiver;
     m_j_ref_prisActivityInstance        = j_ref_prisActivityInstance;
@@ -93,24 +95,40 @@ void BluetoothSerial::Initialize()
                          sizeof(methods)/sizeof(methods[0]));
     // ----------------------------------------------
 
+    // Create an instance of PrisBluetoothManager
+
+    // should we even be using a PrisBluetoothManager class?
+
+    jmethodID prisBluetoothManagerConstructor =
+            env->GetMethodID(m_j_classid_prisBluetoothManager,
+                             "<init>","()V");
+
+    jobject prisBluetoothManagerRef =
+            env->CallObjectMethod(m_j_classid_prisBluetoothManager,
+                                  prisBluetoothManagerConstructor);
+
+    // Initialize
+
+
+
     // Get a reference to the Bluetooth Adapter
-    jmethodID getDefaultAdapter =
-            env->GetStaticMethodID(m_j_classid_bluetoothAdapter,
-                                   "getDefaultAdapter",
-                                   "()Landroid/bluetooth/BluetoothAdapter;");
+//    jmethodID getDefaultAdapter =
+//            env->GetStaticMethodID(m_j_classid_bluetoothAdapter,
+//                                   "getDefaultAdapter",
+//                                   "()Landroid/bluetooth/BluetoothAdapter;");
 
-    jobject bluetoothAdapterRef =
-            env->CallStaticObjectMethod(m_j_classid_bluetoothAdapter,
-                                        getDefaultAdapter);
+//    jobject bluetoothAdapterRef =
+//            env->CallStaticObjectMethod(m_j_classid_bluetoothAdapter,
+//                                        getDefaultAdapter);
 
-    // Verify a bluetooth adapter exists on the
-    // local device. It may be better to do this
-    // check on the Java side of things.
-    if(!bluetoothAdapterRef)   {
-        qDebug() << "####: ERROR: Bluetooth Adapter not "
-                    "available on this device";
-        return;
-    }
+//    // Verify a bluetooth adapter exists on the
+//    // local device. It may be better to do this
+//    // check on the Java side of things.
+//    if(!bluetoothAdapterRef)   {
+//        qDebug() << "####: ERROR: Bluetooth Adapter not "
+//                    "available on this device";
+//        return;
+//    }
 
 //    // Check if Bluetooth is enabled
 //    jmethodID isEnabled =

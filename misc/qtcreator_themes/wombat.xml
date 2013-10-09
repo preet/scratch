@@ -1,0 +1,49 @@
+<!-- https://github.com/zenbro/qtcreator-wombat-theme -->
+
+<?xml version="1.0" encoding="UTF-8"?>
+<style-scheme version="1.0" name="wombat">
+  <style name="AddedLine" foreground="#f6f3e8" background="#2b5428"/>
+  <style name="Binding" foreground="#e5786d"/>
+  <style name="Comment" foreground="#99968b" italic="true"/>
+  <style name="CurrentLine" foreground="#f6f3e8" background="#0c0c0c"/>
+  <style name="CurrentLineNumber" foreground="#ffff00" bold="true"/>
+  <style name="DiffFile" foreground="#ff765e" background="#12100f" bold="true"/>
+  <style name="DiffLocation" foreground="#aaaaff" background="#12100f" bold="true"/>
+  <style name="DisabledCode" foreground="#857b6f" background="#12100f"/>
+  <style name="Doxygen.Comment" foreground="#7a786f"/>
+  <style name="Doxygen.Tag" foreground="#222222" background="#ffed65"/>
+  <style name="Field" foreground="#ff9055"/>
+  <style name="Function" foreground="#cae682"/>
+  <style name="JsGlobalVar" foreground="#ffa034"/>
+  <style name="JsImportVar" foreground="#ffed65"/>
+  <style name="JsScopeVar" foreground="#8ac6f2"/>
+  <style name="Keyword" foreground="#cae682"/>
+  <style name="Label" foreground="#8ac6f2"/>
+  <style name="LineNumber" foreground="#857b6f" background="#000000"/>
+  <style name="Link" foreground="#1148ff" background="#ffffff"/>
+  <style name="Local" foreground="#7cb0e6"/>
+  <style name="Number" foreground="#e5786d"/>
+  <style name="Occurrences" foreground="#f6f3e8" background="#857b6f" bold="true"/>
+  <style name="Occurrences.Rename" foreground="#000000"/>
+  <style name="Occurrences.Unused" background="#12100f"/>
+  <style name="Operator" foreground="#86cd74"/>
+  <style name="Parentheses" foreground="#ff3131" background="#12100f" bold="true"/>
+  <style name="Preprocessor" foreground="#e5786d"/>
+  <style name="QmlExternalId" foreground="#ff935d"/>
+  <style name="QmlExternalObjectProperty" foreground="#6277ff"/>
+  <style name="QmlLocalId" foreground="#8ac6f2"/>
+  <style name="QmlRootObjectProperty" foreground="#9597f4"/>
+  <style name="QmlScopeObjectProperty" foreground="#ffcc8a"/>
+  <style name="QmlStateName" foreground="#51bf84"/>
+  <style name="QmlTypeId" foreground="#cae682"/>
+  <style name="RemovedLine" foreground="#ffffff" background="#862d2d" bold="true"/>
+  <style name="SearchResult" foreground="#000000" background="#8f5f8f"/>
+  <style name="SearchScope" foreground="#ffaaff"/>
+  <style name="Selection" foreground="#f6f3e8" background="#444444"/>
+  <style name="Static" foreground="#ffd815" bold="true"/>
+  <style name="String" foreground="#95e454" italic="true"/>
+  <style name="Text" foreground="#f6f3e8" background="#242424"/>
+  <style name="Type" foreground="#ffcd80" bold="true"/>
+  <style name="VirtualMethod" foreground="#be7fbe"/>
+  <style name="VisualWhitespace" foreground="#c0c0c0"/>
+</style-scheme>
