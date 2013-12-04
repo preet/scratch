@@ -7,24 +7,24 @@ cp -f HashSet.h $SRCDIR/libosmscout/include/osmscout/util/
 
 cd $SRCDIR
 cd libosmscout
-./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
+./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --disable-thread-support --disable-openmp-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
 
 cd .. && cd libosmscout-import
-./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
+./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --disable-thread-support --disable-openmp-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
 
 cd .. && cd Import
 cp map.ost /home/preet/Dev/env/sys/libosmscout
 cp standard.oss /home/preet/Dev/env/sys/libosmscout
-./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
+./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --disable-thread-support --disable-openmp-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
 
 cd .. && cd libosmscout-map
-./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
+./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --disable-thread-support --disable-openmp-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
 
 cd .. && cd libosmscout-map-qt
-./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
+./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --disable-thread-support --disable-openmp-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
 
 cd .. && cd OSMScout
-./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -DHAVE_LIB_QTOPENGL=0 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
+./autogen.sh && ./configure --disable-see2-support --disable-cpp0x-support --disable-thread-support --disable-openmp-support --prefix=/home/preet/Dev/env/sys/libosmscout CPPFLAGS="-DUSE_BOOST=1 -DHAVE_LIB_QTOPENGL=0 -I/home/preet/Dev/env/sys/boost-1.53" && make && make install
 
 echo "======================="
 echo "built:"

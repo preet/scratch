@@ -6,135 +6,6 @@
 
 #include "duktape.h"
 
-static const char * g_init =
-        "\n"
-        "function LiteralDataObj()\n"
-        "{\n"
-        "    this.value = false;\n"
-        "    this.valueIfFalse = \"\";\n"
-        "    this.valueIfTrue = \"\";\n"
-        "    this.property = \"\";\n"
-        "}\n"
-        "\n"
-        "function NumericalDataObj()\n"
-        "{\n"
-        "    this.value = 0;\n"
-        "    this.min = 0;\n"
-        "    this.max = 0;\n"
-        "    this.units = \"\";\n"
-        "    this.property = \"\";\n"
-        "}\n"
-        "\n"
-        "function ListDataObj()\n"
-        "{\n"
-        "    this.listData = [];\n"
-        "\n"
-        "    this.appendData = function(newData)\n"
-        "         {   this.listData.push(newData);   }\n"
-        "\n"
-        "    this.clearData = function()\n"
-        "         {   this.listData.length = 0;   }\n"
-        "}\n"
-        "\n"
-        "var global_list_num_data = new ListDataObj();\n"
-        "\n"
-        "var global_list_lit_data = new ListDataObj();\n"
-        "\n"
-        "function saveNumericalData(numDataObj)\n"
-        "{   global_list_num_data.appendData(numDataObj);   }\n"
-        "\n"
-        "function saveLiteralData(litDataObj)\n"
-        "{   global_list_lit_data.appendData(litDataObj);   }\n"
-        "\n"
-        "function DataBytesObj()\n"
-        "{\n"
-        "    this.bytes = [];\n"
-        "\n"
-        "    this.BYTE = function(bytePos)\n"
-        "         { return ((bytePos > -1 && bytePos < this.bytes.length) ? this.bytes[bytePos] : 0); }\n"
-        "\n"
-        "    this.BIT = function(bytePos,bitPos)\n"
-        "         {\n"
-        "             if(bytePos > -1 && bytePos < this.bytes.length && bitPos > -1 && bitPos < 8)\n"
-        "             {\n"
-        "                 var byteVal = this.bytes[bytePos];\n"
-        "                 if((byteVal & (1 << bitPos)) > 0)\n"
-        "                 {   return 1;   }\n"
-        "                 else\n"
-        "                 {   return 0;   }\n"
-        "             }\n"
-        "         }\n"
-        "         \n"
-        "    this.LENGTH = function()\n"
-        "         {   return this.bytes.length;   }\n"
-        "\n"
-        "    this.appendByte = function(byteVal)\n"
-        "         {\n"
-        "             if(byteVal >= 0)\n"
-        "             {   this.bytes.push(byteVal);   }\n"
-        "         }\n"
-        "\n"
-        "    this.clearData = function()\n"
-        "         {   this.bytes.length = 0;   }\n"
-        "}\n"
-        "\n"
-        "function ListDataBytesObj()\n"
-        "{\n"
-        "   this.listDataBytes = [];\n"
-        "   \n"
-        "   this.appendDataBytes = function(dataBytes)\n"
-        "      {\n"
-        "         var dataBytesObj = new DataBytesObj();\n"
-        "         dataBytesObj.bytes = dataBytes;\n"
-        "         this.listDataBytes.push(dataBytesObj);\n"
-        "      }\n"
-        "      \n"
-        "   this.clearDataBytes = function()\n"
-        "      {   this.listDataBytes.length = 0;   }\n"
-        "}\n"
-        "\n"
-        "// global list of databytes for when a given parameter\n"
-        "// needs to be reconstructed from multiple messages\n"
-        "var global_list_databytes = new ListDataBytesObj();\n"
-        "\n"
-        "function DATA(respNum)\n"
-        "{\n"
-        "   if(respNum > -1 && respNum < global_list_databytes.listDataBytes.length)\n"
-        "   {   return global_list_databytes.listDataBytes[respNum];   }\n"
-        "   else\n"
-        "   {   return 0;   }\n"
-        "}\n"
-        "\n"
-        "function BYTE(bytePos)\n"
-        "{   return DATA(0).BYTE(bytePos);   }\n"
-        "\n"
-        "function BIT(bytePos,bitPos)\n"
-        "{   return DATA(0).BIT(bytePos,bitPos);   }\n"
-        "\n"
-        "function LENGTH()\n"
-        "{   return DATA(0).LENGTH();   }\n"
-        "\n"
-        "\n"
-        "\n"
-        "function __private__set_data(list_databytes)\n"
-        "{\n"
-        "   global_list_databytes.appendDataBytes(list_databytes[0]);\n"
-        "   //var i=0;\n"
-        "   //for(i=0; i < list_databytes[0].length; i++)   {\n"
-        "   //   print(\"byte \"+i+\": \" + list_databytes[0][i]);\n"
-        "   //}\n"
-        "}\n"
-        "\n"
-        "function __private__clear_all_data()\n"
-        "{\n"
-        "   global_list_num_data.clearData();\n"
-        "   global_list_lit_data.clearData();\n"
-        "   global_list_databytes.clearDataBytes();\n"
-        "   //print(\"boop\");\n"
-        "}\n"
-        "";
-
-
 static const char * g_script =
         "function parse() {\n"
         "var engSpd = new NumericalDataObj();\n"
@@ -148,7 +19,12 @@ static const char * g_script =
 
 //"engSpd.value = (BYTE(0)*256 + BYTE(1))/4;\n"
 
-double genByte()
+double genHeaderByte()
+{
+    return 1;
+}
+
+double genDataByte()
 {
     return 3;
 }
@@ -172,7 +48,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    size_t ITERATIONS=10000;
+    size_t ITERATIONS=1000;
 
     // push the global object onto the context's
     // value stack
@@ -180,24 +56,29 @@ int main(int argc, char *argv[])
 
     // register global functions and objects to
     // the global object
-    duk_eval_string(ctx,g_init);
+    duk_eval_file(ctx,"/home/preet/Dev/projects/libobdref/libobdref/globals.js");
     duk_pop(ctx);   // pop result of eval
 
     // register parser script to global object
     duk_eval_string(ctx,g_script);
     duk_pop(ctx);
 
+    //
+    int js_idx_global_obj = duk_normalize_index(ctx,-1);
+    duk_get_prop_string(ctx,js_idx_global_obj,"__private_add_msg_data");
+    int js_idx_add_msg_data = duk_normalize_index(ctx,-1);
+
     // push global list num data
-    duk_get_prop_string(ctx,-1,"global_list_num_data");         // <g,listN>
+    duk_get_prop_string(ctx,-2,"global_list_num_data");         // <g,listN>
 
     // push global list lit data
-    duk_get_prop_string(ctx,-2,"global_list_lit_data");         // <g,listN,listL>
+    duk_get_prop_string(ctx,-3,"global_list_lit_data");         // <g,listN,listL>
 
     // push function __private_clear_all_data onto stack
-    duk_get_prop_string(ctx,-3,"__private__clear_all_data");    // <g,listN,listL,func1>
+    duk_get_prop_string(ctx,-4,"__private__clear_all_data");    // <g,listN,listL,func1>
 
     // push function __private__set_data
-    duk_get_prop_string(ctx,-4,"__private__set_data");          // <g,listN,listL,func1,func2>
+    duk_get_prop_string(ctx,-5,"__private__add_list_databytes");          // <g,listN,listL,func1,func2>
 
     QElapsedTimer timer;
     timer.start();
@@ -206,21 +87,45 @@ int main(int argc, char *argv[])
         duk_dup(ctx,-2);    // <..., func1, func2, func1>
         duk_call(ctx,0);    // <..., func1, func2, retval1>
         duk_pop(ctx);
+        int list_arr_idx,data_arr_idx;
 
-        // set new data
-        duk_dup(ctx,-1);                                // <..., func1, func2, func2>
-        int list_arr_idx = duk_push_array(ctx);         // <..., func2, list[]>
-        int data_arr_idx = duk_push_array(ctx);         // <..., func2, list[], data[]>
-        duk_push_number(ctx,genByte());                 // <..., func2, list[], data[], num1>
-        duk_put_prop_index(ctx,data_arr_idx,0);         // <..., func2, list[], data[num1]>
-        duk_push_number(ctx,genByte());                 // <..., func2, list[], data[num1], num2>
-        duk_put_prop_index(ctx,data_arr_idx,1);         // <..., func2, list[], data[num1,num2]>
-        duk_put_prop_index(ctx,list_arr_idx,0);         // <..., func2, list[data[num1,num2]]>
-        duk_call(ctx,1);                                // <..., func1, func2, retval2>
+        // set msg data
+        // function __private_add_msg_data(listHeaderBytes,listDataBytes)
+        duk_dup(ctx,js_idx_add_msg_data);
+        // (header)
+        list_arr_idx = duk_push_array(ctx); // listHeaderBytes
+        data_arr_idx = duk_push_array(ctx); // headerBytes
+        duk_push_number(ctx,genHeaderByte());
+        duk_put_prop_index(ctx,data_arr_idx,0);
+        duk_push_number(ctx,genHeaderByte());
+        duk_put_prop_index(ctx,data_arr_idx,1);
+        duk_put_prop_index(ctx,list_arr_idx,0);
+        // (data)
+        list_arr_idx = duk_push_array(ctx); // listDataBytes
+        data_arr_idx = duk_push_array(ctx); // dataBytes
+        duk_push_number(ctx,genDataByte());
+        duk_put_prop_index(ctx,data_arr_idx,0);
+        duk_push_number(ctx,genDataByte());
+        duk_put_prop_index(ctx,data_arr_idx,1);
+        duk_push_number(ctx,genDataByte());
+        duk_put_prop_index(ctx,data_arr_idx,2);
+        duk_push_number(ctx,genDataByte());
+        duk_put_prop_index(ctx,data_arr_idx,3);
+        duk_push_number(ctx,genDataByte());
+        duk_put_prop_index(ctx,data_arr_idx,4);
+        duk_push_number(ctx,genDataByte());
+        duk_put_prop_index(ctx,data_arr_idx,5);
+        duk_push_number(ctx,genDataByte());
+        duk_put_prop_index(ctx,data_arr_idx,6);
+        duk_push_number(ctx,genDataByte());
+        duk_put_prop_index(ctx,data_arr_idx,7);
+        duk_put_prop_index(ctx,list_arr_idx,0);
+
+        duk_call(ctx,2);                                // <..., func1, func2, retval2>
         duk_pop(ctx);
 
         // parse the data
-        duk_get_prop_string(ctx,-5,"parse");            // <g,listN,listL,func1,func2,func3>
+        duk_get_prop_string(ctx,-6,"parse");            // <g,listN,listL,func1,func2,func3>
         duk_call(ctx,0);                                // <g,listN,listL,func1,func2,retval3>
         duk_pop(ctx);
 
