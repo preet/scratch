@@ -1,9 +1,9 @@
 {
     "IMPORTCONFIG":
     {
-        "mapfile":"/home/preet/Documents/maps/openstreetmap/toronto.osm.pbf",
-        "typefile":"/home/preet/Dev/env/sys/libosmscout/map.ost",
-        "destinationDirectory":"./toronto",
+        "mapfile":"/home/preet/Documents/maps/openstreetmap/ontario-latest.osm.pbf",
+        "typefile":"/home/preet/Dev/projects/osmsrender/res/map_render_testing.ost",
+        "destinationDirectory":"./ontario",
         "startStep":1,
         "endStep":26,
 
@@ -45,14 +45,14 @@
         "areaNodeIndexCellSizeMax":256,
 
         "waterIndexMinMag":6,
-        "waterIndexMaxMag":14,
+        "waterIndexMaxMag":6,
 
-        "optimizationMaxWayCount":1000000,
-        "optimizationMaxMag":10,
+        "optimizationMaxWayCount":0,
+        "optimizationMaxMag":6,
         "optimizationMinMag":6,
         "optimizationCellSizeAverage":64,
-        "optimizationCellSizeMax":256,
-        "optimizationWayMethod":"TransPolygon::fast",
+        "optimizationCellSizeMax":255,
+        "optimizationWayMethod":"TransPolygon::none",
 
         "routeNodeBlockSize":500000,
 

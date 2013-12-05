@@ -187,13 +187,13 @@ int main(int argc, char *argv[])
 
     ok = ok && GetImportParamAsInt(j,"numericIndexPageSize",numericIndexPageSize);
 
-    ok = ok && GetImportParamAsBool(j,"coordDataMemoryMapped",coordDataMemoryMaped);
+    ok = ok && GetImportParamAsBool(j,"coordDataMemoryMaped",coordDataMemoryMaped);
 
-    ok = ok && GetImportParamAsBool(j,"rawNodeDataMemoryMapped",rawNodeDataMemoryMaped);
+    ok = ok && GetImportParamAsBool(j,"rawNodeDataMemoryMaped",rawNodeDataMemoryMaped);
     ok = ok && GetImportParamAsInt(j,"rawNodeDataCacheSize",rawNodeDataCacheSize);
 
-    ok = ok && GetImportParamAsBool(j,"rawWayIndexMemoryMapped",rawWayIndexMemoryMaped);
-    ok = ok && GetImportParamAsBool(j,"rawWayDataMemoryMapped",rawWayDataMemoryMaped);
+    ok = ok && GetImportParamAsBool(j,"rawWayIndexMemoryMaped",rawWayIndexMemoryMaped);
+    ok = ok && GetImportParamAsBool(j,"rawWayDataMemoryMaped",rawWayDataMemoryMaped);
     ok = ok && GetImportParamAsInt(j,"rawWayDataCacheSize",rawWayDataCacheSize);
     ok = ok && GetImportParamAsInt(j,"rawWayIndexCacheSize",rawWayIndexCacheSize);
     ok = ok && GetImportParamAsInt(j,"rawWayBlockSize",rawWayBlockSize);
