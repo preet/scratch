@@ -136,7 +136,7 @@ struct OffsetGroup
 
 std::string convNameToLookup(std::string const &name)
 {
-    QString temp = QString::fromStdString(name).left(4).toLower();
+    QString temp = QString::fromStdString(name).left(3).toLower();
     return temp.toStdString();
 }
 
@@ -177,6 +177,11 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
     // container for blob memory we delete after
     // committing the sql transaction
     std::vector<char*> list_blobs;
+
+    // keep track of the number of transactions and
+    // commit after a certain limit
+    size_t transaction_limit=500;
+    size_t transaction_count=0;
 
     for(size_t i=0; i < list_tiles.size(); i++)   {
         // for each tile
@@ -226,7 +231,7 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
                 if(set_way_offsets.count(wayRef->GetFileOffset()) != 0)   {
                     continue;
                 }
-                set_way_offsets.insert(wayRef->GetFileOffset());
+                set_way_offsets.insert(wayRef->GetFileOffset()).second;
             }
             MapObject map_object;
             map_object.name     = wayRef->GetName();
@@ -332,6 +337,12 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
                 list_blobs.push_back(data_area_offsets);
             }
 
+            if(data_node_offsets == NULL &&
+               data_way_offsets  == NULL &&
+               data_area_offsets == NULL)   {
+                continue;
+            }
+
             // prepare sql
             try   {
                 stmt->BindInt64(1,list_tiles[i]->key);
@@ -357,6 +368,16 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
                 }
                 stmt->Execute();
                 stmt->Reset();
+
+                if(transaction_count > transaction_limit)   {
+                    stmt->FreeQuery();
+                    stmt->CommitTransaction();
+
+                    stmt->BeginTransaction();
+                    stmt->Sql(stmt_insert);
+                    transaction_count=0;
+                }
+                transaction_count++;
             }
             catch(Kompex::SQLiteException &exception)   {
                 qDebug() << "ERROR: SQLite exception writing tile data:"
@@ -494,20 +515,59 @@ int main(int argc, char *argv[])
 
     // set query types
     osmscout::TypeSet typeSet;
-    typeSet.SetType(typeConfig->GetAreaTypeId("place_city"));
-    typeSet.SetType(typeConfig->GetAreaTypeId("place_town"));
-    typeSet.SetType(typeConfig->GetAreaTypeId("place_village"));
-    typeSet.SetType(typeConfig->GetAreaTypeId("place_hamlet"));
-    typeSet.SetType(typeConfig->GetAreaTypeId("place_suburb"));
 
-    typeSet.SetType(typeConfig->GetNodeTypeId("place_city"));
-    typeSet.SetType(typeConfig->GetNodeTypeId("place_town"));
-    typeSet.SetType(typeConfig->GetNodeTypeId("place_village"));
-    typeSet.SetType(typeConfig->GetNodeTypeId("place_hamlet"));
-    typeSet.SetType(typeConfig->GetNodeTypeId("place_suburb"));
+//    typeSet.SetType(typeConfig->GetAreaTypeId("place_city"));
+//    typeSet.SetType(typeConfig->GetAreaTypeId("place_town"));
+//    typeSet.SetType(typeConfig->GetAreaTypeId("place_village"));
+//    typeSet.SetType(typeConfig->GetAreaTypeId("place_hamlet"));
+//    typeSet.SetType(typeConfig->GetAreaTypeId("place_suburb"));
+
+//    typeSet.SetType(typeConfig->GetNodeTypeId("place_city"));
+//    typeSet.SetType(typeConfig->GetNodeTypeId("place_town"));
+//    typeSet.SetType(typeConfig->GetNodeTypeId("place_village"));
+//    typeSet.SetType(typeConfig->GetNodeTypeId("place_hamlet"));
+//    typeSet.SetType(typeConfig->GetNodeTypeId("place_suburb"));
+
+//    bool opOk = buildTable(stmt,name_id,table_names,"admin_regions",
+//                           list_tiles,map,typeSet,false,true,true);
+//    if(!opOk)   {
+//        qDebug() << "ERROR: Failed to build admin_regions table";
+//        return -1;
+//    }
+
+    typeSet.Clear();
+
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_motorway"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_motorway_link"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_trunk"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_trunk_link"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_primary"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_primary_link"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_secondary"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_secondary_link"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_tertiary"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_tertiary_link"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_residential"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_living_street"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_service"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_pedestrian"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_unclassified"));
+
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_road"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_track_paved"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_track_unpaved"));
+
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_cycleway"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_footway"));
+    typeSet.SetType(typeConfig->GetWayTypeId("highway_path"));
+
+//    typeSet.SetType(typeConfig->GetNodeTypeId("highway_services")); // node and area type should be
+//                                                                    // under POIs i think
+
+
 
     bool opOk = buildTable(stmt,name_id,table_names,"admin_regions",
-                           list_tiles,map,typeSet,false,true,true);
+                           list_tiles,map,typeSet,false,false,true);
     if(!opOk)   {
         qDebug() << "ERROR: Failed to build admin_regions table";
         return -1;
