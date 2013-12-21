@@ -72,9 +72,6 @@
     \endqml
 */
 
-namespace mapmixview
-{
-
 /*!
     Constructs an object list model with the given \a parent.
 */
@@ -359,5 +356,3 @@ QObject *QNamedObjectListModel::get(int i) const
 
     \sa indexOf(), count()
 */
-
-}   // namespace mapmixview

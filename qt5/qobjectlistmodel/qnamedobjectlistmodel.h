@@ -51,9 +51,6 @@
         add additional QList convenience functions (operator<<, etc.)
 */
 
-namespace mapmixview
-{
-
 class QNamedObjectListModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -113,7 +110,5 @@ private:
     Q_DISABLE_COPY(QNamedObjectListModel)
     QObjectList m_objects;
 };
-
-}   // namespace mapmixview
 
 #endif // QNAMEDOBJECTLISTMODEL_H
