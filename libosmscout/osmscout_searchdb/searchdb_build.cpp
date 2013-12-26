@@ -22,7 +22,47 @@
 #include "KompexSQLiteBlob.h"
 
 //
-#include "quadtilehelpers.hpp"
+//#include "quadtilehelpers.hpp"
+
+struct MapObject
+{
+    std::string             name;
+    osmscout::FileOffset    offset;
+    osmscout::RefType       type;
+
+};
+
+struct OffsetGroup
+{
+    std::vector<quint64> node_offsets;
+    std::vector<quint64> way_offsets;
+    std::vector<quint64> area_offsets;
+};
+
+struct GeoBoundingBox
+{
+    double minLat;
+    double maxLat;
+    double minLon;
+    double maxLon;
+};
+
+struct Tile
+{
+    int64_t id;
+    int32_t zoom;
+
+    GeoBoundingBox bbox;
+};
+
+struct ColorRGBA
+{
+    double r;
+    double g;
+    double b;
+    double a;
+};
+
 
 // openscenegraph
 #ifdef DEBUG_WITH_OSG
@@ -115,28 +155,13 @@ const char * g_shader_f =
         "}\n"
         "";
 
-int displayTiles(quadtiles::GeoBoundingBox &bbox_map,
-                 std::vector<quadtiles::QuadTile*> &list_tiles);
+int displayTiles(GeoBoundingBox &bbox_map,
+                 std::vector<Tile*> &list_tiles);
 
 #endif
 
 // ============================================================== //
 // ============================================================== //
-
-struct MapObject
-{
-    std::string             name;
-    osmscout::FileOffset    offset;
-    osmscout::RefType       type;
-
-};
-
-struct OffsetGroup
-{
-    std::vector<quint64> node_offsets;
-    std::vector<quint64> way_offsets;
-    std::vector<quint64> area_offsets;
-};
 
 // ============================================================== //
 
@@ -144,7 +169,140 @@ std::string convNameToLookup(std::string const &name)
 {
     QString temp = QString::fromStdString(name).left(4).toLower();
     return temp.toStdString();
+
+    // TODO
+    // add tokens to ignore (rue, street, avenue, blvd north south etc)
 }
+
+void convLonLatToTile(double const lon,
+                      double const lat,
+                      int32_t const zoom,
+                      Tile &tile)
+{
+    // the number of columns/rows the
+    // world map is divided into
+    int32_t n = pow(2,zoom);
+    double div = n;
+
+    double div_lon = 360.0/div;
+    double div_lat = 180.0/div;
+
+    int64_t tile_x = (lon+180.0)/(div_lon);
+    int64_t tile_y = (90-lat)/(div_lat);
+
+
+    tile.id = tile_x + (tile_y*n);
+    tile.zoom = zoom;
+    tile.bbox.minLon = (tile_x*div_lon)-180.0;
+    tile.bbox.maxLon = tile.bbox.minLon+div_lon;
+    tile.bbox.maxLat = 90.0-(tile_y*div_lat);
+    tile.bbox.minLat = tile.bbox.maxLat-div_lat;
+}
+
+bool buildTileList(GeoBoundingBox const &bbox,
+                   int32_t const zoom,
+                   std::vector<Tile*> &list_tiles)
+{
+    // get tile side lengths in degs
+    int32_t n = pow(2,zoom);
+    double div_lon = 360.0/n;
+    double div_lat = 180.0/n;
+
+    // get corner tiles
+    Tile tile_sw,tile_ne;
+    convLonLatToTile(bbox.minLon,bbox.minLat,zoom,tile_sw);
+    convLonLatToTile(bbox.maxLon,bbox.maxLat,zoom,tile_ne);
+
+//    qDebug() << bbox.minLon << "," << bbox.minLat;
+//    qDebug() << tile_sw.bbox.minLon << "," << tile_sw.bbox.minLat;
+//    qDebug() << tile_ne.bbox.maxLon << "," << tile_ne.bbox.maxLat;
+
+    for(double i=tile_sw.bbox.minLon+(div_lon*0.5); i < tile_ne.bbox.maxLon; i+=div_lon)   {
+        for(double j=tile_sw.bbox.minLat+(div_lat*0.5); j < tile_ne.bbox.maxLat; j+=div_lat)   {
+
+//            qDebug() << i <<","<<j;
+
+            Tile * tile = new Tile;
+            convLonLatToTile(i,j,zoom,*tile);
+            list_tiles.push_back(tile);
+
+//            qDebug() << tile.id;
+        }
+    }
+
+    return true;
+}
+
+ColorRGBA calcRainbowGradient(double cVal)
+{
+    // clamp cVal between 0 and 1
+    if(cVal < 0)   {
+        cVal = 0.0;
+    }
+    if(cVal >= 1)   {
+        cVal = 0.99;
+    }
+
+    unsigned char R,G,B;
+    size_t maxBars = 6;     // number of color bars
+
+    double m = maxBars * cVal;
+    size_t n = size_t(m);
+
+    double fraction = m-n;
+    unsigned char t = int(fraction*255);
+
+    switch(n)   {
+        case 0:   {
+            R = 255;
+            G = t;
+            B = 0;
+            break;
+        }
+        case 1:   {
+            R = 255 - t;
+            G = 255;
+            B = 0;
+            break;
+        }
+        case 2:   {
+            R = 0;
+            G = 255;
+            B = t;
+            break;
+        }
+        case 3:   {
+            R = 0;
+            G = 255 - t;
+            B = 255;
+            break;
+        }
+        case 4:   {
+            R = t;
+            G = 0;
+            B = 255;
+            break;
+        }
+        case 5:   {
+            R = 255;
+            G = 0;
+            B = 255 - t;
+            break;
+        }
+    }
+
+    ColorRGBA c;
+    c.r=R/255.0;
+    c.g=G/255.0;
+    c.b=B/255.0;
+    c.a=1.0;
+
+    return c;
+}
+
+// ============================================================== //
+
+std::map<int64_t,int64_t> g_table_nameid_count;
 
 // ============================================================== //
 
@@ -152,7 +310,7 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
                 qint64 &name_id,
                 boost::unordered_map<std::string,qint64> &table_names,
                 std::string const &sql_table_name,
-                std::vector<quadtiles::QuadTile*> list_tiles,
+                std::vector<Tile*> list_tiles,
                 osmscout::Database &map,
                 osmscout::TypeSet const &typeSet,
                 bool allow_duplicate_nodes,
@@ -162,8 +320,8 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
     // create the sql statement
     std::string stmt_insert = "INSERT INTO "+sql_table_name;
     stmt_insert +=
-            "(quad_key,name_id,node_offsets,way_offsets,area_offsets) VALUES("
-            "@quad_key,@name_id,@node_offsets,@way_offsets,@area_offsets);";
+            "(tile_id,name_id,node_offsets,way_offsets,area_offsets) VALUES("
+            "@tile_id,@name_id,@node_offsets,@way_offsets,@area_offsets);";
 
     try   {
         stmt->BeginTransaction();
@@ -194,7 +352,7 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
         // for each tile
 
         // get objects from osmscout
-        quadtiles::GeoBoundingBox const &bbox = list_tiles[i]->bbox;
+        GeoBoundingBox const &bbox = list_tiles[i]->bbox;
         std::vector<osmscout::NodeRef> listNodes;
         std::vector<osmscout::WayRef>  listWays;
         std::vector<osmscout::AreaRef> listAreas;
@@ -238,7 +396,7 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
                 if(set_way_offsets.count(wayRef->GetFileOffset()) != 0)   {
                     continue;
                 }
-                set_way_offsets.insert(wayRef->GetFileOffset()).second;
+                set_way_offsets.insert(wayRef->GetFileOffset());
             }
             MapObject map_object;
             map_object.name     = wayRef->GetName();
@@ -314,6 +472,8 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
             }
         }
 
+        //qDebug() << list_tiles[i]->id << ":" << entry_admin_regions.size();
+
         // write information for this tile to the database
         boost::unordered_map<qint64,OffsetGroup>::iterator it;
         for(it  = entry_admin_regions.begin();
@@ -325,22 +485,42 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
 
             OffsetGroup &g = it->second;
 
+//            // ### debug start
+//            if(g_table_nameid_count.count(it->first) == 0)   {
+//                std::pair<int64_t,int64_t> debugdata;
+//                debugdata.first = it->first;
+//                debugdata.second =
+//                        g.node_offsets.size()+
+//                        g.way_offsets.size()+
+//                        g.area_offsets.size();
+//                g_table_nameid_count.insert(debugdata);
+//            }
+//            else   {
+//                std::map<int64_t,int64_t>::iterator d_it;
+//                d_it = g_table_nameid_count.find(it->first);
+//                d_it->second +=
+//                        g.node_offsets.size()+
+//                        g.way_offsets.size()+
+//                        g.area_offsets.size();
+//            }
+//            // ### debug end
+
             if(!(g.node_offsets.empty()))   {
-                size_t num_bytes = sizeof(quint64)*g.node_offsets.size();
-                data_node_offsets = new char[num_bytes];
-                memcpy(data_node_offsets,&(g.node_offsets[0]),num_bytes);
+                sz_node_offsets = sizeof(quint64)*g.node_offsets.size();
+                data_node_offsets = new char[sz_node_offsets];
+                memcpy(data_node_offsets,&(g.node_offsets[0]),sz_node_offsets);
                 list_blobs.push_back(data_node_offsets);
             }
             if(!(g.way_offsets.empty()))   {
-                size_t num_bytes = sizeof(quint64)*g.way_offsets.size();
-                data_way_offsets = new char[num_bytes];
-                memcpy(data_way_offsets,&(g.way_offsets[0]),num_bytes);
+                sz_way_offsets = sizeof(quint64)*g.way_offsets.size();
+                data_way_offsets = new char[sz_way_offsets];
+                memcpy(data_way_offsets,&(g.way_offsets[0]),sz_way_offsets);
                 list_blobs.push_back(data_way_offsets);
             }
             if(!(g.area_offsets.empty()))   {
-                size_t num_bytes = sizeof(quint64)*g.area_offsets.size();
-                data_area_offsets = new char[num_bytes];
-                memcpy(data_area_offsets,&(g.area_offsets[0]),num_bytes);
+                sz_area_offsets = sizeof(quint64)*g.area_offsets.size();
+                data_area_offsets = new char[sz_area_offsets];
+                memcpy(data_area_offsets,&(g.area_offsets[0]),sz_area_offsets);
                 list_blobs.push_back(data_area_offsets);
             }
 
@@ -352,7 +532,7 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
 
             // prepare sql
             try   {
-                stmt->BindInt64(1,list_tiles[i]->key);
+                stmt->BindInt64(1,list_tiles[i]->id);
                 stmt->BindInt64(2,it->first);
 
                 if(data_node_offsets)   {
@@ -389,7 +569,7 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
             catch(Kompex::SQLiteException &exception)   {
                 qDebug() << "ERROR: SQLite exception writing tile data:"
                          << QString::fromStdString(exception.GetString());
-                qDebug() << "ERROR: key:" << list_tiles[i]->key;
+                qDebug() << "ERROR: id:" << list_tiles[i]->id;
                 qDebug() << "ERROR: name_lookup_id:" << it->first;
                 qDebug() << "ERROR:" << sz_node_offsets << sz_way_offsets << sz_area_offsets;
                 return false;
@@ -638,30 +818,30 @@ int main(int argc, char *argv[])
                            "name_lookup TEXT NOT NULL UNIQUE);");
 
         stmt->SqlStatement("CREATE TABLE admin_regions("
-                           "quad_key INTEGER NOT NULL,"
+                           "tile_id INTEGER NOT NULL,"
                            "name_id INTEGER NOT NULL,"
                            "node_offsets BLOB,"
                            "way_offsets BLOB,"
                            "area_offsets BLOB,"
-                           "PRIMARY KEY(quad_key,name_id)"
+                           "PRIMARY KEY(tile_id,name_id)"
                            ");");
 
         stmt->SqlStatement("CREATE TABLE streets("
-                           "quad_key INTEGER NOT NULL,"
+                           "tile_id INTEGER NOT NULL,"
                            "name_id INTEGER NOT NULL,"
                            "node_offsets BLOB,"
                            "way_offsets BLOB,"
                            "area_offsets BLOB,"
-                           "PRIMARY KEY(quad_key,name_id)"
+                           "PRIMARY KEY(tile_id,name_id)"
                            ");");
 
         stmt->SqlStatement("CREATE TABLE pois("
-                           "quad_key INTEGER NOT NULL,"
+                           "tile_id INTEGER NOT NULL,"
                            "name_id INTEGER NOT NULL,"
                            "node_offsets BLOB,"
                            "way_offsets BLOB,"
                            "area_offsets BLOB,"
-                           "PRIMARY KEY(quad_key,name_id)"
+                           "PRIMARY KEY(tile_id,name_id)"
                            ");");
     }
     catch(Kompex::SQLiteException &exception)   {
@@ -671,38 +851,21 @@ int main(int argc, char *argv[])
     }
 
 
-    // get all level 10 quad tiles for the dataset
+    // build a tile list for the dataset
 
-    // world bbox
-    quadtiles::GeoBoundingBox bbox_world;
-    bbox_world.minLon = -180.0; bbox_world.maxLon = 180.0;
-    bbox_world.minLat = -90.0;  bbox_world.maxLat = 90.0;
+//    // world bbox
+//    GeoBoundingBox bbox_world;
+//    bbox_world.minLon = -180.0; bbox_world.maxLon = 180.0;
+//    bbox_world.minLat = -90.0;  bbox_world.maxLat = 90.0;
 
     // map data bbox
-    quadtiles::GeoBoundingBox bbox_map;
+    GeoBoundingBox bbox_map;
     map.GetBoundingBox(bbox_map.minLat,bbox_map.minLon,
                        bbox_map.maxLat,bbox_map.maxLon);
 
     // generate tile list
-    std::vector<quadtiles::QuadTile*> list_tiles;
-
-    {
-        std::vector<quadtiles::QuadTile*> list_tiles_temp;
-        quadtiles::QuadTile * root = new quadtiles::QuadTile(0,0,bbox_world);
-        quadtiles::buildQuadTilesForBounds(root,9,bbox_map,list_tiles_temp);
-
-        // save tiles to local list
-        for(size_t i=0; i < list_tiles_temp.size(); i++)   {
-            quadtiles::QuadTile * tile = new quadtiles::QuadTile(
-                        list_tiles_temp[i]->level,
-                        list_tiles_temp[i]->key,
-                        list_tiles_temp[i]->bbox);
-            list_tiles.push_back(tile);
-        }
-
-        // clean up
-        quadtiles::deleteQuadTree(root);
-    }
+    std::vector<Tile*> list_tiles;
+    buildTileList(bbox_map,10,list_tiles);
 
 #ifdef DEBUG_WITH_OSG
     return displayTiles(bbox_map,list_tiles);
@@ -721,24 +884,24 @@ int main(int argc, char *argv[])
     // build database tables
     bool opOk=false;
 
-    // admin_regions
-    qDebug() << "INFO: Building admin_regions table...";
-    setTypesForAdminRegions(typeConfig,typeSet);
-    opOk = buildTable(stmt,name_id,table_names,"admin_regions",
-                      list_tiles,map,typeSet,false,true,true);
-    if(opOk)   {
-        qDebug() << "INFO: Finished building admin_regions table";
-    }
-    else   {
-        qDebug() << "ERROR: Failed to build admin_regions table";
-        return -1;
-    }
+//    // admin_regions
+//    qDebug() << "INFO: Building admin_regions table...";
+//    setTypesForAdminRegions(typeConfig,typeSet);
+//    opOk = buildTable(stmt,name_id,table_names,"admin_regions",
+//                      list_tiles,map,typeSet,false,true,true);
+//    if(opOk)   {
+//        qDebug() << "INFO: Finished building admin_regions table";
+//    }
+//    else   {
+//        qDebug() << "ERROR: Failed to build admin_regions table";
+//        return -1;
+//    }
 
     // streets
     qDebug() << "INFO: Building streets table...";
     setTypesForStreets(typeConfig,typeSet);
     opOk = buildTable(stmt,name_id,table_names,"streets",
-                      list_tiles,map,typeSet,false,false,true);
+                      list_tiles,map,typeSet,false,false,false);
     if(opOk)   {
         qDebug() << "INFO: Finished building streets table";
     }
@@ -747,18 +910,18 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    // pois
-    qDebug() << "INFO: Building pois table...";
-    setTypesForPOIs(typeConfig,typeSet);
-    opOk = buildTable(stmt,name_id,table_names,"pois",
-                      list_tiles,map,typeSet,false,false,false);
-    if(opOk)   {
-        qDebug() << "INFO: Finished building pois table";
-    }
-    else   {
-        qDebug() << "ERROR: Failed to build pois table";
-        return -1;
-    }
+//    // pois
+//    qDebug() << "INFO: Building pois table...";
+//    setTypesForPOIs(typeConfig,typeSet);
+//    opOk = buildTable(stmt,name_id,table_names,"pois",
+//                      list_tiles,map,typeSet,false,false,false);
+//    if(opOk)   {
+//        qDebug() << "INFO: Finished building pois table";
+//    }
+//    else   {
+//        qDebug() << "ERROR: Failed to build pois table";
+//        return -1;
+//    }
 
     // build name_lookup table
     qDebug() << "INFO: Building name_lookup table...";
@@ -779,6 +942,25 @@ int main(int argc, char *argv[])
     delete stmt;
     delete database;
 
+//    // ### debug
+//    std::map<int64_t,std::string> table_count_names;
+//    boost::unordered_map<std::string,qint64>::iterator it;
+//    for(it = table_names.begin(); it != table_names.end(); ++it)   {
+//        std::map<int64_t,int64_t>::iterator d_it;
+//        d_it = g_table_nameid_count.find(it->second);
+
+//        std::pair<int64_t,std::string> data;
+//        data.first = d_it->second;
+//        data.second = it->first;
+//        table_count_names.insert(data);
+//    }
+
+//    std::map<int64_t,std::string>::iterator c_it;
+//    for(c_it  = table_count_names.begin();
+//        c_it != table_count_names.end(); ++c_it)   {
+//        qDebug() << QString::fromStdString(c_it->second) << ":" << c_it->first;
+//    }
+
 //    // debug
 //    boost::unordered_map<std::string,qint64>::iterator it;
 //    for(it  = table_names.begin(); it != table_names.end(); ++it)
@@ -792,8 +974,8 @@ int main(int argc, char *argv[])
 
 
 #ifdef DEBUG_WITH_OSG
-int displayTiles(quadtiles::GeoBoundingBox &bbox_map,
-                 std::vector<quadtiles::QuadTile*> &list_tiles)
+int displayTiles(GeoBoundingBox &bbox_map,
+                 std::vector<Tile*> &list_tiles)
 {
     // setup shaders
     std::string ver_str;
@@ -816,9 +998,15 @@ int displayTiles(quadtiles::GeoBoundingBox &bbox_map,
     ss = gdTiles->getOrCreateStateSet();
     ss->setAttributeAndModes(shader);
 
+    // get max id
+    int64_t tile_id_max=0;
+    for(size_t i=0; i < list_tiles.size(); i++)   {
+        tile_id_max = std::max(tile_id_max,list_tiles[i]->id);
+    }
+
     // tiles geometry
     for(size_t i=0; i < list_tiles.size(); i++)   {
-        quadtiles::GeoBoundingBox const &bbox = list_tiles[i]->bbox;
+        GeoBoundingBox const &bbox = list_tiles[i]->bbox;
         osg::ref_ptr<osg::Vec3dArray> listVx = new osg::Vec3dArray;
         listVx->push_back(osg::Vec3d(bbox.minLon,bbox.minLat,0.1));  // BL
         listVx->push_back(osg::Vec3d(bbox.maxLon,bbox.minLat,0.1));  // BR
@@ -826,10 +1014,13 @@ int displayTiles(quadtiles::GeoBoundingBox &bbox_map,
         listVx->push_back(osg::Vec3d(bbox.minLon,bbox.maxLat,0.1));  // TL
 
         osg::ref_ptr<osg::Vec4Array> listCx = new osg::Vec4Array;
-        listCx->push_back(osg::Vec4(0,1,0,1));
-        listCx->push_back(osg::Vec4(0,1,0,1));
-        listCx->push_back(osg::Vec4(0,1,0,1));
-        listCx->push_back(osg::Vec4(0,1,0,1));
+        double k = double(list_tiles[i]->id)/double(tile_id_max);
+        ColorRGBA c = calcRainbowGradient(k);
+
+        listCx->push_back(osg::Vec4(c.r,c.g,c.b,1.0));
+        listCx->push_back(osg::Vec4(c.r,c.g,c.b,1.0));
+        listCx->push_back(osg::Vec4(c.r,c.g,c.b,1.0));
+        listCx->push_back(osg::Vec4(c.r,c.g,c.b,1.0));
 
         osg::ref_ptr<osg::Geometry> gmTile = new osg::Geometry;
         gmTile->setVertexArray(listVx);
@@ -849,10 +1040,10 @@ int displayTiles(quadtiles::GeoBoundingBox &bbox_map,
         listVx->push_back(osg::Vec3d(bbox_map.minLon,bbox_map.maxLat,0));  // TL
 
         osg::ref_ptr<osg::Vec4Array> listCx = new osg::Vec4Array;
-        listCx->push_back(osg::Vec4(1,0,0,1));
-        listCx->push_back(osg::Vec4(1,0,0,1));
-        listCx->push_back(osg::Vec4(1,0,0,1));
-        listCx->push_back(osg::Vec4(1,0,0,1));
+        listCx->push_back(osg::Vec4(1,1,1,1));
+        listCx->push_back(osg::Vec4(1,1,1,1));
+        listCx->push_back(osg::Vec4(1,1,1,1));
+        listCx->push_back(osg::Vec4(1,1,1,1));
 
         osg::ref_ptr<osg::Geometry> gmMapBounds = new osg::Geometry;
         gmMapBounds->setVertexArray(listVx);

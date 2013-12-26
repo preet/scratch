@@ -3,6 +3,9 @@ PATH_OSMSCOUT = /home/preet/Dev/env/sys/libosmscout
 TEMPLATE = app
 QT += core
 CONFIG += console debug
+#CONFIG += link_pkgconfig
+#PKGCONFIG += openscenegraph openthreads
+#DEFINES += DEBUG_WITH_OSG
 SOURCES += searchdb_build.cpp
 
 #boost
