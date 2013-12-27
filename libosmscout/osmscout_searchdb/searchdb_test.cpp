@@ -34,9 +34,7 @@ struct GeoBoundingBox
 
 struct Tile
 {
-    int64_t id;
-    int32_t zoom;
-
+    int32_t id;
     GeoBoundingBox bbox;  
 };
 
@@ -49,22 +47,28 @@ struct OffsetGroup
 
 // ============================================================== //
 
-bool buildTileFromId(int64_t const tile_id,
-                     int64_t const zoom,
+// each id is 64 bits (8 bytes), and contains both a name_id and tile_id
+// the lower 'g_sz_tile_id' bytes of those 8 bytes will contain
+// the tile_id and the rest of the bytes will be the name_id
+int const g_sz_bits_tile_id = 24;  // 24 because 32 (4 bytes) would overflow
+int const g_zoom_level = 10;
+int const g_side_tiles_n = pow(2,g_zoom_level);
+
+// ============================================================== //
+
+bool buildTileFromId(int32_t const tile_id,
                      Tile &tile)
 {
     // the number of columns/rows the
     // world map is divided into
-    int32_t const n = pow(2,zoom);
-    double const div = n;
+    double const div = g_side_tiles_n;
     double const div_lon = 360.0/div;
     double const div_lat = 180.0/div;
 
-    int64_t tile_x = tile_id%n;
-    int64_t tile_y = tile_id/n;
+    int32_t tile_x = tile_id%g_side_tiles_n;
+    int32_t tile_y = tile_id/g_side_tiles_n;
 
     tile.id = tile_id;
-    tile.zoom = zoom;
     tile.bbox.minLon = (tile_x * div_lon)-180.0;
     tile.bbox.maxLon = tile.bbox.minLon + div_lon;
     tile.bbox.maxLat = 90.0 - (tile_y * div_lat);
@@ -166,13 +170,18 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        int64_t name_id = stmt->GetColumnInt64(0);
+        // determine the id range we need to query for
+        int64_t name_id = stmt->GetColumnInt(0);
         stmt->FreeQuery();
+
+        int32_t mask = pow(2,g_sz_bits_tile_id)-1;
+        int64_t min_id = name_id << g_sz_bits_tile_id;
+        int64_t max_id = min_id | mask;
 
         // use name_id to get search results from
         // admin_region, streets and pois
-        query = "SELECT tile_id,node_offsets,way_offsets,area_offsets FROM streets WHERE "
-                "streets.name_id = "+intToString(name_id)+";";
+        query = "SELECT id,node_offsets,way_offsets,area_offsets FROM streets WHERE "
+                "streets.id BETWEEN "+intToString(min_id)+" AND "+intToString(max_id)+";";
         qDebug() << QString::fromStdString(query);
         try   {
             stmt->Sql(query);
@@ -189,7 +198,8 @@ int main(int argc, char *argv[])
         std::map<int64_t,OffsetGroup> table_tile_streetoffsets;
 
         while(stmt->FetchRow())   {
-            int64_t tile_id = stmt->GetColumnInt64(0);
+            int64_t id = stmt->GetColumnInt64(0);
+            int32_t tile_id = (id & mask);
 
             // save to OffsetGroup
             OffsetGroup g;
@@ -221,7 +231,7 @@ int main(int argc, char *argv[])
 
 
             Tile tile;
-            buildTileFromId(tile_id,10,tile);
+            buildTileFromId(tile_id,tile);
 
             // straight line squared distance in degrees
             // from the search origin to the tile center
@@ -248,7 +258,8 @@ int main(int argc, char *argv[])
 //            num_results += g.way_offsets.size();
 //            num_results += g.area_offsets.size();
 
-            if(it->first == 270621)   {
+//            if(it->first == 270621)   {
+            if(1)   {
                 num_results = g.way_offsets.size();
                 std::vector<osmscout::WayRef> listWayRefs;
                 map.GetWaysByOffset(g.way_offsets,listWayRefs);
