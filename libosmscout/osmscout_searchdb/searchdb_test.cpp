@@ -54,6 +54,16 @@ int const g_sz_bits_tile_id = 24;  // 24 because 32 (4 bytes) would overflow
 int const g_zoom_level = 10;
 int const g_side_tiles_n = pow(2,g_zoom_level);
 
+
+// search parameters
+
+// g_search_max_tiles
+// * search this many of the closest tiles
+int const g_search_max_tiles=10;
+
+// g_search_max_unq_results
+// * max
+
 // ============================================================== //
 
 bool buildTileFromId(int32_t const tile_id,
@@ -180,8 +190,8 @@ int main(int argc, char *argv[])
 
         // use name_id to get search results from
         // admin_region, streets and pois
-        query = "SELECT id,node_offsets,way_offsets,area_offsets FROM streets WHERE "
-                "streets.id BETWEEN "+intToString(min_id)+" AND "+intToString(max_id)+";";
+        query = "SELECT id,node_offsets,way_offsets,area_offsets FROM pois WHERE "
+                "pois.id BETWEEN "+intToString(min_id)+" AND "+intToString(max_id)+";";
         qDebug() << QString::fromStdString(query);
         try   {
             stmt->Sql(query);
@@ -254,18 +264,24 @@ int main(int argc, char *argv[])
             it != table_tile_streetoffsets.end(); ++it)
         {
             OffsetGroup &g = it->second;
-//            num_results += g.node_offsets.size();
-//            num_results += g.way_offsets.size();
-//            num_results += g.area_offsets.size();
+            num_results += g.node_offsets.size();
+            num_results += g.way_offsets.size();
+            num_results += g.area_offsets.size();
 
 //            if(it->first == 270621)   {
             if(1)   {
-                num_results = g.way_offsets.size();
                 std::vector<osmscout::WayRef> listWayRefs;
                 map.GetWaysByOffset(g.way_offsets,listWayRefs);
                 for(size_t n=0; n < listWayRefs.size(); n++)   {
                     osmscout::WayRef const &way = listWayRefs[n];
                     qDebug() << QString::fromStdString(way->GetName());
+                }
+
+                std::vector<osmscout::NodeRef> listNodeRefs;
+                map.GetNodesByOffset(g.node_offsets,listNodeRefs);
+                for(size_t n=0; n < listNodeRefs.size(); n++)   {
+                    osmscout::NodeRef const &nd = listNodeRefs[n];
+                    qDebug() << QString::fromStdString(nd->GetName());
                 }
             }
         }
