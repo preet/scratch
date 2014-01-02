@@ -190,8 +190,8 @@ int main(int argc, char *argv[])
 
         // use name_id to get search results from
         // admin_region, streets and pois
-        query = "SELECT id,node_offsets,way_offsets,area_offsets FROM pois WHERE "
-                "pois.id BETWEEN "+intToString(min_id)+" AND "+intToString(max_id)+";";
+        query = "SELECT id,node_offsets,way_offsets,area_offsets FROM admin_regions WHERE "
+                "admin_regions.id BETWEEN "+intToString(min_id)+" AND "+intToString(max_id)+";";
         qDebug() << QString::fromStdString(query);
         try   {
             stmt->Sql(query);

@@ -2,7 +2,7 @@
     "IMPORTCONFIG":
     {
         "mapfile":"/home/preet/Documents/maps/openstreetmap/ontario-latest.osm.pbf",
-        "typefile":"/home/preet/map_render.ost",
+        "typefile":"/home/preet/Dev/projects/osmsrender/res/map_render.ost",
         "destinationDirectory":"./ontario",
         "startStep":1,
         "endStep":26,

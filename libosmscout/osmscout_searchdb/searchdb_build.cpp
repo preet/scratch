@@ -36,6 +36,8 @@ struct OffsetGroup
     std::vector<osmscout::FileOffset> node_offsets;
     std::vector<osmscout::FileOffset> way_offsets;
     std::vector<osmscout::FileOffset> area_offsets;
+
+    QString name; // debug
 };
 
 struct GeoBoundingBox
@@ -64,7 +66,6 @@ struct ColorRGBA
 
 // openscenegraph
 #ifdef DEBUG_WITH_OSG
-#include <osg/PolygonMode>
 #include <osg/Drawable>
 #include <osg/Geometry>
 #include <osgViewer/Viewer>
@@ -362,6 +363,19 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
                        listNodes,
                        listWays,
                        listAreas);
+
+        //
+        if(list_tiles[i]->id == 277779)   {
+            qDebug() << "BB: " << bbox.minLon << "," << bbox.maxLon;
+            qDebug() << "BB: " << bbox.minLat << "," << bbox.maxLat;
+            for(size_t j=0; j < listNodes.size(); j++)   {
+                osmscout::NodeRef &nodeRef = listNodes[j];
+                QString temp = QString::fromStdString(nodeRef->GetName());
+                qDebug() << list_tiles[i]->id << ": " << temp;
+//                if(temp.startsWith("wind",Qt::CaseInsensitive))   {
+//                }
+            }
+        }
 
         // merge all of the object refs into one list
         // of MapObjects so its easier to manage
@@ -810,6 +824,74 @@ int main(int argc, char *argv[])
         qDebug() << "ERROR: Failed to open osmscout map";
         return -1;
     }
+    osmscout::TypeConfig * typeConfig = map.GetTypeConfig();
+    osmscout::TypeSet typeSet;
+    setTypesForAdminRegions(typeConfig,typeSet);
+
+    GeoBoundingBox tempbbox;
+    tempbbox.minLon = -83.3203; tempbbox.maxLon = -82.9688;
+    tempbbox.minLat = 42.1875; tempbbox.maxLat = 42.3633;
+
+//    tempbbox.minLon -= 1; tempbbox.maxLon += 1;
+//    tempbbox.minLat -= 1; tempbbox.maxLat += 1;
+
+    map.GetBoundingBox(tempbbox.minLat,tempbbox.minLon,
+                       tempbbox.maxLat,tempbbox.maxLon);
+
+    osmscout::AreaSearchParameter area_search_param;
+    area_search_param.SetUseLowZoomOptimization(false);
+
+    osmscout::Magnification mag;
+    mag.SetMagnification(1024);
+
+    std::vector<osmscout::TypeSet> listWayTypes;
+    listWayTypes.resize(1);
+    osmscout::TypeSet areaTypes;
+    osmscout::TypeSet nodeTypes;
+    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_city"));
+//    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_town"));
+//    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_village"));
+//    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_hamlet"));
+//    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_suburb"));
+
+    std::vector<osmscout::NodeRef> listNodes;
+    std::vector<osmscout::WayRef>  listWays;
+    std::vector<osmscout::AreaRef> listAreas;
+    map.GetObjects(nodeTypes,listWayTypes,areaTypes,
+                   tempbbox.minLon,tempbbox.minLat,
+                   tempbbox.maxLon,tempbbox.maxLat,
+                   mag,
+                   area_search_param,
+                   listNodes,
+                   listWays,
+                   listAreas);
+
+    qDebug() << "BB: " << tempbbox.minLon << "," << tempbbox.maxLon;
+    qDebug() << "BB: " << tempbbox.minLat << "," << tempbbox.maxLat;
+    qDebug() << "NSZ: " << listNodes.size();
+    qDebug() << "WSZ: " << listWays.size();
+    qDebug() << "ASZ: " << listAreas.size();
+    for(size_t j=0; j < listNodes.size(); j++)   {
+        osmscout::NodeRef &nodeRef = listNodes[j];
+        QString temp = QString::fromStdString(nodeRef->GetName());
+        if(!temp.isEmpty() && temp.startsWith("w",Qt::CaseInsensitive))   {
+            qDebug() << "N: " << temp;
+        }
+    }
+    qDebug() << "";
+    osmscout::NodeRef nr;
+    map.GetNodeByOffset(96923,nr);
+    qDebug() << "*: " << QString::fromStdString(nr->GetName());
+    qDebug() << "*: " << QString::fromStdString(typeConfig->GetTypeInfo(nr->GetType()).GetName());
+    qDebug() << "*: " << nr->GetLon();
+    qDebug() << "*: " << nr->GetLat();
+    for(size_t j=0; j < listAreas.size(); j++)   {
+        osmscout::AreaRef &areaRef = listAreas[j];
+        QString temp = QString::fromStdString(areaRef->rings.front().GetName());
+        qDebug() << "A: " << temp;
+    }
+
+    return 0;
 
     // create search database
     Kompex::SQLiteDatabase * database;
@@ -878,11 +960,6 @@ int main(int argc, char *argv[])
     // [name_id] [name_key]
     int32_t name_id=1;
     boost::unordered_map<std::string,int32_t> table_names;
-
-    // use the tile bounds to query osmscout
-
-    osmscout::TypeConfig * typeConfig = map.GetTypeConfig();
-    osmscout::TypeSet typeSet;
 
     // build database tables
     bool opOk=false;
@@ -985,7 +1062,6 @@ int main(int argc, char *argv[])
 // ============================================================== //
 // ============================================================== //
 
-
 #ifdef DEBUG_WITH_OSG
 int displayTiles(GeoBoundingBox &bbox_map,
                  std::vector<Tile*> &list_tiles)
@@ -1012,7 +1088,7 @@ int displayTiles(GeoBoundingBox &bbox_map,
     ss->setAttributeAndModes(shader);
 
     // get max id
-    int64_t tile_id_max=0;
+    int32_t tile_id_max=0;
     for(size_t i=0; i < list_tiles.size(); i++)   {
         tile_id_max = std::max(tile_id_max,list_tiles[i]->id);
     }
@@ -1066,6 +1142,33 @@ int displayTiles(GeoBoundingBox &bbox_map,
 
         gdTiles->addDrawable(gmMapBounds);
     }
+
+    // debug
+    {
+        osg::ref_ptr<osg::Vec3dArray> listVx = new osg::Vec3dArray;
+        listVx->push_back(osg::Vec3d(-83.0285111-0.0879,42.3032758-0.08789,0));  // BL
+        listVx->push_back(osg::Vec3d(-83.0285111+0.0879,42.3032758-0.08789,0));  // BR
+        listVx->push_back(osg::Vec3d(-83.0285111+0.0879,42.3032758+0.08789,0));  // TR
+        listVx->push_back(osg::Vec3d(-83.0285111-0.0879,42.3032758+0.08789,0));  // TL
+
+        osg::ref_ptr<osg::Vec4Array> listCx = new osg::Vec4Array;
+        listCx->push_back(osg::Vec4(1,1,1,1));
+        listCx->push_back(osg::Vec4(1,1,1,1));
+        listCx->push_back(osg::Vec4(1,1,1,1));
+        listCx->push_back(osg::Vec4(1,1,1,1));
+
+        osg::ref_ptr<osg::Geometry> gmDebug = new osg::Geometry;
+        gmDebug->setVertexArray(listVx);
+        gmDebug->setColorArray(listCx);
+        gmDebug->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+        gmDebug->addPrimitiveSet(new osg::DrawArrays(GL_LINE_LOOP,0,4));
+
+        gdTiles->addDrawable(gmDebug);
+    }
+
+    Tile temp;
+    convLonLatToTile(-83.0285111,42.3032758,temp);
+    qDebug() << "ID: " << temp.id;
 
     grRoot->addChild(gdTiles);
 
