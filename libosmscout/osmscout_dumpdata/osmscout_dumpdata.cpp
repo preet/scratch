@@ -172,6 +172,12 @@
 
 
 
+
+
+
+
+
+
 /*
   DumpData - a demo program for libosmscout
   Copyright (C) 2012  Tim Teulings

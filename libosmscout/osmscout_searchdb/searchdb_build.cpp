@@ -364,19 +364,6 @@ bool buildTable(Kompex::SQLiteStatement * stmt,
                        listWays,
                        listAreas);
 
-        //
-        if(list_tiles[i]->id == 277779)   {
-            qDebug() << "BB: " << bbox.minLon << "," << bbox.maxLon;
-            qDebug() << "BB: " << bbox.minLat << "," << bbox.maxLat;
-            for(size_t j=0; j < listNodes.size(); j++)   {
-                osmscout::NodeRef &nodeRef = listNodes[j];
-                QString temp = QString::fromStdString(nodeRef->GetName());
-                qDebug() << list_tiles[i]->id << ": " << temp;
-//                if(temp.startsWith("wind",Qt::CaseInsensitive))   {
-//                }
-            }
-        }
-
         // merge all of the object refs into one list
         // of MapObjects so its easier to manage
         std::vector<MapObject> list_map_objects;
@@ -679,6 +666,8 @@ void setTypesForAdminRegions(osmscout::TypeConfig const * typeConfig,
 {
     typeSet.Clear();
 
+    // TODO add place_county
+
     typeSet.SetType(typeConfig->GetAreaTypeId("place_city"));
     typeSet.SetType(typeConfig->GetAreaTypeId("place_town"));
     typeSet.SetType(typeConfig->GetAreaTypeId("place_village"));
@@ -828,74 +817,26 @@ int main(int argc, char *argv[])
     osmscout::TypeSet typeSet;
     setTypesForAdminRegions(typeConfig,typeSet);
 
-    GeoBoundingBox tempbbox;
-    tempbbox.minLon = -83.3203; tempbbox.maxLon = -82.9688;
-    tempbbox.minLat = 42.1875; tempbbox.maxLat = 42.3633;
+//    GeoBoundingBox tempbbox;
+//    tempbbox.minLon = -83.3203; tempbbox.maxLon = -82.9688;
+//    tempbbox.minLat = 42.1875; tempbbox.maxLat = 42.3633;
 
-//    tempbbox.minLon -= 1; tempbbox.maxLon += 1;
-//    tempbbox.minLat -= 1; tempbbox.maxLat += 1;
-
-    map.GetBoundingBox(tempbbox.minLat,tempbbox.minLon,
-                       tempbbox.maxLat,tempbbox.maxLon);
-
-    osmscout::AreaSearchParameter area_search_param;
-    area_search_param.SetUseLowZoomOptimization(false);
-
-    osmscout::Magnification mag;
-    mag.SetMagnification(1024);
-
-    std::vector<osmscout::TypeSet> listWayTypes;
-    listWayTypes.resize(1);
-    osmscout::TypeSet areaTypes;
-    osmscout::TypeSet nodeTypes;
-    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_city"));
-//    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_town"));
-//    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_village"));
-//    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_hamlet"));
-//    nodeTypes.SetType(typeConfig->GetNodeTypeId("place_suburb"));
-
-    std::vector<osmscout::NodeRef> listNodes;
-    std::vector<osmscout::WayRef>  listWays;
-    std::vector<osmscout::AreaRef> listAreas;
-    map.GetObjects(nodeTypes,listWayTypes,areaTypes,
-                   tempbbox.minLon,tempbbox.minLat,
-                   tempbbox.maxLon,tempbbox.maxLat,
-                   mag,
-                   area_search_param,
-                   listNodes,
-                   listWays,
-                   listAreas);
-
-    qDebug() << "BB: " << tempbbox.minLon << "," << tempbbox.maxLon;
-    qDebug() << "BB: " << tempbbox.minLat << "," << tempbbox.maxLat;
-    qDebug() << "NSZ: " << listNodes.size();
-    qDebug() << "WSZ: " << listWays.size();
-    qDebug() << "ASZ: " << listAreas.size();
-    for(size_t j=0; j < listNodes.size(); j++)   {
-        osmscout::NodeRef &nodeRef = listNodes[j];
-        QString temp = QString::fromStdString(nodeRef->GetName());
-        if(!temp.isEmpty() && temp.startsWith("w",Qt::CaseInsensitive))   {
-            qDebug() << "N: " << temp;
-        }
-    }
-    qDebug() << "";
-    osmscout::NodeRef nr;
-    map.GetNodeByOffset(96923,nr);
-    qDebug() << "*: " << QString::fromStdString(nr->GetName());
-    qDebug() << "*: " << QString::fromStdString(typeConfig->GetTypeInfo(nr->GetType()).GetName());
-    qDebug() << "*: " << nr->GetLon();
-    qDebug() << "*: " << nr->GetLat();
-    for(size_t j=0; j < listAreas.size(); j++)   {
-        osmscout::AreaRef &areaRef = listAreas[j];
-        QString temp = QString::fromStdString(areaRef->rings.front().GetName());
-        qDebug() << "A: " << temp;
-    }
-
-    return 0;
+////    tempbbox.minLon -= 1; tempbbox.maxLon += 1;
+////    tempbbox.minLat -= 1; tempbbox.maxLat += 1;
 
     // create search database
     Kompex::SQLiteDatabase * database;
     Kompex::SQLiteStatement * stmt;
+
+    QString db_file_path = app.applicationDirPath()+"/searchdb.sqlite";
+    QFile db_file(db_file_path);
+    if(db_file.exists())   {
+        if(!db_file.remove())   {
+            qDebug() << "ERROR: searchdb.sqlite exists and "
+                        "could not be deleted";
+            return -1;
+        }
+    }
 
     try   {
         database = new Kompex::SQLiteDatabase("searchdb.sqlite",
