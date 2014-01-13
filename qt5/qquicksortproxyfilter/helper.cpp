@@ -56,6 +56,11 @@ void Helper::searchFilterChanged(QString const &str)
 //    qml_listSearchResultsFilter->sort(0);
 }
 
+QObject * Helper::getSourceModel()
+{
+    return qml_listSearchResults;
+}
+
 QString Helper::genRandomName(quint32 seed)
 {
     srand(seed);

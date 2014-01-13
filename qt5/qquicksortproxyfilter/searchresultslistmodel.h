@@ -109,7 +109,7 @@ Q_SIGNALS:
     void countChanged();
 
 private:
-    Q_DISABLE_COPY(SearchResultsListModel)
+//    Q_DISABLE_COPY(SearchResultsListModel)
 
     QHash<int,QByteArray> m_roles;
 

@@ -19,7 +19,7 @@ Rectangle   {
     }
 
     Component.onCompleted: {
-        console.log("QAbstractListModel property:"+SearchResultsModel.count);
+        console.log("QAbstractListModel property:"+Helper.getSourceModel().count);
         console.log("Some other QObject property:"+Helper.message);
     }
 

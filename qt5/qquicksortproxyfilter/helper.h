@@ -38,6 +38,7 @@ public:
     explicit Helper(QQuickView * qqview, QObject * parent=0);
 
     Q_INVOKABLE void searchFilterChanged(QString const &str);
+    Q_INVOKABLE QObject * getSourceModel();
     
     inline QString getMessage() const   {
         QString m = "Hello World!";
