@@ -1,7 +1,17 @@
-TEMPLATE = lib
+TEMPLATE = app
 CONFIG -= qt
-CONFIG += static
-TARGET = osmscoutnameidx
+#CONFIG += app
+TARGET = import
+
+# ======================================================= #
+# import testing
+# ======================================================= #
+
+SOURCES += import/osmscout_json_import.cpp
+
+LIBS += -pthread
+LIBS += -lprotobuf -lz
+LIBS += -ljansson
 
 # ======================================================= #
 # core lib
@@ -155,6 +165,9 @@ $${PATH_LIBOSMSCOUT_CORE}/src/osmscout/RouteNode.cpp
 # import lib
 # ======================================================= #
 
+DEFINES += HAVE_LIB_PROTOBUF
+DEFINES += HAVE_LIB_ZLIB
+
 # auto generated config files
 INCLUDEPATH += libosmscout-import/include
 HEADERS += \
@@ -164,11 +177,11 @@ libosmscout-import/include/osmscout/ImportFeatures.h
 # protocol buffer
 INCLUDEPATH += libosmscout-import/include/osmscout/import/pbf
 HEADERS += \
-libosmscout-import/include/osmscout/import/pbf/fileformat.pb.h
+libosmscout-import/include/osmscout/import/pbf/fileformat.pb.h \
 libosmscout-import/include/osmscout/import/pbf/osmformat.pb.h
 
 SOURCES += \
-libosmscout-import/src/osmscout/import/pbf/fileformat.pb.cc
+libosmscout-import/src/osmscout/import/pbf/fileformat.pb.cc \
 libosmscout-import/src/osmscout/import/pbf/osmformat.pb.cc
 
 # core lib

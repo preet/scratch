@@ -1,0 +1,218 @@
+OST
+
+/*
+  Meaning of the different OPTIONS:
+    ROUTE:
+      This way or area is routable for the given vehicles
+    OPTIMIZE_LOW_ZOOM:
+      Optimize this area or way for idplaying in low zoom by
+      reducing visible complexity
+    PIN_WAY:
+      This is a way, even if the path is closed
+    IGNORESEALAND:
+      Ignore this type for calculation of land masses
+    INDEX_REGION:
+      The given area or node describes an administrate region
+      that should be part of the region tree for the city/street
+      index
+    INDEX_POI:
+      The given area, way or node is as POI and should be indexed
+      by its name in relation to the enclosing region.
+    INDEX_LOC:
+      The given way or area should be indexed as location.  
+    IGNORE:
+      Ignore objects of this type  
+*/
+
+GRADES
+  SURFACE GRADE 1 {
+    "paved"
+    "asphalt"
+    "cobblestone"
+    "cobblestone:flattened"
+    "concrete"
+    "concrete:lanes"
+    "concrete:plates"
+    "paving_stones"
+    "paving_stones:20"
+    "paving_stones:30"
+    "sett"
+    "tarred"
+    "tartan"
+  }
+
+  SURFACE GRADE 2 {
+    "ash"
+    "clay"
+    "compacted"
+    "compacted_gravel"
+    "fine_gravel"
+    "gravel"
+    "gravel;grass"
+    "grass_paver"
+    "metal"
+    "pebblestone"
+    "stone"
+    "wood"
+  }
+
+  SURFACE GRADE 3 {
+    "unpaved"
+    "dirt"
+    "earth"
+    "grass"
+    "grass;earth"
+    "ground"
+    "mud"
+    "sand"
+    "soil"
+  }
+
+  SURFACE GRADE 4 {
+    "artificial_turf"
+    "bark_mulch"
+  }
+
+TYPES
+  // ROADS (generally accessible by motor vehicles)
+  TYPE highway_motorway = WAY ("highway"=="motorway") OPTIONS ROUTE[CAR]
+  TYPE highway_motorway_link = WAY ("highway"=="motorway_link") OPTIONS ROUTE[CAR]
+  TYPE highway_trunk = WAY ("highway"=="trunk") OPTIONS ROUTE[CAR]
+  TYPE highway_trunk_link = WAY ("highway"=="trunk_link") OPTIONS ROUTE[CAR]
+  TYPE highway_primary = WAY ("highway"=="primary") OPTIONS ROUTE[CAR]
+  TYPE highway_primary_link = WAY ("highway"=="primary_link") OPTIONS ROUTE[CAR]
+  TYPE highway_secondary = WAY ("highway"=="secondary") OPTIONS ROUTE[FOOT CAR]
+  TYPE highway_secondary_link = WAY ("highway"=="secondary_link") OPTIONS ROUTE[FOOT CAR]
+  TYPE highway_tertiary = WAY ("highway"=="tertiary") OPTIONS ROUTE[FOOT CAR]
+  TYPE highway_tertiary_link = WAY ("highway"=="tertiary_link") OPTIONS ROUTE[FOOT CAR]
+  TYPE highway_residential = WAY ("highway"=="residential") OPTIONS ROUTE[FOOT CAR]
+  TYPE highway_living_street = WAY ("highway"=="living_street") OPTIONS ROUTE[FOOT CAR]
+  TYPE highway_service = WAY AREA ("highway"=="service") OPTIONS ROUTE[FOOT CAR] PIN_WAY
+  TYPE highway_pedestrian = WAY AREA ("highway"=="pedestrian") OPTIONS ROUTE[FOOT] PIN_WAY
+  TYPE highway_unclassified = WAY ("highway"=="unclassified") OPTIONS ROUTE[FOOT CAR]    // note: street type that's smaller than residential but not really "unclassified"
+
+  // http://wiki.openstreetmap.org/wiki/OSM_tags_for_routing/Access-Restrictions
+  // AMBIGUOUS ROADS
+  // highway_road represents an unclassified road type
+  TYPE highway_road = WAY ("highway"=="road") OPTIONS ROUTE[FOOT CAR]
+
+  // WARN: highway_track is generally NOT designated for motor vehicle use and is
+  //       often unpaved or otherwise unsuitable for common vehicles. Before it is
+  //       used in calculating a route, access tags *must* be explicitly checked
+  TYPE highway_track_paved = WAY (("highway"=="track" AND "surface"=="paved") OR ("highway"=="track" AND "tracktype"=="grade1")) OPTIONS ROUTE[FOOT]
+  TYPE highway_track_unpaved = WAY (("highway"=="track" AND "surface"=="unpaved") OR ("highway"=="track" AND !("tracktype"=="grade1"))) OPTIONS ROUTE[FOOT]
+
+  // PUBLIC TRANSPORT
+  //TYPE highway_bus_guideway = WAY ("highway"=="bus_guideway") OPTIONS ROUTE[] // WARN
+  //TYPE highway_byway = WAY ("highway"=="byway") OPTIONS ROUTE[] // WARN TAKE THIS OUT ITS DEPRECATED
+
+  // PATHS (generally inaccessible by motor vehicles)
+  TYPE highway_cycleway = WAY ("highway"=="cycleway") //OPTIONS ROUTE[]
+  TYPE highway_footway = WAY AREA ("highway"=="footway" OR "highway"=="steps") OPTIONS ROUTE[FOOT] PIN_WAY
+  TYPE highway_path = WAY ("highway"=="path") OPTIONS ROUTE[FOOT] IGNORESEALAND // should this go after the other ways?
+  // TYPE highway_bridleway = WAY ("highway"=="bridleway") OPTIONS ROUTE[] // roads primarily for horses
+  // TYPE highway_steps = WAY ("highway"=="steps") OPTIONS ROUTE[] // include as part of footway?
+
+  // HIGHWAY MISC (not roads or paths)
+  TYPE highway_mini_roundabout = NODE ("highway"=="mini_roundabout")
+  TYPE highway_bus_stop = NODE ("highway"=="bus_stop")
+  TYPE highway_turning_cycle = NODE ("highway"=="turning_cycle")
+  TYPE highway_construction = WAY ("highway"=="construction")
+  TYPE highway_roundabout = WAY AREA ("highway"=="roundabout") OPTIONS ROUTE[FOOT CAR] PIN_WAY
+  TYPE highway_motorway_junction = NODE ("highway"=="motorway_junction") OPTIONS ROUTE[CAR] // highway exit
+  TYPE highway_services = NODE AREA ("highway"=="services") // this is basically a rest stop / gas station
+  // need to split "highway_motorway_junction" into
+  // "highway_motorway_junction_named" and "highway_motorway_junction_unnamed" to apply
+  // different styles!
+
+  // WATERWAYS
+  // TYPE waterway_stream = WAY ("waterway"=="stream") OPTIONS IGNORESEALAND
+  // TYPE waterway_river = WAY ("waterway"=="river") OPTIONS IGNORESEALAND
+  // TYPE waterway_riverbank = AREA ("waterway"=="riverbank")
+
+  // RAILWAYS
+  // We simplify this extensively and merge most types together.
+  // "railway_rail" is kept separate from "railway_active" to
+  // optimize it at low zooms (these railways can be cross-country)
+  // TODO: Add INDEX_POI to public transport stops, etc as appropriate
+  TYPE railway_rail = WAY ("railway"=="rail") 
+  TYPE railway_active = WAY ("railway"=="tram" OR "railway"=="monorail" OR "railway"=="light_rail" OR "railway"=="preserved" OR "railway"=="narrow_gauge")
+  TYPE railway_stop = NODE ("railway"=="station" OR "railway"=="halt" OR "railway"=="tram_stop")
+  TYPE railway_level_crossing = NODE ("railway"=="level_crossing") // a point where rails and roads cross
+  TYPE railway_subway = WAY("railway"=="subway")
+  TYPE railway_subway_entrance = NODE ("railway"=="subway_entrance")
+
+  // AIRPORTS
+  TYPE aeroway_aerodrome = NODE AREA ("aeroway"=="aerodrome")
+  TYPE aeroway_terminal = NODE AREA ("aeroway"=="terminal") // airport passenger building
+
+  // NATURAL
+  // TYPE natural_water = NODE AREA ("natural"=="water") OPTIONS IGNORESEALAND
+
+  // LEISURE
+  TYPE leisure_park = NODE ("leisure"=="park")
+  TYPE leisure_nature_reserve = NODE AREA ("leisure"=="nature_reserve") // national park
+  TYPE leisure_beach = NODE ("leisure"=="beach_resort")
+  TYPE leisure_stadium = NODE AREA ("leisure"=="stadium") // (should be classified as amenity?)
+
+  // AMENITIES
+  // (food)
+  TYPE amenity_cafe = NODE AREA ("amenity"=="cafe") OPTIONS FIND_CITY FIND_STREET
+  TYPE amenity_fast_food = NODE AREA ("amenity"=="fast_food") OPTIONS FIND_CITY FIND_STREET
+  TYPE amenity_restaurant = NODE AREA ("amenity"=="restaurant") OPTIONS FIND_CITY FIND_STREET
+
+  // (transportation)
+  TYPE amenity_fuel = NODE AREA ("amenity"=="fuel") OPTIONS FIND_CITY FIND_STREET
+  TYPE amenity_parking = NODE AREA ("amenity"=="parking") OPTIONS FIND_CITY FIND_STREET
+
+  // (finance)
+  TYPE amenity_atm = NODE AREA ("amenity"=="atm") OPTIONS FIND_CITY FIND_STREET
+
+  // (healthcare) 
+  TYPE amenity_hospital = NODE AREA ("amenity"=="hospital") OPTIONS FIND_CITY FIND_STREET
+  // TYPE "amenity_pharmacy" = NODE AREA ("amenity"=="pharmacy") OPTIONS FIND_CITY FIND_STREET
+
+  // (nightlife)
+  TYPE amenity_bar = NODE AREA ("amenity"=="bar" OR "amenity"=="pub") OPTIONS FIND_CITY FIND_STREET
+  TYPE amenity_nightclub = NODE AREA ("amenity"=="nightclub") OPTIONS FIND_CITY FIND_STREET
+
+  // (everything else)
+  TYPE amenity = NODE AREA (EXISTS "amenity")
+
+  // (shopping)
+  TYPE shop = NODE AREA (EXISTS "shop") // TODO OPTIONS INDEX_POI 
+
+  // (places to stay)
+  TYPE tourism_guest_house = NODE AREA ("tourism"=="guest_house")
+  TYPE tourism_hostel = NODE AREA ("tourism"=="hostel")
+  TYPE tourism_hotel = NODE AREA ("tourism"=="hotel")
+  TYPE tourism_motel = NODE AREA ("tourism"=="motel")
+
+  // Do not delete the following type, they are required by the GenCityStreet import step
+  TYPE boundary_administrative = WAY AREA ("boundary"=="administrative") OR
+                                 RELATION ("type"=="boundary" AND "boundary"=="administrative") OPTIONS MULTIPOLYGON IGNORESEALAND
+
+  TYPE place_continent = NODE AREA ("place"=="continent")
+  TYPE place_country = NODE ("place"=="country")
+  TYPE place_state = NODE AREA ("place"=="state")
+  TYPE place_region = NODE AREA ("place"=="region")
+  TYPE place_county = NODE AREA ("place"=="county")
+
+  // Do not delete the following types, they are required by the GenCityStreet import step
+  TYPE place_city = NODE AREA ("place"=="city")
+  TYPE place_town = NODE AREA ("place"=="town")
+  TYPE place_village = NODE AREA ("place"=="village")
+  TYPE place_hamlet = NODE AREA ("place"=="hamlet")
+  TYPE place_suburb = NODE AREA ("place"=="suburb" OR "place"=="neighbourhood" OR "place"=="neighborhood")
+
+  TYPE place_locality = NODE AREA ("place"=="locality") // a locality is an unpopulated place
+  TYPE place_island = NODE AREA ("place"=="island")
+
+  // generic buildings
+  TYPE building = AREA (EXISTS "building" AND !("building" IN ["no","false","0"]))
+
+TAGS
+  TAG "building"
+  TAG "height"
+
+END
