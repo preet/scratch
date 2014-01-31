@@ -17,13 +17,22 @@ LIBS += -ljansson
 # core lib
 # ======================================================= #
 
-# auto generated config files
+# auto generated config and custom files
 INCLUDEPATH += libosmscout/include
+INCLUDEPATH += libosmscout/src
+
 HEADERS += \
 libosmscout/include/osmscout/private/Config.h \
-libosmscout/include/osmscout/CoreFeatures.h
+libosmscout/include/osmscout/CoreFeatures.h \
+libosmscout/include/osmscout/TypeConfig.h \
+libosmscout/include/osmscout/util/ParserUtil.h
 
-PATH_LIBOSMSCOUT_CORE = /home/preet/Dev/projects/libosmscout/libosmscout
+SOURCES += \
+libosmscout/src/osmscout/util/ParserUtil.cpp
+
+
+# default project files
+PATH_LIBOSMSCOUT_CORE = /home/preet/Dev/projects/libosmscout-exp/libosmscout
 INCLUDEPATH += $${PATH_LIBOSMSCOUT_CORE}
 INCLUDEPATH += $${PATH_LIBOSMSCOUT_CORE}/include
 INCLUDEPATH += $${PATH_LIBOSMSCOUT_CORE}/src
@@ -48,7 +57,6 @@ $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/util/FileWriter.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/util/HashSet.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/util/String.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/util/FileScanner.h \
-$${PATH_LIBOSMSCOUT_CORE}/include/osmscout/util/ParserUtil.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/util/Cache.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/util/NodeUseMap.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/util/File.h \
@@ -80,7 +88,6 @@ $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/ost/Parser.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/ost/Scanner.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/Coord.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/Router.h \
-$${PATH_LIBOSMSCOUT_CORE}/include/osmscout/TypeConfig.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/Pixel.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/RouteData.h \
 $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/NumericIndex.h \
@@ -107,7 +114,6 @@ $${PATH_LIBOSMSCOUT_CORE}/src/osmscout/util/HashSet.cpp \
 $${PATH_LIBOSMSCOUT_CORE}/src/osmscout/util/Projection.cpp \
 $${PATH_LIBOSMSCOUT_CORE}/src/osmscout/util/Reference.cpp \
 $${PATH_LIBOSMSCOUT_CORE}/src/osmscout/util/Magnification.cpp \
-$${PATH_LIBOSMSCOUT_CORE}/src/osmscout/util/ParserUtil.cpp \
 $${PATH_LIBOSMSCOUT_CORE}/src/osmscout/util/StopClock.cpp \
 $${PATH_LIBOSMSCOUT_CORE}/src/osmscout/util/NodeUseMap.cpp \
 $${PATH_LIBOSMSCOUT_CORE}/src/osmscout/util/FileScanner.cpp \
@@ -185,7 +191,7 @@ libosmscout-import/src/osmscout/import/pbf/fileformat.pb.cc \
 libosmscout-import/src/osmscout/import/pbf/osmformat.pb.cc
 
 # core lib
-PATH_LIBOSMSCOUT_IMPORT = /home/preet/Dev/projects/libosmscout/libosmscout-import
+PATH_LIBOSMSCOUT_IMPORT = /home/preet/Dev/projects/libosmscout-exp/libosmscout-import
 INCLUDEPATH += $${PATH_LIBOSMSCOUT_IMPORT}
 INCLUDEPATH += $${PATH_LIBOSMSCOUT_IMPORT}/include
 INCLUDEPATH += $${PATH_LIBOSMSCOUT_IMPORT}/src
@@ -250,6 +256,13 @@ $${PATH_LIBOSMSCOUT_IMPORT}/src/osmscout/import/PreprocessOSM.cpp \
 $${PATH_LIBOSMSCOUT_IMPORT}/src/osmscout/import/GenNumericIndex.cpp \
 $${PATH_LIBOSMSCOUT_IMPORT}/src/osmscout/import/GenOptimizeAreaWayIds.cpp \
 $${PATH_LIBOSMSCOUT_IMPORT}/src/osmscout/import/GenRouteDat.cpp
+
+# new files
+#HEADERS += \
+#$${PATH_LIBOSMSCOUT_IMPORT}/include/osmscout/import/UpdateNodeDat.h
+
+#SOURCES += \
+#$${PATH_LIBOSMSCOUT_IMPORT}/src/osmscout/import/UpdateNodeDat.cpp
 
 #libosmscout-import needs libxml2
 INCLUDEPATH += /usr/include/libxml2
