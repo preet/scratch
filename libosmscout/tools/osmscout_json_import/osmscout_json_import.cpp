@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <sstream>
 #include <algorithm>
 
 // jansson
@@ -305,6 +306,9 @@ int main(int argc, char *argv[])
     p.SetRouteNodeBlockSize(routeNodeBlockSize);
     p.SetAssumeLand(assumeLand);
 
+    // make sure the destination directory exists
+    std::string sys_make_path = "mkdir -p "+destinationDirectory;
+    system(sys_make_path.c_str());
 
     std::cout << "========================================" << std::endl;
     std::cout << "Starting Import..."                       << std::endl;
@@ -314,6 +318,68 @@ int main(int argc, char *argv[])
     {   std::cerr << "Import OK!" << std::endl;   }
     else
     {   std::cerr << "Import failed!" << std::endl;   }
+
+    std::cout << "========================================" << std::endl;
+
+
+    while(true)   {
+        std::cout << "Separate temp files? Y/N" << std::endl;
+        std::string rem_extra_files;
+        std::cin >> rem_extra_files;
+
+        if(rem_extra_files.compare("Y")==0 ||
+           rem_extra_files.compare("y")==0)   {
+
+            // create a temp directory
+            std::string files_path = destinationDirectory;
+            if(files_path[files_path.length()-1] != '/')   {
+                files_path.append("/");
+            }
+            sys_make_path = "mkdir -p "+files_path+"temp";
+            system(sys_make_path.c_str());
+
+            std::vector<std::string> list_temp_files;
+            list_temp_files.push_back(std::string("areas.idmap"));          // osm id map for DebugDatabase
+            list_temp_files.push_back(std::string("coord.dat"));
+
+            list_temp_files.push_back(std::string("location.txt"));
+
+            list_temp_files.push_back(std::string("nodes.idmap"));          // osm id map for DebugDatabase
+            list_temp_files.push_back(std::string("nodes.tmp"));
+
+            list_temp_files.push_back(std::string("rawcoastline.dat"));
+            list_temp_files.push_back(std::string("rawnode.idx"));
+            list_temp_files.push_back(std::string("rawnodes.dat"));
+            list_temp_files.push_back(std::string("rawrel.idx"));
+            list_temp_files.push_back(std::string("rawrels.dat"));
+            list_temp_files.push_back(std::string("rawturnrestr.dat"));
+            list_temp_files.push_back(std::string("rawway.idx"));
+            list_temp_files.push_back(std::string("rawways.dat"));
+
+            list_temp_files.push_back(std::string("relarea.tmp"));
+
+            list_temp_files.push_back(std::string("turnrestr.dat"));       // ?
+
+            list_temp_files.push_back(std::string("wayareablack.dat"));
+            list_temp_files.push_back(std::string("wayarea.tmp"));
+            list_temp_files.push_back(std::string("ways.idmap"));          // osm id map for DebugDatabase
+            list_temp_files.push_back(std::string("wayway.tmp"));
+
+            for(size_t i=0; i < list_temp_files.size(); i++)   {
+                std::string prev_file_path = files_path+list_temp_files[i];
+                std::string next_file_path = files_path+"temp/"+list_temp_files[i];
+                std::string sys_mv_file = "mv "+prev_file_path+" "+next_file_path;
+                system(sys_mv_file.c_str());
+                std::cout << "-> " << sys_mv_file << std::endl;
+            }
+            break;
+        }
+        else if(rem_extra_files.compare("N")==0 ||
+                rem_extra_files.compare("n")==0)   {
+            break;
+        }
+        std::cout << "ERROR: Unrecognized input" << std::endl;
+    }
 
 
     return 0;
