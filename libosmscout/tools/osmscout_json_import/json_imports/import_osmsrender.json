@@ -1,9 +1,9 @@
 {
     "IMPORTCONFIG":
     {
-        "mapfile":"/home/preet/Documents/maps/openstreetmap/ontario-latest.osm.pbf",
+        "mapfile":"/home/preet/Documents/maps/toronto.osm.pbf",
         "typefile":"/home/preet/Dev/projects/osmsrender/res/map_render.ost",
-        "destinationDirectory":"./ontario",
+        "destinationDirectory":"./data",
         "startStep":1,
         "endStep":26,
 
@@ -59,4 +59,5 @@
         "assumeLand":true
     }
 }
+
 

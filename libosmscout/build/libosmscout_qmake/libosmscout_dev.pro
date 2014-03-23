@@ -5,7 +5,7 @@ TARGET = osmscout
 
 # path that contains autogen'd files and fixes to
 # build libosmscout with qmake
-PATH_LIBOSMSCOUT_EXTRA = /home/preet/Dev/projects/libosmscout_dev/libosmscout
+PATH_LIBOSMSCOUT_EXTRA = $${_PRO_FILE_PWD_}/libosmscout
 PATH_LIBOSMSCOUT_CORE = /home/preet/Dev/projects/libosmscout-exp/libosmscout
 
 
@@ -231,7 +231,7 @@ header_files.files = $${PATH_LIBOSMSCOUT_CORE}/include/osmscout/*
 header_files.path = $${PATH_INSTALL}/include/osmscout
 
 # note: even though include/private/Config.h gets copied over
-#       its not used and is harmless
+#       its not used after building the lib and is harmless
 more_header_files.files = $${PATH_LIBOSMSCOUT_EXTRA}/include/osmscout/*
 more_header_files.path = $${PATH_INSTALL}/include/osmscout
 

@@ -12,7 +12,7 @@ Rectangle   {
     property real margins: 5;
     property real fontsize: 12;
 
-    FontLoader { id: robotomed; source: "fonts/Roboto-Medium.ttf"; }
+    FontLoader { id: robotomed; source: "fonts/FiraSans-Medium.ttf"; }
 
     Connections   {
         target: Helper;

@@ -5,7 +5,7 @@ TARGET = osmscoutimport
 
 # path that contains autogen'd files and fixes to
 # build libosmscout with qmake
-PATH_LIBOSMSCOUT_IMPORT_EXTRA = /home/preet/Dev/projects/libosmscout_import_dev/libosmscout-import
+PATH_LIBOSMSCOUT_IMPORT_EXTRA = $${_PRO_FILE_PWD_}/libosmscout-import
 PATH_LIBOSMSCOUT_IMPORT = /home/preet/Dev/projects/libosmscout-exp/libosmscout-import
 
 # ======================================================= #
@@ -155,6 +155,8 @@ target.path = $${PATH_INSTALL}/lib
 header_files.files = $${PATH_LIBOSMSCOUT_IMPORT}/include/osmscout/*
 header_files.path = $${PATH_INSTALL}/include/osmscout/
 
+# note: even though include/private/Config.h gets copied over
+#       its not used after building the lib and is harmless
 more_header_files.files = $${PATH_LIBOSMSCOUT_IMPORT_EXTRA}/include/osmscout/*
 more_header_files.path = $${PATH_INSTALL}/include/osmscout/
 

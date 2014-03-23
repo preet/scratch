@@ -13,5 +13,4 @@ SOURCES += \
    main.cpp
 
 RESOURCES += \
-    res.qrc \
     res.qrc
