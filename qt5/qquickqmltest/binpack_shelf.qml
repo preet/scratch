@@ -29,7 +29,7 @@ Rectangle
             height: 5;
             color: "#60c659";
             x: binpack_shelf.m_place_x;
-            y: binpack_shelf.height-binpack_shelf.m_place_y-height;
+            y: binpack_shelf.m_place_y+binpack_shelf.m_spacing;
             z: binpack_shelf.z+5;
         }
 
@@ -39,7 +39,7 @@ Rectangle
             height: 2;
             color: "#008ed6";
             x: 0;
-            y: binpack_shelf.height-binpack_shelf.m_shelf_y-height;
+            y: binpack_shelf.m_shelf_y;
             z: binpack_shelf.z+5;
         }
 
@@ -48,9 +48,9 @@ Rectangle
         property int m_place_x: 0;
         property int m_place_y: 0;
         property int m_shelf_y: 0;
-        property int m_spacing: 1;
+        property int m_spacing: 2;
 
-        property int m_bin_top: height;
+        property int m_bin_bottom: height;
         property int m_bin_right: width;
 
         function addRectangle(r_width, r_height)
@@ -59,10 +59,10 @@ Rectangle
                 x: m_place_x+m_spacing,
                 y: m_place_y+m_spacing,
                 right: m_place_x+m_spacing+r_width,
-                top: m_place_y+m_spacing+r_height
+                bottom: m_place_y+m_spacing+r_height
             };
 
-            if(rect.top < m_bin_top) {
+            if(rect.bottom < m_bin_bottom) {
                 if(rect.right < m_bin_right) {
                     // draw rectangle
                     drawRectangle(rect);
@@ -71,8 +71,8 @@ Rectangle
                     m_place_x = rect.right;
 
                     // adjust shelf
-                    if(m_shelf_y < rect.top) {
-                        m_shelf_y = rect.top;
+                    if(m_shelf_y < rect.bottom) {
+                        m_shelf_y = rect.bottom;
                     }
                 }
                 else { // try jumping up a shelf
@@ -81,9 +81,9 @@ Rectangle
                     rect.x = m_place_x+m_spacing; // left
                     rect.y = m_place_y+m_spacing; // bottom
                     rect.right = rect.x+r_width;
-                    rect.top = rect.y+r_height;
+                    rect.bottom = rect.y+r_height;
 
-                    if(rect.top < m_bin_top) {
+                    if(rect.bottom < m_bin_bottom) {
                         if(rect.right < m_bin_right) {
                             // draw rectangle
                             drawRectangle(rect);
@@ -92,24 +92,23 @@ Rectangle
                             m_place_x = rect.right;
 
                             // adjust shelf
-                            if(m_shelf_y < rect.top) {
-                                m_shelf_y = rect.top;
+                            if(m_shelf_y < rect.bottom) {
+                                m_shelf_y = rect.bottom;
                             }
                         }
                     }
                 }
             }
-            return false;
         }
 
         function drawRectangle(rect)
         {
             var rect_width = rect.right-rect.x;
-            var rect_height = rect.top-rect.y;
+            var rect_height = rect.bottom-rect.y;
 
             // adjust y so that the origin (0,0)
-            // is at the top left of binpack_shelf
-            rect.y = m_bin_top-rect.top;
+            // is at the bottom left of binpack_shelf
+            // rect.y = m_bin_top-rect.top;
 
             var rect_obj = rect_component.createObject(binpack_shelf);
             rect_obj.x = rect.x;
@@ -122,8 +121,8 @@ Rectangle
             anchors.fill: parent;
             enabled: true;
             onClicked: {
-                var w = Math.floor((Math.random()*60)+30);
-                var h = Math.floor((Math.random()*60)+30);
+                var w = Math.floor((Math.random()*50)+20);
+                var h = Math.floor((Math.random()*50)+20);
                 binpack_shelf.addRectangle(w,h);
             }
         }

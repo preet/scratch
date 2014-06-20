@@ -1,5 +1,7 @@
 #include "helper.h"
 
+#include <QStandardPaths>
+
 extern const char * g_init;
 extern const char * g_script;
 
@@ -11,6 +13,11 @@ static double genByte()
 Helper::Helper(QQuickView *qqview, QObject *parent) :
     QObject(parent)
 {
+    QStringList list_doc_paths = QStandardPaths::standardLocations(QStandardPaths::DocumentsLocation);
+    for(size_t i=0; i < list_doc_paths.size(); i++) {
+        qDebug() << "###: Android sucks: " << list_doc_paths[i];
+    }
+
     m_view = qqview;
     m_view->rootContext()->setContextProperty("Helper",this);
     m_view->setResizeMode(QQuickView::SizeRootObjectToView);

@@ -8,7 +8,7 @@ int main(int argc, char **argv)
     QGuiApplication app(argc,argv);
     QQuickView * qqview = new QQuickView();
     qqview->setResizeMode(QQuickView::SizeRootObjectToView);
-    qqview->setSource(QUrl("/home/preet/Dev/scratch/qt5/qquickqmltest/binpack_shelf.qml"));
+    qqview->setSource(QUrl("/home/preet/Dev/scratch/qt5/qquickqmltest/cam_viewextents.qml"));
     qqview->show();
     
     int rval = app.exec();
