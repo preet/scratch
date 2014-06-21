@@ -4,9 +4,11 @@
 #include <iostream>
 #include <fstream>
 #include <sys/time.h>
+#include <cassert>
 
 // osg includes
 #include <osg/Vec3>
+#include <osg/io_utils>
 #include <osg/Geode>
 #include <osg/Geometry>
 #include <osg/PrimitiveSet>
@@ -85,6 +87,13 @@ std::vector<std::vector<VxTile*>> g_list_lod_vxtiles(K_MAX_VX_LOD);
 std::vector<double> CalcLodDistances();
 std::vector<double> g_list_lod_dist = CalcLodDistances();
 
+std::vector<osg::Vec3d> g_list_frustum_plane_norms(6);
+std::vector<osg::Vec3d> g_list_frustum_plane_pts(6);
+std::vector<osg::Vec3d> g_list_frustum_culling_test_pts;
+std::vector<osg::Vec4> g_list_frustum_culling_test_colors;
+
+volatile bool g_calc_view_extents = false;
+
 struct PointLLA
 {
     PointLLA() :
@@ -101,15 +110,37 @@ struct PointLLA
     double alt;
 };
 
-struct GeoBounds
+struct VxTile
 {
-    GeoBounds() :
-        minLat(0),maxLat(0),
-        minLon(0),maxLon(0)
-    {}
+    double minLon;
+    double maxLon;
+    double minLat;
+    double maxLat;
 
-    double minLat; double maxLat;
-    double minLon; double maxLon;
+    osg::Vec3d ecef_tl;
+    osg::Vec3d ecef_bl;
+    osg::Vec3d ecef_br;
+    osg::Vec3d ecef_tr;
+
+    uint16_t level;
+
+    VxTile * top_left;
+    VxTile * top_right;
+    VxTile * btm_left;
+    VxTile * btm_right;
+
+    osg::Vec3d bsphere_center;
+    double bsphere_radius;
+
+    VxTile() :
+        level(0),
+        top_left(nullptr),
+        top_right(nullptr),
+        btm_left(nullptr),
+        btm_right(nullptr)
+    {
+        // empty
+    }
 };
 
 PointLLA ConvECEFToLLA(const osg::Vec3d &pointECEF)
@@ -275,6 +306,61 @@ bool CalcApproxBoundingSphere(std::vector<osg::Vec3d> const &list_vx,
     return true;
 }
 
+double CalcDistPointPlane(osg::Vec3d const &plane_norm,
+                          osg::Vec3d const &plane_pt,
+                          osg::Vec3d const &distal_pt)
+{
+    double a = plane_norm.x();
+    double b = plane_norm.y();
+    double c = plane_norm.z();
+    double d = -1 * (a*plane_pt.x() + b*plane_pt.y() + c*plane_pt.z());
+
+    double distance = (a*distal_pt.x() + b*distal_pt.y() + c*distal_pt.z() + d) /
+        sqrt(a*a + b*b + c*c);
+
+    return distance;
+}
+
+bool CalcFrustumIntersectsSphere(osg::Vec3d const &sphere_center,
+                                 double const sphere_radius)
+{
+    // Calculate the signed distance between the
+    // sphere_center and the frustum plane
+
+    for(size_t i=0; i < 6; i++) {
+        double const dist = CalcDistPointPlane(g_list_frustum_plane_norms[i],
+                                               g_list_frustum_plane_pts[i],
+                                               sphere_center);
+
+//        std::cout << "###: dist: " << i << ": " << dist << std::endl;
+
+//        std::cout << "###: n: " << g_list_frustum_plane_norms[i] << std::endl;
+
+        if(dist > sphere_radius) {
+            // its outside this plane
+            return false;
+        }
+    }
+    return true;
+}
+
+std::vector<double> CalcLodDistances()
+{
+    std::vector<double> list_lod_dist;
+
+    for(size_t i=0; i < K_MAX_LOD; i++) {
+        double dist = (sqrt(K_MAX_LOD_AREA_REF_M)*0.5 /
+                       tan(FOVY_DEGS*0.5*K_DEG2RAD)) * pow(2,i);
+
+        list_lod_dist.push_back(dist);
+    }
+
+    std::reverse(list_lod_dist.begin(),
+                 list_lod_dist.end());
+
+    return list_lod_dist;
+}
+
 bool BuildEarthSurfaceGeometry(double minLon, double minLat,
                                double maxLon, double maxLat,
                                size_t lonSegments,
@@ -330,23 +416,6 @@ bool BuildEarthSurfaceGeometry(double minLon, double minLat,
     return true;
 }
 
-std::vector<double> CalcLodDistances()
-{
-    std::vector<double> list_lod_dist;
-
-    for(size_t i=0; i < K_MAX_LOD; i++) {
-        double dist = (sqrt(K_MAX_LOD_AREA_REF_M)*0.5 /
-                       tan(FOVY_DEGS*0.5*K_DEG2RAD)) * pow(2,i);
-
-        list_lod_dist.push_back(dist);
-    }
-
-    std::reverse(list_lod_dist.begin(),
-                 list_lod_dist.end());
-
-    return list_lod_dist;
-}
-
 osg::ref_ptr<osg::AutoTransform> BuildLodRingsNode()
 {
     osg::ref_ptr<osg::Geode> gd_rings = new osg::Geode;
@@ -358,8 +427,6 @@ osg::ref_ptr<osg::AutoTransform> BuildLodRingsNode()
     for(size_t i=0; i < K_MAX_LOD; i++) {
         // Get the distance for this LOD
         double dist = g_list_lod_dist[i];
-
-        double cgrad = double(i+1)/K_MAX_LOD;
         osg::Vec4 color = K_COLOR_TABLE[i];
 
         // Create a ring of vertices
@@ -392,16 +459,19 @@ osg::ref_ptr<osg::AutoTransform> BuildLodRingsNode()
 }
 
 
-// From osg/examples/osgthirdpersonview
 osg::ref_ptr<osg::MatrixTransform> BuildFrustumNode(osg::Camera * camera)
 {
     // Projection and ModelView matrices
+
     osg::Matrixd proj;
     osg::Matrixd mv;
+    osg::Matrixd vm;
+
     if (camera)
     {
         proj = camera->getProjectionMatrix();
         mv = camera->getViewMatrix();
+        vm = camera->getViewMatrix();
     }
     else
     {
@@ -409,6 +479,9 @@ osg::ref_ptr<osg::MatrixTransform> BuildFrustumNode(osg::Camera * camera)
         proj.makePerspective( 30., 1., 1., 10. );
         // leave mv as identity
     }
+
+    osg::Matrixd const mv_inv = osg::Matrixd::inverse( mv );
+    osg::Matrixd const vm_inv = osg::Matrixd::inverse(vm);
 
     // Get near and far from the Projection matrix.
     const double near = proj(3,2) / (proj(2,2)-1.0);
@@ -429,17 +502,113 @@ osg::ref_ptr<osg::MatrixTransform> BuildFrustumNode(osg::Camera * camera)
     // Our vertex array needs only 9 vertices: The origin, and the
     // eight corners of the near and far planes.
     osg::ref_ptr<osg::Vec3dArray> v = new osg::Vec3dArray;
-    v->resize( 9 );
+    v->resize( 21 );
 
-    v->at(0).set( 0., 0., 0. );
-    v->at(1).set( nLeft, nBottom, -near );
-    v->at(2).set( nRight, nBottom, -near );
-    v->at(3).set( nRight, nTop, -near );
-    v->at(4).set( nLeft, nTop, -near );
-    v->at(5).set( fLeft, fBottom, -far );
-    v->at(6).set( fRight, fBottom, -far );
-    v->at(7).set( fRight, fTop, -far );
-    v->at(8).set( fLeft, fTop, -far );
+    // near and far are negated because the opengl
+    // camera is at (0,0,0) with the view dirn pointing
+    // down the -Z axis
+
+    osg::Vec3d NBL(nLeft,nBottom,-near);
+    NBL = NBL * mv_inv;
+
+    osg::Vec3d NBR(nRight,nBottom,-near);
+    NBR = NBR *mv_inv;
+
+    osg::Vec3d NTR(nRight,nTop,-near);
+    NTR = NTR * mv_inv;
+
+    osg::Vec3d NTL(nLeft,nTop,-near);
+    NTL = NTL * mv_inv;
+
+    osg::Vec3d FBL(fLeft, fBottom, -far);
+    FBL = FBL * mv_inv;
+
+    osg::Vec3d FBR(fRight, fBottom, -far);
+    FBR = FBR * mv_inv;
+
+    osg::Vec3d FTR(fRight, fTop, -far);
+    FTR = FTR * mv_inv;
+
+    osg::Vec3d FTL(fLeft, fTop, -far);
+    FTL = FTL* mv_inv;
+
+    // get the normals for the frustum planes
+    osg::Vec3d p_left = NBL+ (FTL-NBL)*0.5;
+    osg::Vec3d d_left = (FTL-NTL)^(NBL-NTL); d_left.normalize();
+
+    osg::Vec3d p_right = (NBR+FTR)*0.5;
+    osg::Vec3d d_right = (NTR-FTR)^(FBR-FTR); d_right.normalize();
+
+    osg::Vec3d p_top = (NTL+FTR)*0.5;
+    osg::Vec3d d_top = (FTR-NTR)^(NTL-NTR); d_top.normalize();
+
+    osg::Vec3d p_btm = (NBL+FBR)*0.5;
+    osg::Vec3d d_btm = (FBL-NBL)^(NBR-NBL); d_btm.normalize();
+
+    osg::Vec3d p_near = (NBL+NTR)*0.5;
+    osg::Vec3d d_near = (NTL-NTR)^(NBR-NTR); d_near.normalize();
+
+    osg::Vec3d p_far = (FBL+FTR)*0.5;
+    osg::Vec3d d_far = (FTR-FBL)^(FBL-FTL); d_far.normalize();
+
+    // save
+    {
+        g_list_frustum_plane_pts[0] = p_left;
+        g_list_frustum_plane_pts[1] = p_right;
+        g_list_frustum_plane_pts[2] = p_top;
+        g_list_frustum_plane_pts[3] = p_btm;
+        g_list_frustum_plane_pts[4] = p_near;
+        g_list_frustum_plane_pts[5] = p_far;
+
+        g_list_frustum_plane_norms[0] = d_left;
+        g_list_frustum_plane_norms[1] = d_right;
+        g_list_frustum_plane_norms[2] = d_top;
+        g_list_frustum_plane_norms[3] = d_btm;
+        g_list_frustum_plane_norms[4] = d_near;
+        g_list_frustum_plane_norms[5] = d_far;
+
+    }
+
+    // get a length to show the normals
+    double const normal_length = (FTR-FBR).length()*0.5;
+    d_left *= normal_length;
+    d_right *= normal_length;
+    d_top *= normal_length;
+    d_btm *= normal_length;
+    d_near *= normal_length;
+    d_far *= normal_length;
+
+    v->at(0).set(0.,0.,0.);
+    v->at(0) = v->at(0) * mv_inv;
+
+    v->at(1) = NBL;
+    v->at(2) = NBR;
+    v->at(3) = NTR;
+    v->at(4) = NTL;
+
+    v->at(5) = FBL;
+    v->at(6) = FBR;
+    v->at(7) = FTR;
+    v->at(8) = FTL;
+
+    v->at(9) = p_left;
+    v->at(10) = p_left+d_left;
+
+    v->at(11) = p_right;
+    v->at(12) = p_right+d_right;
+
+    v->at(13) = p_top;
+    v->at(14) = p_top+d_top;
+
+    v->at(15) = p_btm;
+    v->at(16) = p_btm+d_btm;
+
+    v->at(17) = p_near;
+    v->at(18) = p_near+d_near;
+
+    v->at(19) = p_far;
+    v->at(20) = p_far+d_far;
+
 
     osg::ref_ptr<osg::Geometry> geom = new osg::Geometry;
     geom->setUseDisplayList( false );
@@ -455,9 +624,12 @@ osg::ref_ptr<osg::MatrixTransform> BuildFrustumNode(osg::Camera * camera)
         1, 2, 3, 4 };
     GLushort idxLoops1[4] = {
         5, 6, 7, 8 };
+    GLushort idxNormals[12] = {
+        9,10,11,12,13,14,15,16,17,18,19,20 };
     geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINES, 8, idxLines ) );
     geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINE_LOOP, 4, idxLoops0 ) );
     geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINE_LOOP, 4, idxLoops1 ) );
+    geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINES, 12, idxNormals ) );
 
     osg::ref_ptr<osg::Geode> geode = new osg::Geode;
     geode->addDrawable( geom );
@@ -469,11 +641,12 @@ osg::ref_ptr<osg::MatrixTransform> BuildFrustumNode(osg::Camera * camera)
     // the inverse ModelView matrix.
     osg::ref_ptr<osg::MatrixTransform> mt = new osg::MatrixTransform;
     mt->setName("frustum");
-    mt->setMatrix( osg::Matrixd::inverse( mv ) );
+//    mt->setMatrix( mv_inv );
     mt->addChild( geode );
 
     return mt;
 }
+
 
 osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
 {
@@ -530,37 +703,70 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
     return gp;
 }
 
-struct VxTile
+osg::ref_ptr<osg::Group> BuildFrustumCullingTest()
 {
-    double minLon;
-    double maxLon;
-    double minLat;
-    double maxLat;
-
-    osg::Vec3d ecef_tl;
-    osg::Vec3d ecef_bl;
-    osg::Vec3d ecef_br;
-    osg::Vec3d ecef_tr;
-
-    uint16_t level;
-
-    VxTile * top_left;
-    VxTile * top_right;
-    VxTile * btm_left;
-    VxTile * btm_right;
-
-
-
-    VxTile() :
-        level(0),
-        top_left(nullptr),
-        top_right(nullptr),
-        btm_left(nullptr),
-        btm_right(nullptr)
-    {
-        // empty
+    if(g_list_frustum_culling_test_colors.empty()) {
+        for(size_t i=0; i < 25; i++) {
+            g_list_frustum_culling_test_colors.push_back(osg::Vec4(1,1,1,1));
+        }
     }
-};
+
+    if(g_list_frustum_culling_test_pts.empty()) {
+        g_list_frustum_culling_test_pts.resize(25);
+    }
+
+    int k = 0;
+
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->getOrCreateStateSet()->setMode( GL_LIGHTING,
+                                        osg::StateAttribute::OFF |
+                                        osg::StateAttribute::PROTECTED );
+
+    for(size_t n=0; n < 5; n++)
+    {
+        for(size_t m=0; m < 5; m++)
+        {
+            osg::ref_ptr<osg::Vec3dArray> list_vx =
+                    new osg::Vec3dArray(10);
+
+            double const radius = 100;
+            double const rotate_by_rads = (2.0*K_PI/list_vx->size());
+
+            for(size_t i=0; i < list_vx->size(); i++) {
+                list_vx->at(i) = osg::Vec3d(
+                            radius*cos(rotate_by_rads*i),
+                            0,
+                            radius*sin(rotate_by_rads*i));
+            }
+
+            osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+            list_cx->push_back(g_list_frustum_culling_test_colors[k]);
+
+            osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+            gm->setVertexArray(list_vx);
+            gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+            gm->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+
+            osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+            gd->addDrawable(gm.get());
+
+            osg::ref_ptr<osg::MatrixTransform> xf = new osg::MatrixTransform;
+            xf->setMatrix(osg::Matrixd::translate(osg::Vec3d(n*250,0.0,m*250)));
+//            xf->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+//            xf->setPosition(osg::Vec3d(n*250,m*250,0));
+            xf->addChild(gd);
+
+            gp->addChild(xf);
+
+            g_list_frustum_culling_test_pts[k] = (osg::Vec3d(n*250,0.0,m*250));
+
+            k++;
+        }
+    }
+
+    gp->setName("culltest");
+    return gp;
+}
 
 void SplitTile(VxTile * parent)
 {
@@ -727,57 +933,47 @@ std::vector<VxTile*> BuildBaseViewExtents()
 {
     std::vector<VxTile*> list_vxtiles;
 
-    // Start at level 2
+    // Start at level 2 [4 x 4]
+    size_t const num_tiles_side = 4;
+    double lon_step = 360.0/num_tiles_side;
+    double lat_step = 180.0/num_tiles_side;
 
-}
+    for(size_t i=0; i < num_tiles_side; i++) { // lon
+        for(size_t j=0; j < num_tiles_side; j++) { // lat
+            VxTile * vxtile = new VxTile;
 
-osg::ref_ptr<osg::Group> GetTileGeometry()
-{
-    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+            vxtile->minLon = -180.0 + lon_step*i;
+            vxtile->maxLon = vxtile->minLon + lon_step;
 
-    for(size_t i=0; i < g_list_lod_vxtiles.size(); i++) {
+            vxtile->minLat = -90.0 + lat_step*i;
+            vxtile->maxLat = vxtile->minLat + lat_step;
 
-        osg::Vec4 color = K_COLOR_TABLE[i];
+            vxtile->ecef_tl = ConvLLAToECEF(PointLLA(vxtile->minLon,vxtile->maxLat,0));
+            vxtile->ecef_bl = ConvLLAToECEF(PointLLA(vxtile->minLon,vxtile->minLat,0));
+            vxtile->ecef_br = ConvLLAToECEF(PointLLA(vxtile->maxLon,vxtile->minLat,0));
+            vxtile->ecef_tr = ConvLLAToECEF(PointLLA(vxtile->maxLon,vxtile->maxLat,0));
 
-//        std::cout << "###: " << g_list_lod_vxtiles[i].size() << std::endl;
+            // calculate the bounding volume
+            std::vector<osg::Vec3d> list_vx;
+            list_vx.push_back(vxtile->ecef_tl);
+            list_vx.push_back(vxtile->ecef_bl);
+            list_vx.push_back(vxtile->ecef_br);
+            list_vx.push_back(vxtile->ecef_tr);
 
-        for(size_t j=0; j < g_list_lod_vxtiles[i].size(); j++) {
-            VxTile * tile = g_list_lod_vxtiles[i][j];
+            if(!CalcApproxBoundingSphere(list_vx,
+                                         vxtile->bsphere_center,
+                                         vxtile->bsphere_radius))
+            {
+                std::cout << "####: Fatal: CalcApproxBoundingSphere failed" << std::endl;
+                assert(1==0);
+            }
 
-            // Create a ring for the tile
-            osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
-            list_vx->push_back(tile->ecef_tl);
-            list_vx->push_back(tile->ecef_bl);
-            list_vx->push_back(tile->ecef_br);
-            list_vx->push_back(tile->ecef_tr);
-
-//            std::cout << "###: " << tile->minLon << ", " << tile->maxLon << ", " << tile->minLat << ", " << tile->maxLat << std::endl;
-
-//            std::cout << "###: " << tile->ecef_tl.x() << ", " << tile->ecef_tl.y() << ", " << tile->ecef_tl.z() << std::endl;
-//            std::cout << "###: " << tile->ecef_bl.x() << ", " << tile->ecef_bl.y() << ", " << tile->ecef_bl.z() << std::endl;
-//            std::cout << "###: " << tile->ecef_br.x() << ", " << tile->ecef_br.y() << ", " << tile->ecef_br.z() << std::endl;
-//            std::cout << "###: " << tile->ecef_tr.x() << ", " << tile->ecef_tr.y() << ", " << tile->ecef_tr.z() << std::endl;
-
-            osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
-            list_cx->push_back(color);
-
-            osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
-            gm->setVertexArray(list_vx);
-            gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
-            gm->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
-
-            gd->addDrawable(gm.get());
+            list_vxtiles.push_back(vxtile);
         }
     }
 
-    osg::ref_ptr<osg::Group> gp = new osg::Group;
-    gp->setName("gpvxtiles");
-    gp->addChild(gd.get());
-
-    return gp;
+    return list_vxtiles;
 }
-
-volatile bool g_calc_view_extents = false;
 
 class KeyboardEventHandler : public osgGA::GUIEventHandler
 {
@@ -822,10 +1018,6 @@ int main(int argc, const char *argv[])
     (void)argc;
     (void)argv;
 
-    // Camera frustum mesh
-    auto xf_camera = BuildFrustumNode(NULL);
-    xf_camera->setName("camera");
-
     // Lod rings
     auto xf_rings = BuildLodRingsNode();
     xf_rings->setName("rings");
@@ -834,18 +1026,25 @@ int main(int argc, const char *argv[])
     auto gp_celestial = BuildCelestialSurfaceNode();
     gp_celestial->setName("celestial");
 
+    // Frustum culling test
+    auto gp_cull = BuildFrustumCullingTest();
+
+
     // View0 root
     osg::ref_ptr<osg::Group> gp_root0 = new osg::Group;
-    gp_root0->addChild(gp_celestial);
+//    gp_root0->addChild(gp_celestial);
+    gp_root0->addChild(gp_cull);
 
     // View1 root
     osg::ref_ptr<osg::Group> gp_root1 = new osg::Group;
-    gp_root1->addChild(xf_camera);
-    gp_root1->addChild(xf_rings);
-    gp_root1->addChild(gp_celestial);
+    gp_root1->addChild(BuildFrustumNode(NULL));
+//    gp_root1->addChild(xf_rings);
+//    gp_root1->addChild(gp_celestial);
+    gp_root1->addChild(gp_cull);
 
 
     osgViewer::CompositeViewer viewer;
+    viewer.setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
 
     // Create View 0
     {
@@ -868,6 +1067,7 @@ int main(int argc, const char *argv[])
         view->setSceneData( gp_root1.get() );
         view->getCamera()->setClearColor(osg::Vec4(0.1,0.1,0.1,1.0));
         view->setCameraManipulator( new osgGA::TrackballManipulator );
+
     }
 
     // Create the fixed base VxTiles we use to
@@ -875,60 +1075,62 @@ int main(int argc, const char *argv[])
 
     while (!viewer.done())
     {
-        // Update the wireframe frustum
-        size_t const num_children = gp_root->getNumChildren();
-        for(size_t i=0; i < num_children; i++) {
-            std::string const name = gp_root->getChild(i)->getName();
-            if(name == "frustum") {
-                gp_root->removeChild(i);
-                break;
+        // Create a new camera frustum node
+        auto new_frustum = BuildFrustumNode(viewer.getView(0)->getCamera());
+
+        // Create a new cull test node
+        for(size_t i=0; i < g_list_frustum_culling_test_pts.size(); i++) {
+            if(CalcFrustumIntersectsSphere(g_list_frustum_culling_test_pts[i],100.0)) {
+                g_list_frustum_culling_test_colors[i] = osg::Vec4(0,1,1,1);
+            }
+            else {
+                g_list_frustum_culling_test_colors[i] = osg::Vec4(1,1,1,1);
             }
         }
-        gp_root->addChild(BuildFrustumNode(
-            viewer.getView(0)->getCamera(),
-            osg::Vec4(1,1,1,1)).get());
+        auto new_culltest = BuildFrustumCullingTest();
+
+
+        // Update gp_root0
+        {
+            for(size_t i=0; i < gp_root0->getNumChildren(); i++) {
+                std::string const name = gp_root0->getChild(i)->getName();
+                // Remove prev cull test node
+                if(name == "culltest") {
+                    gp_root0->removeChild(i);
+                    i--;
+                }
+            }
+            // Add new culltest node
+            gp_root0->addChild(new_culltest);
+        }
+
+        // Update gp_root1
+        {
+            for(size_t i=0; i < gp_root1->getNumChildren(); i++) {
+                std::string const name = gp_root1->getChild(i)->getName();
+                // Remove prev camera node
+                if(name == "frustum") {
+                    gp_root1->removeChild(i);
+                    i--;
+                }
+                // Remove prev cull test node
+                if(name == "culltest") {
+                    gp_root1->removeChild(i);
+                    i--;
+                }
+            }
+            // Add new camera node and culltest node
+            gp_root1->addChild(new_frustum);
+            gp_root1->addChild(new_culltest);
+        }
 
         // update the rings
-        osg::Vec3d eye,vpt,up;
-        viewer.getView(0)->getCamera()->getViewMatrixAsLookAt(eye,vpt,up);
-        xf_rings->setPosition(eye);
+//        osg::Vec3d eye,vpt,up;
+//        viewer.getView(0)->getCamera()->getViewMatrixAsLookAt(eye,vpt,up);
+//        xf_rings->setPosition(eye);
 
         if(g_calc_view_extents) {
             std::cout << "###: CalcViewExtents" << std::endl;
-
-            // Delete old view extents
-            for(size_t i=0; i < g_list_lod_vxtiles.size(); i++) {
-                for(size_t j=0; j < g_list_lod_vxtiles[i].size(); j++) {
-                    delete g_list_lod_vxtiles[i][j];
-                }
-                g_list_lod_vxtiles[i].clear();
-            }
-
-            // Create the level 0 tile
-            VxTile * vx_root = new VxTile();
-            vx_root->minLon = -180.0;
-            vx_root->maxLon = 180.0;
-            vx_root->minLat = -90.0;
-            vx_root->maxLat = 90.0;
-
-            vx_root->ecef_tl = ConvLLAToECEF(PointLLA(vx_root->minLon,vx_root->maxLat,0));
-            vx_root->ecef_bl = ConvLLAToECEF(PointLLA(vx_root->minLon,vx_root->minLat,0));
-            vx_root->ecef_br = ConvLLAToECEF(PointLLA(vx_root->maxLon,vx_root->minLat,0));
-            vx_root->ecef_tr = ConvLLAToECEF(PointLLA(vx_root->maxLon,vx_root->maxLat,0));
-
-            vx_root->level = 0;
-
-            // Calc surf xsec with eye vec
-            osg::Vec3d xsecNear,xsecFar;
-            if(CalcRayEarthIntersection(eye,vpt-eye,xsecNear,xsecFar)) {
-                BuildViewExtents(eye,xsecNear,vx_root);
-                osg::ref_ptr<osg::Group> gp_vxtiles = GetTileGeometry();
-                gp_tiles->addChild(gp_vxtiles);
-            }
-            else {
-                std::cout << "###: Warn: eye -> vpt doesnt not xsec earth";
-            }
-
             g_calc_view_extents = false;
         }
 
