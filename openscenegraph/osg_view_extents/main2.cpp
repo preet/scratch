@@ -36,7 +36,7 @@
 #define K_NEPS -1E-11
 
 // average radius
-#define RAD_AV 6371000
+#define RAD_AV 6371000.0
 
 // WGS84 ellipsoid parameters
 // (http://en.wikipedia.org/wiki/WGS_84)
@@ -307,6 +307,25 @@ bool CalcApproxBoundingSphere(std::vector<osg::Vec3d> const &list_vx,
     return true;
 }
 
+bool CalcHorizonPlane(osg::Vec3d const &eye,
+                      osg::Vec3d &horizon_norm,
+                      osg::Vec3d &horizon_pt)
+{
+    // We need to clamp eye_length such that the
+    // eye is outside of the celestial body surface
+
+    // It would be more accurate to do a RayBodyIntersection
+    double eye_length = eye.length();
+    if(eye_length < (RAD_AV*1.2)) {
+        return false;
+    }
+    double const inv_dist = 1.0/eye_length;
+
+    horizon_norm = eye*inv_dist;
+    horizon_pt = horizon_norm * (RAD_AV*RAD_AV*inv_dist);
+    return true;
+}
+
 //double CalcDistPointPlane(osg::Vec3d const &plane_norm,
 //                          osg::Vec3d const &plane_pt,
 //                          osg::Vec3d const &distal_pt)
@@ -466,6 +485,57 @@ osg::ref_ptr<osg::AutoTransform> BuildLodRingsNode()
     return xf_rings;
 }
 
+osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera)
+{
+    osg::ref_ptr<osg::Group> gp_horizon_plane = new osg::Group;
+
+    gp_horizon_plane->setName("horizonplane");
+
+    osg::Vec3d eye,vpt,up;
+    if(camera) {
+        camera->getViewMatrixAsLookAt(eye,vpt,up);
+
+        osg::Vec3d horizon_norm,horizon_pt;
+        if(CalcHorizonPlane(eye,horizon_norm,horizon_pt)) {
+            // Draw the plane as a circle centered on horizon_pt
+            // with radius RAD_AV*0.5
+            osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(16);
+            double const rotate_by_rads = (2.0*K_PI/list_vx->size());
+            double const dist = RAD_AV*1.1;
+
+            // Rotate the circle so that its normal is
+            // aligned to the horizon_norm
+            osg::Matrixd rotate_to_horizon =
+                    osg::Matrixd::rotate(osg::Vec3d(0,0,1),
+                                         horizon_norm);
+
+            for(size_t i=0; i < 16; i++) {
+                list_vx->at(i) = osg::Vec3d(
+                            dist*cos(rotate_by_rads*i),
+                            dist*sin(rotate_by_rads*i),
+                            0);
+
+                list_vx->at(i) = list_vx->at(i) * rotate_to_horizon;
+                list_vx->at(i) = list_vx->at(i) + horizon_pt;
+            }
+
+            osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+            list_cx->push_back(osg::Vec4(0.4,0.5,0.9,1.0)); // smurple
+
+            osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+            gm->setVertexArray(list_vx);
+            gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+            gm->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+
+            osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+            gd->addDrawable(gm);
+
+            gp_horizon_plane->addChild(gd);
+        }
+    }
+
+    return gp_horizon_plane;
+}
 
 osg::ref_ptr<osg::MatrixTransform> BuildFrustumNode(osg::Camera * camera)
 {
@@ -705,8 +775,7 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
                          osg::PolygonMode::LINE);
 
     gp->getOrCreateStateSet()->setAttribute(polygonMode.get());
-    gp->getOrCreateStateSet()->setMode(GL_LIGHTING,osg::StateAttribute::OFF);
-
+    gp->setName("celestialbody");
 
     return gp;
 }
@@ -726,9 +795,6 @@ osg::ref_ptr<osg::Group> BuildFrustumCullingTest()
     int k = 0;
 
     osg::ref_ptr<osg::Group> gp = new osg::Group;
-    gp->getOrCreateStateSet()->setMode( GL_LIGHTING,
-                                        osg::StateAttribute::OFF |
-                                        osg::StateAttribute::PROTECTED );
 
     for(size_t n=0; n < 5; n++)
     {
@@ -953,7 +1019,7 @@ std::vector<VxTile*> BuildBaseViewExtents()
             vxtile->minLon = -180.0 + lon_step*i;
             vxtile->maxLon = vxtile->minLon + lon_step;
 
-            vxtile->minLat = -90.0 + lat_step*i;
+            vxtile->minLat = -90.0 + lat_step*j;
             vxtile->maxLat = vxtile->minLat + lat_step;
 
             vxtile->ecef_tl = ConvLLAToECEF(PointLLA(vxtile->minLon,vxtile->maxLat,0));
@@ -967,6 +1033,9 @@ std::vector<VxTile*> BuildBaseViewExtents()
             list_vx.push_back(vxtile->ecef_bl);
             list_vx.push_back(vxtile->ecef_br);
             list_vx.push_back(vxtile->ecef_tr);
+
+//            std::cout << vxtile->bsphere_center << std::endl;
+//            std::cout << vxtile->bsphere_radius << std::endl;
 
             if(!CalcApproxBoundingSphere(list_vx,
                                          vxtile->bsphere_center,
@@ -995,11 +1064,15 @@ osg::ref_ptr<osg::Group> BuildBaseViewExtentsGeometry(std::vector<VxTile*> const
                     new osg::Sphere(vx_tile->bsphere_center,
                                     vx_tile->bsphere_radius));
 
+        bsphere->setColor(osg::Vec4(0.5,0.5,0.5,0.1));
+
         osg::ref_ptr<osg::Geode> gd = new osg::Geode;
         gd->addDrawable(bsphere);
         gp->addChild(gd);
     }
 
+    gp->getOrCreateStateSet()->setMode ( GL_DEPTH_TEST, osg::StateAttribute::OFF );
+    gp->setName("bspheres");
     return gp;
 }
 
@@ -1062,32 +1135,30 @@ int main(int argc, const char *argv[])
     // Build the base view extents. We always start finding
     // detailed view extents by testing the base extents against
     // the frustum.
-    std::vector<VxTile*> list_base_vx = BuildBaseViewExtents();
-
-
-    // Lod rings
-    auto xf_rings = BuildLodRingsNode();
-    xf_rings->setName("rings");
+    std::vector<VxTile*> list_base_vx_tiles = BuildBaseViewExtents();
 
     // Celestial body surface mesh
     auto gp_celestial = BuildCelestialSurfaceNode();
-    gp_celestial->setName("celestial");
 
-    // Frustum culling test
-    auto gp_cull = BuildFrustumCullingTest();
-
+    // Bounding spheres for the base vx tiles
+    auto gp_bspheres = BuildBaseViewExtentsGeometry(list_base_vx_tiles);
 
     // View0 root
     osg::ref_ptr<osg::Group> gp_root0 = new osg::Group;
-//    gp_root0->addChild(gp_celestial);
-    gp_root0->addChild(gp_cull);
+    gp_root0->addChild(gp_celestial);
+    gp_root0->addChild(gp_bspheres);
 
     // View1 root
     osg::ref_ptr<osg::Group> gp_root1 = new osg::Group;
-    gp_root1->addChild(BuildFrustumNode(NULL));
-//    gp_root1->addChild(xf_rings);
-//    gp_root1->addChild(gp_celestial);
-    gp_root1->addChild(gp_cull);
+    gp_root1->addChild(gp_celestial);
+    gp_root1->addChild(gp_bspheres);
+
+    // disable lighting and enable blending
+    gp_root0->getOrCreateStateSet()->setMode( GL_LIGHTING,osg::StateAttribute::OFF);
+    gp_root0->getOrCreateStateSet()->setMode( GL_BLEND,osg::StateAttribute::ON);
+
+    gp_root1->getOrCreateStateSet()->setMode( GL_LIGHTING,osg::StateAttribute::OFF);
+    gp_root1->getOrCreateStateSet()->setMode( GL_BLEND,osg::StateAttribute::ON);
 
 
     osgViewer::CompositeViewer viewer;
@@ -1114,7 +1185,6 @@ int main(int argc, const char *argv[])
         view->setSceneData( gp_root1.get() );
         view->getCamera()->setClearColor(osg::Vec4(0.1,0.1,0.1,1.0));
         view->setCameraManipulator( new osgGA::TrackballManipulator );
-
     }
 
     // Create the fixed base VxTiles we use to
@@ -1125,30 +1195,31 @@ int main(int argc, const char *argv[])
         // Create a new camera frustum node
         auto new_frustum = BuildFrustumNode(viewer.getView(0)->getCamera());
 
-        // Create a new cull test node
-        for(size_t i=0; i < g_list_frustum_culling_test_pts.size(); i++) {
-            if(CalcFrustumIntersectsSphere(g_list_frustum_culling_test_pts[i],100.0)) {
-                g_list_frustum_culling_test_colors[i] = osg::Vec4(0,1,1,1);
+        // Create a new horizon plane node
+        auto new_horizonplane = BuildHorizonPlaneNode(viewer.getView(0)->getCamera());
+
+        // Update the base view extent geometry
+        for(size_t i=0; i < list_base_vx_tiles.size(); i++) {
+            if(CalcFrustumIntersectsSphere(list_base_vx_tiles[i]->bsphere_center,
+                                           list_base_vx_tiles[i]->bsphere_radius)) {
+                UpdateBaseViewExtentsGeometryColor(gp_bspheres,i,osg::Vec4(1.0,0.5,0.0,0.05));
             }
             else {
-                g_list_frustum_culling_test_colors[i] = osg::Vec4(1,1,1,1);
+                UpdateBaseViewExtentsGeometryColor(gp_bspheres,i,osg::Vec4(0.5,0.5,0.5,0.05));
             }
         }
-        auto new_culltest = BuildFrustumCullingTest();
-
 
         // Update gp_root0
         {
             for(size_t i=0; i < gp_root0->getNumChildren(); i++) {
                 std::string const name = gp_root0->getChild(i)->getName();
-                // Remove prev cull test node
-                if(name == "culltest") {
+                if(name == "horizonplane") {
                     gp_root0->removeChild(i);
                     i--;
                 }
             }
-            // Add new culltest node
-            gp_root0->addChild(new_culltest);
+            // Add new nodes
+            gp_root0->addChild(new_horizonplane);
         }
 
         // Update gp_root1
@@ -1160,27 +1231,15 @@ int main(int argc, const char *argv[])
                     gp_root1->removeChild(i);
                     i--;
                 }
-                // Remove prev cull test node
-                if(name == "culltest") {
+                else if(name == "horizonplane") {
                     gp_root1->removeChild(i);
                     i--;
                 }
             }
-            // Add new camera node and culltest node
+            // Add new nodes
             gp_root1->addChild(new_frustum);
-            gp_root1->addChild(new_culltest);
+            gp_root1->addChild(new_horizonplane);
         }
-
-        // update the rings
-//        osg::Vec3d eye,vpt,up;
-//        viewer.getView(0)->getCamera()->getViewMatrixAsLookAt(eye,vpt,up);
-//        xf_rings->setPosition(eye);
-
-        if(g_calc_view_extents) {
-            std::cout << "###: CalcViewExtents" << std::endl;
-            g_calc_view_extents = false;
-        }
-
         viewer.frame();
     }
     return 0;
