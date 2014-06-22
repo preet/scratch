@@ -19,6 +19,7 @@
 #include <osg/AutoTransform>
 #include <osgViewer/CompositeViewer>
 #include <osgGA/TrackballManipulator>
+#include <osg/ShapeDrawable>
 
 // obb
 #include "obb.hpp"
@@ -306,19 +307,30 @@ bool CalcApproxBoundingSphere(std::vector<osg::Vec3d> const &list_vx,
     return true;
 }
 
+//double CalcDistPointPlane(osg::Vec3d const &plane_norm,
+//                          osg::Vec3d const &plane_pt,
+//                          osg::Vec3d const &distal_pt)
+//{
+//    double a = plane_norm.x();
+//    double b = plane_norm.y();
+//    double c = plane_norm.z();
+//    double d = -1 * (a*plane_pt.x() + b*plane_pt.y() + c*plane_pt.z());
+
+//    double distance = (a*distal_pt.x() + b*distal_pt.y() + c*distal_pt.z() + d) /
+//        sqrt(a*a + b*b + c*c);
+
+//    return distance;
+//}
+
 double CalcDistPointPlane(osg::Vec3d const &plane_norm,
                           osg::Vec3d const &plane_pt,
                           osg::Vec3d const &distal_pt)
 {
-    double a = plane_norm.x();
-    double b = plane_norm.y();
-    double c = plane_norm.z();
-    double d = -1 * (a*plane_pt.x() + b*plane_pt.y() + c*plane_pt.z());
+    // From Real-Time Collision by Christner Ericson p. 127
 
-    double distance = (a*distal_pt.x() + b*distal_pt.y() + c*distal_pt.z() + d) /
-        sqrt(a*a + b*b + c*c);
-
-    return distance;
+    // calculate d
+    double const d = plane_norm*plane_pt;
+    return ((plane_norm*distal_pt)-d)/(plane_norm*plane_norm);
 }
 
 bool CalcFrustumIntersectsSphere(osg::Vec3d const &sphere_center,
@@ -331,10 +343,6 @@ bool CalcFrustumIntersectsSphere(osg::Vec3d const &sphere_center,
         double const dist = CalcDistPointPlane(g_list_frustum_plane_norms[i],
                                                g_list_frustum_plane_pts[i],
                                                sphere_center);
-
-//        std::cout << "###: dist: " << i << ": " << dist << std::endl;
-
-//        std::cout << "###: n: " << g_list_frustum_plane_norms[i] << std::endl;
 
         if(dist > sphere_radius) {
             // its outside this plane
@@ -975,6 +983,39 @@ std::vector<VxTile*> BuildBaseViewExtents()
     return list_vxtiles;
 }
 
+osg::ref_ptr<osg::Group> BuildBaseViewExtentsGeometry(std::vector<VxTile*> const &list_vx_tiles)
+{
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+
+    for(auto & vx_tile : list_vx_tiles)
+    {
+        // Create the bounding sphere geometry for this tile
+        osg::ref_ptr<osg::ShapeDrawable> bsphere =
+                new osg::ShapeDrawable(
+                    new osg::Sphere(vx_tile->bsphere_center,
+                                    vx_tile->bsphere_radius));
+
+        osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+        gd->addDrawable(bsphere);
+        gp->addChild(gd);
+    }
+
+    return gp;
+}
+
+void UpdateBaseViewExtentsGeometryColor(osg::ref_ptr<osg::Group> gp_bspheres,
+                                        size_t const index,
+                                        osg::Vec4 const &color)
+{
+    osg::Geode * gd = static_cast<osg::Geode*>(
+                gp_bspheres->getChild(index));
+
+    osg::ShapeDrawable * bsphere = static_cast<osg::ShapeDrawable*>(
+                gd->getDrawable(0));
+
+    bsphere->setColor(color);
+}
+
 class KeyboardEventHandler : public osgGA::GUIEventHandler
 {
 public:
@@ -1017,6 +1058,12 @@ int main(int argc, const char *argv[])
 {
     (void)argc;
     (void)argv;
+
+    // Build the base view extents. We always start finding
+    // detailed view extents by testing the base extents against
+    // the frustum.
+    std::vector<VxTile*> list_base_vx = BuildBaseViewExtents();
+
 
     // Lod rings
     auto xf_rings = BuildLodRingsNode();
