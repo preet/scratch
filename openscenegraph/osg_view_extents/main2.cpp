@@ -5,6 +5,8 @@
 #include <fstream>
 #include <sys/time.h>
 #include <cassert>
+#include <memory>
+#include <chrono>
 
 // osg includes
 #include <osg/Vec3>
@@ -93,6 +95,9 @@ std::vector<osg::Vec3d> g_list_frustum_plane_pts(6);
 std::vector<osg::Vec3d> g_list_frustum_culling_test_pts;
 std::vector<osg::Vec4> g_list_frustum_culling_test_colors;
 
+osg::Vec3d g_horizon_plane_norm;
+osg::Vec3d g_horizon_plane_pt;
+
 volatile bool g_calc_view_extents = false;
 
 struct PointLLA
@@ -111,34 +116,61 @@ struct PointLLA
     double alt;
 };
 
+enum TileGmClip
+{
+    TILE_TL = 1 << 0,
+    TILE_BL = 1 << 1,
+    TILE_BR = 1 << 2,
+    TILE_TR = 1 << 3
+};
+
 struct VxTile
 {
     double minLon;
     double maxLon;
+
     double minLat;
     double maxLat;
+
+    double midLat;
+    double midLon;
 
     osg::Vec3d ecef_tl;
     osg::Vec3d ecef_bl;
     osg::Vec3d ecef_br;
     osg::Vec3d ecef_tr;
+    osg::Vec3d ecef_tm;
+    osg::Vec3d ecef_bm;
+    osg::Vec3d ecef_ml;
+    osg::Vec3d ecef_mr;
+    osg::Vec3d ecef_mm;
+
+    osg::Vec3d bbox_center;
+    osg::Vec3d bbox_ext;
 
     uint16_t level;
 
-    VxTile * top_left;
-    VxTile * top_right;
-    VxTile * btm_left;
-    VxTile * btm_right;
+    std::unique_ptr<VxTile> top_left;
+    std::unique_ptr<VxTile> top_right;
+    std::unique_ptr<VxTile> btm_left;
+    std::unique_ptr<VxTile> btm_right;
 
-    osg::Vec3d bsphere_center;
-    double bsphere_radius;
+    osg::ref_ptr<osg::Geometry> gm_tl;
+    osg::ref_ptr<osg::Geometry> gm_bl;
+    osg::ref_ptr<osg::Geometry> gm_br;
+    osg::ref_ptr<osg::Geometry> gm_tr;
+    uint8_t gm_clip;
+    bool gm_dirty;
 
     VxTile() :
         level(0),
-        top_left(nullptr),
-        top_right(nullptr),
-        btm_left(nullptr),
-        btm_right(nullptr)
+        gm_tl(nullptr),
+        gm_bl(nullptr),
+        gm_br(nullptr),
+        gm_tr(nullptr),
+        gm_clip(0),
+        gm_dirty(true)
+
     {
         // empty
     }
@@ -269,16 +301,48 @@ bool CalcRayEarthIntersection(osg::Vec3d const &rayPoint,
     return false;
 }
 
-bool CalcApproxBoundingSphere(std::vector<osg::Vec3d> const &list_vx,
-                              osg::Vec3d & sphere_center,
-                              double & sphere_radius)
+//bool CalcApproxBoundingSphere(std::vector<osg::Vec3d> const &list_vx,
+//                              osg::Vec3d & sphere_center,
+//                              double & sphere_radius)
+//{
+//    if(list_vx.size() < 3) {
+//        return false;
+//    }
+
+//    // From Real-Time Collision Detection by Ericson p 89
+
+//    // Get the bbox min and max
+//    osg::Vec3d min = list_vx[0];
+//    osg::Vec3d max = list_vx[0];
+
+//    for(auto const & vx : list_vx) {
+//        min.x() = std::min(min.x(),vx.x());
+//        min.y() = std::min(min.y(),vx.y());
+//        min.z() = std::min(min.z(),vx.z());
+
+//        max.x() = std::max(max.x(),vx.x());
+//        max.y() = std::max(max.y(),vx.y());
+//        max.z() = std::max(max.z(),vx.z());
+//    }
+
+//    // Let the center of the sphere be the bbox center
+//    sphere_center = (min+max)*0.5;
+
+//    // Set the radius as the furthest distance between
+//    // the center and any single point in list_vx
+//    sphere_radius = 0;
+//    for(auto const & vx : list_vx) {
+//        sphere_radius = std::max(sphere_radius,(vx-sphere_center).length2());
+//    }
+
+//    sphere_radius = sqrt(sphere_radius);
+//    return true;
+//}
+
+void CalcBoundingBox(std::vector<osg::Vec3d> const &list_vx,
+                     osg::Vec3d & bbox_center,
+                     osg::Vec3d & bbox_extents)
 {
-    if(list_vx.size() < 3) {
-        return false;
-    }
-
-    // From Real-Time Collision Detection by Ericson p 89
-
     // Get the bbox min and max
     osg::Vec3d min = list_vx[0];
     osg::Vec3d max = list_vx[0];
@@ -293,18 +357,30 @@ bool CalcApproxBoundingSphere(std::vector<osg::Vec3d> const &list_vx,
         max.z() = std::max(max.z(),vx.z());
     }
 
-    // Let the center of the sphere be the bbox center
-    sphere_center = (min+max)*0.5;
+    bbox_center = (min+max)*0.5;
+    bbox_extents = (max-bbox_center);
+}
 
-    // Set the radius as the furthest distance between
-    // the center and any single point in list_vx
-    sphere_radius = 0;
+void CalcBoundingBox(std::vector<osg::Vec3d const *> const &list_vx,
+                     osg::Vec3d & bbox_center,
+                     osg::Vec3d & bbox_extents)
+{
+    // Get the bbox min and max
+    osg::Vec3d min = *(list_vx[0]);
+    osg::Vec3d max = *(list_vx[0]);
+
     for(auto const & vx : list_vx) {
-        sphere_radius = std::max(sphere_radius,(vx-sphere_center).length2());
+        min.x() = std::min(min.x(),vx->x());
+        min.y() = std::min(min.y(),vx->y());
+        min.z() = std::min(min.z(),vx->z());
+
+        max.x() = std::max(max.x(),vx->x());
+        max.y() = std::max(max.y(),vx->y());
+        max.z() = std::max(max.z(),vx->z());
     }
 
-    sphere_radius = sqrt(sphere_radius);
-    return true;
+    bbox_center = (min+max)*0.5;
+    bbox_extents = (max-bbox_center);
 }
 
 bool CalcHorizonPlane(osg::Vec3d const &eye,
@@ -352,23 +428,73 @@ double CalcDistPointPlane(osg::Vec3d const &plane_norm,
     return ((plane_norm*distal_pt)-d)/(plane_norm*plane_norm);
 }
 
-bool CalcFrustumIntersectsSphere(osg::Vec3d const &sphere_center,
-                                 double const sphere_radius)
-{
-    // Calculate the signed distance between the
-    // sphere_center and the frustum plane
+//bool CalcFrustumIntersectsSphere(osg::Vec3d const &sphere_center,
+//                                 double const sphere_radius)
+//{
+//    // Calculate the signed distance between the
+//    // sphere_center and the frustum plane
 
+//    for(size_t i=0; i < 6; i++) {
+//        double const dist = CalcDistPointPlane(g_list_frustum_plane_norms[i],
+//                                               g_list_frustum_plane_pts[i],
+//                                               sphere_center);
+
+//        if(dist > sphere_radius) {
+//            // its outside this plane
+//            return false;
+//        }
+//    }
+//    return true;
+//}
+
+bool CalcFrustumIntersectsBox(osg::Vec3d const &bbox_center,
+                              osg::Vec3d const &bbox_ext)
+{
     for(size_t i=0; i < 6; i++) {
+        // min distance between bbox center and plane
         double const dist = CalcDistPointPlane(g_list_frustum_plane_norms[i],
                                                g_list_frustum_plane_pts[i],
-                                               sphere_center);
+                                               bbox_center);
 
-        if(dist > sphere_radius) {
-            // its outside this plane
+        // find the proj of the maximally distal point of the bbox
+        // in the direction of the plane normal in the bbox onto
+        // the plane normal ?
+        double const r =
+                bbox_ext.x()*fabs(g_list_frustum_plane_norms[i].x()) +
+                bbox_ext.y()*fabs(g_list_frustum_plane_norms[i].y()) +
+                bbox_ext.z()*fabs(g_list_frustum_plane_norms[i].z());
+
+        if(dist > r) {
+            // bbox is outside this plane
             return false;
         }
     }
     return true;
+}
+
+bool CalcBBoxIsBehindPlane(osg::Vec3d const &plane_normal,
+                           osg::Vec3d const &plane_pt,
+                           osg::Vec3d const &bbox_center,
+                           osg::Vec3d const &bbox_ext)
+{
+    // min distance between bbox center and plane
+    double const dist = CalcDistPointPlane(plane_normal,
+                                           plane_pt,
+                                           bbox_center);
+
+    // find the proj of the maximally distal point of the bbox
+    // in the direction of the plane normal in the bbox onto
+    // the plane normal ?
+    double const r =
+            bbox_ext.x()*fabs(plane_normal.x()) +
+            bbox_ext.y()*fabs(plane_normal.y()) +
+            bbox_ext.z()*fabs(plane_normal.z());
+
+    if(dist < -r) {
+        // bbox is completely behind the plane
+        return true;
+    }
+    return false;
 }
 
 std::vector<double> CalcLodDistances()
@@ -497,6 +623,10 @@ osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera)
 
         osg::Vec3d horizon_norm,horizon_pt;
         if(CalcHorizonPlane(eye,horizon_norm,horizon_pt)) {
+            // save
+            g_horizon_plane_norm = horizon_norm;
+            g_horizon_plane_pt = horizon_pt;
+
             // Draw the plane as a circle centered on horizon_pt
             // with radius RAD_AV*0.5
             osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(16);
@@ -712,9 +842,6 @@ osg::ref_ptr<osg::MatrixTransform> BuildFrustumNode(osg::Camera * camera)
     osg::ref_ptr<osg::Geode> geode = new osg::Geode;
     geode->addDrawable( geom );
 
-    geode->getOrCreateStateSet()->setMode( GL_LIGHTING, osg::StateAttribute::OFF | osg::StateAttribute::PROTECTED );
-
-
     // Create parent MatrixTransform to transform the view volume by
     // the inverse ModelView matrix.
     osg::ref_ptr<osg::MatrixTransform> mt = new osg::MatrixTransform;
@@ -842,9 +969,104 @@ osg::ref_ptr<osg::Group> BuildFrustumCullingTest()
     return gp;
 }
 
+void BuildTile(VxTile * tile,
+               double minLon,
+               double minLat,
+               double maxLon,
+               double maxLat,
+               uint16_t level)
+{
+    tile->minLon = minLon;
+    tile->minLat = minLat;
+    tile->maxLon = maxLon;
+    tile->maxLat = maxLat;
+    tile->midLon = (minLon+maxLon)*0.5;
+    tile->midLat = (minLat+maxLat)*0.5;
+
+    PointLLA const lla_tl(tile->minLon,tile->maxLat);
+    PointLLA const lla_bl(tile->minLon,tile->minLat);
+    PointLLA const lla_br(tile->maxLon,tile->minLat);
+    PointLLA const lla_tr(tile->maxLon,tile->maxLat);
+    PointLLA const lla_mm(tile->midLon,tile->midLat);
+    PointLLA const lla_tm(tile->midLon,tile->maxLat);
+    PointLLA const lla_bm(tile->midLon,tile->minLat);
+    PointLLA const lla_ml(tile->minLon,tile->midLat);
+    PointLLA const lla_mr(tile->maxLon,tile->midLat);
+
+    tile->ecef_tl = ConvLLAToECEF(lla_tl);
+    tile->ecef_bl = ConvLLAToECEF(lla_bl);
+    tile->ecef_br = ConvLLAToECEF(lla_br);
+    tile->ecef_tr = ConvLLAToECEF(lla_tr);
+    tile->ecef_mm = ConvLLAToECEF(lla_mm);
+    tile->ecef_tm = ConvLLAToECEF(lla_tm);
+    tile->ecef_bm = ConvLLAToECEF(lla_bm);
+    tile->ecef_ml = ConvLLAToECEF(lla_ml);
+    tile->ecef_mr = ConvLLAToECEF(lla_mr);
+
+    std::vector<osg::Vec3d> list_vx;
+    list_vx.push_back(tile->ecef_tl);
+    list_vx.push_back(tile->ecef_bl);
+    list_vx.push_back(tile->ecef_br);
+    list_vx.push_back(tile->ecef_tr);
+
+    CalcBoundingBox(list_vx,
+                    tile->bbox_center,
+                    tile->bbox_ext);
+
+    tile->level = level;
+}
+
+void BuildTile(VxTile * tile,
+               double minLon,
+               double minLat,
+               double maxLon,
+               double maxLat,
+               osg::Vec3d const &ecef_tl,
+               osg::Vec3d const &ecef_bl,
+               osg::Vec3d const &ecef_br,
+               osg::Vec3d const &ecef_tr,
+               uint16_t level)
+{
+    tile->minLon = minLon;
+    tile->minLat = minLat;
+    tile->maxLon = maxLon;
+    tile->maxLat = maxLat;
+    tile->midLon = (minLon+maxLon)*0.5;
+    tile->midLat = (minLat+maxLat)*0.5;
+
+    tile->ecef_tl = ecef_tl;
+    tile->ecef_bl = ecef_bl;
+    tile->ecef_br = ecef_br;
+    tile->ecef_tr = ecef_tr;
+
+    PointLLA const lla_mm(tile->midLon,tile->midLat);
+    PointLLA const lla_tm(tile->midLon,tile->maxLat);
+    PointLLA const lla_bm(tile->midLon,tile->minLat);
+    PointLLA const lla_ml(tile->minLon,tile->midLat);
+    PointLLA const lla_mr(tile->maxLon,tile->midLat);
+
+    tile->ecef_mm = ConvLLAToECEF(lla_mm);
+    tile->ecef_tm = ConvLLAToECEF(lla_tm);
+    tile->ecef_bm = ConvLLAToECEF(lla_bm);
+    tile->ecef_ml = ConvLLAToECEF(lla_ml);
+    tile->ecef_mr = ConvLLAToECEF(lla_mr);
+
+    std::vector<osg::Vec3d> list_vx;
+    list_vx.push_back(tile->ecef_tl);
+    list_vx.push_back(tile->ecef_bl);
+    list_vx.push_back(tile->ecef_br);
+    list_vx.push_back(tile->ecef_tr);
+
+    CalcBoundingBox(list_vx,
+                    tile->bbox_center,
+                    tile->bbox_ext);
+
+    tile->level = level;
+}
+
 void SplitTile(VxTile * parent)
 {
-    // Split this tile into 4
+    // Split this tile into 4   
     PointLLA lla_cen;
     lla_cen.lon = (parent->minLon + parent->maxLon)*0.5;
     lla_cen.lat = (parent->minLat + parent->maxLat)*0.5;
@@ -855,152 +1077,220 @@ void SplitTile(VxTile * parent)
     PointLLA const lla_ml(parent->minLon,lla_cen.lat);
     PointLLA const lla_mr(parent->maxLon,lla_cen.lat);
 
-    osg::Vec3d const ecef_cen = ConvLLAToECEF(lla_cen);
-    osg::Vec3d const ecef_tm = ConvLLAToECEF(lla_tm);
-    osg::Vec3d const ecef_bm = ConvLLAToECEF(lla_bm);
-    osg::Vec3d const ecef_ml = ConvLLAToECEF(lla_ml);
-    osg::Vec3d const ecef_mr = ConvLLAToECEF(lla_mr);
+    osg::Vec3d const & ecef_cen = parent->ecef_mm;
+    osg::Vec3d const & ecef_tm = parent->ecef_tm;
+    osg::Vec3d const & ecef_bm = parent->ecef_bm;
+    osg::Vec3d const & ecef_ml = parent->ecef_ml;
+    osg::Vec3d const & ecef_mr = parent->ecef_mr;
 
     uint16_t const next_level = parent->level + 1;
 
     // TOP-LEFT
     {
         auto & tl = parent->top_left;
-        tl = new VxTile;
+        tl.reset(new VxTile);
 
-        tl->minLon = lla_ml.lon;
-        tl->minLat = lla_ml.lat;
-
-        tl->maxLon = lla_tm.lon;
-        tl->maxLat = lla_tm.lat;
-
-        tl->ecef_tl = parent->ecef_tl;
-        tl->ecef_bl = ecef_ml;
-        tl->ecef_br = ecef_cen;
-        tl->ecef_tr = ecef_tm;
-
-        tl->level = next_level;
-
-//        std::cout << "my_level: " << tl->level << ", ";
-//        std::cout << "minLat: " << tl->minLat << ", "
-//                  << "maxLat: " << tl->maxLat << ", "
-//                  << "minLon: " << tl->minLon << ", "
-//                  << "maxLon: " << tl->maxLon
-//                  << std::endl;
+        BuildTile(tl.get(),lla_ml.lon,lla_ml.lat,lla_tm.lon,lla_tm.lat,parent->ecef_tl,ecef_ml,ecef_cen,ecef_tm,next_level);
     }
 
     // TOP-RIGHT
     {
         auto & tr = parent->top_right;
-        tr = new VxTile;
+        tr.reset(new VxTile);
 
-        tr->minLon = lla_cen.lon;
-        tr->minLat = lla_cen.lat;
-
-        tr->maxLon = parent->maxLon;
-        tr->maxLat = parent->maxLat;
-
-        tr->ecef_tl = ecef_tm;
-        tr->ecef_bl = ecef_cen;
-        tr->ecef_br = ecef_mr;
-        tr->ecef_tr = parent->ecef_tr;
-
-        tr->level = next_level;
+        BuildTile(tr.get(),lla_cen.lon,lla_cen.lat,parent->maxLon,parent->maxLat,ecef_tm,ecef_cen,ecef_mr,parent->ecef_tr,next_level);
     }
 
     // BOTTOM-LEFT
     {
         auto & bl = parent->btm_left;
-        bl = new VxTile;
+        bl.reset(new VxTile);
 
-        bl->minLon = parent->minLon;
-        bl->minLat = parent->minLat;
-
-        bl->maxLon = lla_cen.lon;
-        bl->maxLat = lla_cen.lat;
-
-        bl->ecef_tl = ecef_ml;
-        bl->ecef_bl = parent->ecef_bl;
-        bl->ecef_br = ecef_bm;
-        bl->ecef_tr = ecef_cen;
-
-        bl->level = next_level;
+        BuildTile(bl.get(),parent->minLon,parent->minLat,lla_cen.lon,lla_cen.lat,ecef_ml,parent->ecef_bl,ecef_bm,ecef_cen,next_level);
     }
 
     // BOTTOM-RIGHT
     {
         auto & br = parent->btm_right;
-        br = new VxTile;
+        br.reset(new VxTile);
 
-        br->minLon = lla_bm.lon;
-        br->minLat = lla_bm.lat;
-
-        br->maxLon = lla_mr.lon;
-        br->maxLat = lla_mr.lat;
-
-        br->ecef_tl = ecef_cen;
-        br->ecef_bl = ecef_bm;
-        br->ecef_br = parent->ecef_br;
-        br->ecef_tr = ecef_mr;
-
-        br->level = next_level;
+        BuildTile(br.get(),lla_bm.lon,lla_bm.lat,lla_mr.lon,lla_mr.lat,ecef_cen,ecef_bm,parent->ecef_br,ecef_mr,next_level);
     }
 }
 
-void BuildViewExtents(osg::Vec3d const &eye,
-                      osg::Vec3d const &surf_xsec,
+osg::ref_ptr<osg::Geometry> QuickBuildTileGeometry(VxTile * tile, uint8_t quad)
+{
+    osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(4);
+
+    if(quad == 0) {
+
+    }
+    if(quad == 2) {
+
+    }
+    if(quad == 4) {
+
+    }
+    if(quad == 8) {
+
+    }
+    list_vx->at(0) = tile->ecef_tl;
+    list_vx->at(1) = tile->ecef_bl;
+    list_vx->at(2) = tile->ecef_br;
+    list_vx->at(3) = tile->ecef_tr;
+
+    osg::ref_ptr<osg::Vec4Array> list_cx =
+            new osg::Vec4Array(1);
+    list_cx->at(0) = osg::Vec4(1.0,1.0,1.0,1.0);
+
+    osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+    gm->setVertexArray(list_vx);
+    gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+    gm->addPrimitiveSet(new osg::DrawArrays(
+        osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+
+    return gm;
+}
+
+size_t g_tile_count=0;
+
+void BuildViewExtentsGeometry(VxTile * tile, osg::ref_ptr<osg::Group> &gp_vx_tiles)
+{
+
+    //  Build the geometry for this tile
+    if(tile->gm_dirty) {
+
+        osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+
+        if(!(tile->top_left || tile->gm_tl)) {
+            // build gm_tl
+            tile->gm_tl = QuickBuildTileGeometry(tile,0);
+            gd->addDrawable(tile->gm_tl);
+        }
+
+        if(!(tile->btm_left || tile->gm_bl)) {
+            // build gm_bl
+            tile->gm_bl = QuickBuildTileGeometry(tile,2);
+            gd->addDrawable(tile->gm_bl);
+        }
+
+        if(!(tile->btm_right || tile->gm_br)) {
+            // build gm_br
+            tile->gm_br = QuickBuildTileGeometry(tile,4);
+            gd->addDrawable(tile->gm_br);
+        }
+
+        if(!(tile->top_right || tile->gm_tr)) {
+            // build gm_tr
+            tile->gm_tr = QuickBuildTileGeometry(tile,8);
+            gd->addDrawable(tile->gm_tr);
+        }
+
+        if(gd->getNumDrawables() > 0) {
+            gp_vx_tiles->addChild(gd);
+        }
+
+        tile->gm_dirty = false;
+    }
+
+
+    if(tile->top_left) {
+        BuildViewExtentsGeometry(tile->top_left.get(),gp_vx_tiles);
+    }
+    if(tile->btm_left) {
+        BuildViewExtentsGeometry(tile->btm_left.get(),gp_vx_tiles);
+    }
+    if(tile->btm_right) {
+        BuildViewExtentsGeometry(tile->btm_right.get(),gp_vx_tiles);
+    }
+    if(tile->top_right) {
+        BuildViewExtentsGeometry(tile->top_right.get(),gp_vx_tiles);
+    }
+}
+
+bool BuildViewExtents(osg::Vec3d const &eye,
                       VxTile * tile)
 {
-    // Return if tile isn't visible within the camera frustum
-    // if(!visible) { return; }
+    g_tile_count++;
 
-    // If the tile size is larger than [threshold], divide
-    if(tile->level < K_MIN_VX_LOD) {
+    // Check if this tile is visible with the
+    // curent view frustum:
 
-        g_list_lod_vxtiles[tile->level].push_back(tile);
-        SplitTile(tile);
-        BuildViewExtents(eye,surf_xsec,tile->top_left);
-        BuildViewExtents(eye,surf_xsec,tile->btm_left);
-        BuildViewExtents(eye,surf_xsec,tile->btm_right);
-        BuildViewExtents(eye,surf_xsec,tile->top_right);
+    // Note: we can combine the horizon test as
+    // just another plane in the frustum test...
+
+    bool visible = ((!CalcBBoxIsBehindPlane(g_horizon_plane_norm,
+                                            g_horizon_plane_pt,
+                                            tile->bbox_center,
+                                            tile->bbox_ext)) &&
+
+                      CalcFrustumIntersectsBox(tile->bbox_center,
+                                               tile->bbox_ext));
+
+    if(!visible) {
+        return false;
     }
-    else {
-        // Return if the tile doesn't intersect the lod distance
-        // from the eye for its level
 
-        // Approximate the tile with two triangles
-        bool tri_xsec = TriangleIntersectsSphere(tile->ecef_tl,
-                                                 tile->ecef_bl,
-                                                 tile->ecef_br,
-                                                 eye,
-                                                 g_list_lod_dist[tile->level]);
-
-        if(!tri_xsec) {
-            tri_xsec = TriangleIntersectsSphere(tile->ecef_tl,
-                                                tile->ecef_br,
-                                                tile->ecef_tr,
-                                                eye,
-                                                g_list_lod_dist[tile->level]);
+    // Check if this tile needs to be split
+    // based on distance from the eye
+    if(tile->level < (K_MAX_LOD-1)) {
+        bool xsec = false;
+        if(TriangleIntersectsSphere(tile->ecef_tl,
+                                    tile->ecef_bl,
+                                    tile->ecef_br,
+                                    eye,
+                                    g_list_lod_dist[tile->level]))
+        {
+            xsec = true;
+        }
+        else if(TriangleIntersectsSphere(tile->ecef_tl,
+                                         tile->ecef_br,
+                                         tile->ecef_tr,
+                                         eye,
+                                         g_list_lod_dist[tile->level]))
+        {
+            xsec = true;
         }
 
-        if(!tri_xsec) {
-            return;
+        if(xsec) {
+            SplitTile(tile); // optimize by only calling when necessary
+            uint8_t temp_clip = 0;
+
+            if(BuildViewExtents(eye,tile->top_left.get())) {
+                temp_clip |= 1;
+            }
+            else {
+                tile->top_left = nullptr;
+            }
+
+            if(BuildViewExtents(eye,tile->btm_left.get())) {
+                temp_clip |= 2;
+            }
+            else {
+                tile->btm_left = nullptr;
+            }
+
+            if(BuildViewExtents(eye,tile->btm_right.get())) {
+                temp_clip |= 4;
+            }
+            else {
+                tile->btm_right = nullptr;
+            }
+
+            if(BuildViewExtents(eye,tile->top_right.get())) {
+                temp_clip |= 8;
+            }
+            else {
+                tile->top_right = nullptr;
+            }
+
+            if(!(temp_clip == tile->gm_clip)) {
+                tile->gm_dirty = true;
+            }
         }
-
-        // If the tile intersects its lod sphere, subdivide it
-        g_list_lod_vxtiles[tile->level].push_back(tile);
-
-        // Return if the tile level exceeds the max
-        if(tile->level == (K_MAX_VX_LOD-1)) {
-            return;
-        }
-
-        SplitTile(tile);
-        BuildViewExtents(eye,surf_xsec,tile->top_left);
-        BuildViewExtents(eye,surf_xsec,tile->btm_left);
-        BuildViewExtents(eye,surf_xsec,tile->btm_right);
-        BuildViewExtents(eye,surf_xsec,tile->top_right);
     }
+
+    return true;
 }
 
 std::vector<VxTile*> BuildBaseViewExtents()
@@ -1022,28 +1312,7 @@ std::vector<VxTile*> BuildBaseViewExtents()
             vxtile->minLat = -90.0 + lat_step*j;
             vxtile->maxLat = vxtile->minLat + lat_step;
 
-            vxtile->ecef_tl = ConvLLAToECEF(PointLLA(vxtile->minLon,vxtile->maxLat,0));
-            vxtile->ecef_bl = ConvLLAToECEF(PointLLA(vxtile->minLon,vxtile->minLat,0));
-            vxtile->ecef_br = ConvLLAToECEF(PointLLA(vxtile->maxLon,vxtile->minLat,0));
-            vxtile->ecef_tr = ConvLLAToECEF(PointLLA(vxtile->maxLon,vxtile->maxLat,0));
-
-            // calculate the bounding volume
-            std::vector<osg::Vec3d> list_vx;
-            list_vx.push_back(vxtile->ecef_tl);
-            list_vx.push_back(vxtile->ecef_bl);
-            list_vx.push_back(vxtile->ecef_br);
-            list_vx.push_back(vxtile->ecef_tr);
-
-//            std::cout << vxtile->bsphere_center << std::endl;
-//            std::cout << vxtile->bsphere_radius << std::endl;
-
-            if(!CalcApproxBoundingSphere(list_vx,
-                                         vxtile->bsphere_center,
-                                         vxtile->bsphere_radius))
-            {
-                std::cout << "####: Fatal: CalcApproxBoundingSphere failed" << std::endl;
-                assert(1==0);
-            }
+            BuildTile(vxtile,vxtile->minLon,vxtile->minLat,vxtile->maxLon,vxtile->maxLat,2);
 
             list_vxtiles.push_back(vxtile);
         }
@@ -1059,34 +1328,41 @@ osg::ref_ptr<osg::Group> BuildBaseViewExtentsGeometry(std::vector<VxTile*> const
     for(auto & vx_tile : list_vx_tiles)
     {
         // Create the bounding sphere geometry for this tile
-        osg::ref_ptr<osg::ShapeDrawable> bsphere =
-                new osg::ShapeDrawable(
-                    new osg::Sphere(vx_tile->bsphere_center,
-                                    vx_tile->bsphere_radius));
+//        osg::ref_ptr<osg::ShapeDrawable> bsphere =
+//                new osg::ShapeDrawable(
+//                    new osg::Sphere(vx_tile->bsphere_center,
+//                                    vx_tile->bsphere_radius));
 
-        bsphere->setColor(osg::Vec4(0.5,0.5,0.5,0.1));
+        osg::ref_ptr<osg::ShapeDrawable> bbox =
+                new osg::ShapeDrawable(
+                    new osg::Box(vx_tile->bbox_center,
+                                 vx_tile->bbox_ext.x()*2.0,
+                                 vx_tile->bbox_ext.y()*2.0,
+                                 vx_tile->bbox_ext.z()*2.0));
+
+        bbox->setColor(osg::Vec4(0.5,0.5,0.5,0.1));
 
         osg::ref_ptr<osg::Geode> gd = new osg::Geode;
-        gd->addDrawable(bsphere);
+        gd->addDrawable(bbox);
         gp->addChild(gd);
     }
 
     gp->getOrCreateStateSet()->setMode ( GL_DEPTH_TEST, osg::StateAttribute::OFF );
-    gp->setName("bspheres");
+    gp->setName("bboxes");
     return gp;
 }
 
-void UpdateBaseViewExtentsGeometryColor(osg::ref_ptr<osg::Group> gp_bspheres,
+void UpdateBaseViewExtentsGeometryColor(osg::ref_ptr<osg::Group> bboxes,
                                         size_t const index,
                                         osg::Vec4 const &color)
 {
     osg::Geode * gd = static_cast<osg::Geode*>(
-                gp_bspheres->getChild(index));
+                bboxes->getChild(index));
 
-    osg::ShapeDrawable * bsphere = static_cast<osg::ShapeDrawable*>(
+    osg::ShapeDrawable * bbox = static_cast<osg::ShapeDrawable*>(
                 gd->getDrawable(0));
 
-    bsphere->setColor(color);
+    bbox->setColor(color);
 }
 
 class KeyboardEventHandler : public osgGA::GUIEventHandler
@@ -1136,29 +1412,34 @@ int main(int argc, const char *argv[])
     // detailed view extents by testing the base extents against
     // the frustum.
     std::vector<VxTile*> list_base_vx_tiles = BuildBaseViewExtents();
+    osg::ref_ptr<osg::Group> gp_vx_tiles = new osg::Group;
 
     // Celestial body surface mesh
     auto gp_celestial = BuildCelestialSurfaceNode();
 
     // Bounding spheres for the base vx tiles
-    auto gp_bspheres = BuildBaseViewExtentsGeometry(list_base_vx_tiles);
+    auto gp_bboxes = BuildBaseViewExtentsGeometry(list_base_vx_tiles);
 
     // View0 root
     osg::ref_ptr<osg::Group> gp_root0 = new osg::Group;
     gp_root0->addChild(gp_celestial);
-    gp_root0->addChild(gp_bspheres);
+    gp_root0->addChild(gp_bboxes);
+    gp_root0->addChild(gp_vx_tiles);
 
     // View1 root
     osg::ref_ptr<osg::Group> gp_root1 = new osg::Group;
     gp_root1->addChild(gp_celestial);
-    gp_root1->addChild(gp_bspheres);
+    gp_root1->addChild(gp_bboxes);
+    gp_root1->addChild(gp_vx_tiles);
 
     // disable lighting and enable blending
     gp_root0->getOrCreateStateSet()->setMode( GL_LIGHTING,osg::StateAttribute::OFF);
     gp_root0->getOrCreateStateSet()->setMode( GL_BLEND,osg::StateAttribute::ON);
+    gp_root0->getOrCreateStateSet()->setMode( GL_DEPTH_TEST,osg::StateAttribute::OFF);
 
     gp_root1->getOrCreateStateSet()->setMode( GL_LIGHTING,osg::StateAttribute::OFF);
     gp_root1->getOrCreateStateSet()->setMode( GL_BLEND,osg::StateAttribute::ON);
+    gp_root1->getOrCreateStateSet()->setMode( GL_DEPTH_TEST,osg::StateAttribute::OFF);
 
 
     osgViewer::CompositeViewer viewer;
@@ -1192,22 +1473,44 @@ int main(int argc, const char *argv[])
 
     while (!viewer.done())
     {
+        osg::Camera * camera = viewer.getView(0)->getCamera();
+
         // Create a new camera frustum node
-        auto new_frustum = BuildFrustumNode(viewer.getView(0)->getCamera());
+        auto new_frustum = BuildFrustumNode(camera);
 
         // Create a new horizon plane node
-        auto new_horizonplane = BuildHorizonPlaneNode(viewer.getView(0)->getCamera());
+        auto new_horizonplane = BuildHorizonPlaneNode(camera);
+
+        // Get camera eye
+        osg::Vec3d cam_eye;
+        {
+            osg::Vec3d cam_up,cam_vpt;
+            camera->getViewMatrixAsLookAt(cam_eye,cam_vpt,cam_up);
+        }
 
         // Update the base view extent geometry
-        for(size_t i=0; i < list_base_vx_tiles.size(); i++) {
-            if(CalcFrustumIntersectsSphere(list_base_vx_tiles[i]->bsphere_center,
-                                           list_base_vx_tiles[i]->bsphere_radius)) {
-                UpdateBaseViewExtentsGeometryColor(gp_bspheres,i,osg::Vec4(1.0,0.5,0.0,0.05));
+        {
+            g_tile_count=0;
+            std::chrono::time_point<std::chrono::system_clock> start,end;
+            start = std::chrono::system_clock::now();
+
+            gp_vx_tiles->removeChildren(0,gp_vx_tiles->getNumChildren());
+
+            for(size_t i=0; i < list_base_vx_tiles.size(); i++) {
+                if(BuildViewExtents(cam_eye,list_base_vx_tiles[i])) {
+                    UpdateBaseViewExtentsGeometryColor(gp_bboxes,i,osg::Vec4(1.0,0.5,0.0,0.05));
+                    BuildViewExtentsGeometry(list_base_vx_tiles[i],gp_vx_tiles);
+                }
+                else {
+                    UpdateBaseViewExtentsGeometryColor(gp_bboxes,i,osg::Vec4(0.5,0.5,0.5,0.05));
+                }
             }
-            else {
-                UpdateBaseViewExtentsGeometryColor(gp_bspheres,i,osg::Vec4(0.5,0.5,0.5,0.05));
-            }
+            end = std::chrono::system_clock::now();
+            std::chrono::duration<double> elapsed_seconds = end-start;
+//            std::cout << "###: took: " << elapsed_seconds.count()*1000.0
+//                      << " ms for " << g_tile_count << " tiles" << std::endl;
         }
+
 
         // Update gp_root0
         {
