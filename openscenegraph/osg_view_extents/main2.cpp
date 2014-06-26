@@ -65,23 +65,23 @@ uint16_t const K_MIN_VX_LOD = 2;
 
 std::vector<osg::Vec4> const K_COLOR_TABLE {
     {0., 0., 0., 1.},
-    {41/255., 41/255., 41/255., 0.},
-    {102/255., 102/255., 102/255., 0.},
-    {140/255., 140/255., 140/255., 0.},
-    {200/255., 200/255., 200/255., 0.},
-    {66/255., 206/255., 252/255., 0.},
-    {124/255., 160/255., 252/255., 0.},
-    {173/255., 146/255., 252/255., 0.},
-    {255/255., 120/255., 252/255., 0.},
-    {255/255., 117/255., 172/255., 0.},
-    {255/255., 142/255., 107/255., 0.},
-    {252/255., 174/255., 91/255., 0.},
-    {252/255., 194/255., 0/255., 0.},
-    {202/255., 245/255., 29/255., 0.},
-    {0/255., 191/255., 0/255., 0.},
-    {100/255., 245/255., 174/255., 0.},
-    {0/255., 235/255., 231/255., 0.},
-    {255/255., 255/255., 255/255., 0.}
+    {41/255., 41/255., 41/255., 1.},
+    {102/255., 102/255., 102/255., 1.},
+    {140/255., 140/255., 140/255., 1.},
+    {200/255., 200/255., 200/255., 1.},
+    {66/255., 206/255., 252/255., 1.},
+    {124/255., 160/255., 252/255., 1.},
+    {173/255., 146/255., 252/255., 1.},
+    {255/255., 120/255., 252/255., 1.},
+    {255/255., 117/255., 172/255., 1.},
+    {255/255., 142/255., 107/255., 1.},
+    {252/255., 174/255., 91/255., 1.},
+    {252/255., 194/255., 0/255., 1.},
+    {202/255., 245/255., 29/255., 1.},
+    {0/255., 191/255., 0/255., 1.},
+    {100/255., 245/255., 174/255., 1.},
+    {0/255., 235/255., 231/255., 1.},
+    {255/255., 255/255., 255/255., 1.}
 };
 
 struct VxTile;
@@ -145,8 +145,10 @@ struct VxTile
     osg::Vec3d ecef_mr;
     osg::Vec3d ecef_mm;
 
+    // obb
     osg::Vec3d bbox_center;
-    osg::Vec3d bbox_ext;
+    osg::Vec3d bbox_ori[3]; // local orientation axes
+    osg::Vec3d bbox_ext;    // positive half-extents
 
     uint16_t level;
 
@@ -572,9 +574,6 @@ bool BuildEarthSurfaceGeometry(double minLon, double minLat,
 osg::ref_ptr<osg::AutoTransform> BuildLodRingsNode()
 {
     osg::ref_ptr<osg::Geode> gd_rings = new osg::Geode;
-    gd_rings->getOrCreateStateSet()->setMode( GL_LIGHTING,
-                                              osg::StateAttribute::OFF |
-                                              osg::StateAttribute::PROTECTED );
 
     // For each ring
     for(size_t i=0; i < K_MAX_LOD; i++) {
@@ -583,7 +582,7 @@ osg::ref_ptr<osg::AutoTransform> BuildLodRingsNode()
         osg::Vec4 color = K_COLOR_TABLE[i];
 
         // Create a ring of vertices
-        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray((i+1)*2 + 12);
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray((K_MAX_LOD-(i+1))*2 + 12);
         double const rotate_by_rads = (2.0*K_PI/list_vx->size());
 
         for(size_t j=0; j < list_vx->size(); j++){
@@ -837,7 +836,7 @@ osg::ref_ptr<osg::MatrixTransform> BuildFrustumNode(osg::Camera * camera)
     geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINES, 8, idxLines ) );
     geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINE_LOOP, 4, idxLoops0 ) );
     geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINE_LOOP, 4, idxLoops1 ) );
-    geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINES, 12, idxNormals ) );
+//    geom->addPrimitiveSet( new osg::DrawElementsUShort( osg::PrimitiveSet::LINES, 12, idxNormals ) );
 
     osg::ref_ptr<osg::Geode> geode = new osg::Geode;
     geode->addDrawable( geom );
@@ -861,7 +860,7 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
 
     BuildEarthSurfaceGeometry(-180,-90,
                               180,90,
-                              32,16,
+                              16,8,
                               list_vx,
                               list_tx,
                               list_ix);
@@ -874,7 +873,7 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
 
     osg::ref_ptr<osg::Vec4Array> cx_array =
             new osg::Vec4Array;
-    cx_array->push_back(osg::Vec4(0.25,0.25,0.25,1.0));
+    cx_array->push_back(osg::Vec4(0.2,0.2,0.2,1.0));
 
     osg::ref_ptr<osg::DrawElementsUShort> ix_array =
             new osg::DrawElementsUShort(GL_TRIANGLES);
@@ -896,12 +895,11 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
     osg::ref_ptr<osg::Group> gp = new osg::Group;
     gp->addChild(gd.get());
 
-    // enable wireframe and disable lighting
-    osg::ref_ptr<osg::PolygonMode> polygonMode = new osg::PolygonMode;
-    polygonMode->setMode(osg::PolygonMode::FRONT_AND_BACK,
-                         osg::PolygonMode::LINE);
-
-    gp->getOrCreateStateSet()->setAttribute(polygonMode.get());
+//    // enable wireframe and disable lighting
+//    osg::ref_ptr<osg::PolygonMode> polygonMode = new osg::PolygonMode;
+//    polygonMode->setMode(osg::PolygonMode::FRONT_AND_BACK,
+//                         osg::PolygonMode::LINE);
+//    gp->getOrCreateStateSet()->setAttribute(polygonMode.get());
     gp->setName("celestialbody");
 
     return gp;
@@ -1122,18 +1120,31 @@ osg::ref_ptr<osg::Geometry> QuickBuildTileGeometry(VxTile * tile, uint8_t quad)
 {
     osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(4);
 
-    if(quad == 0) {
+//    if(quad == 0) {
+//        list_vx->at(0) = tile->ecef_tl;
+//        list_vx->at(1) = tile->ecef_ml;
+//        list_vx->at(2) = tile->ecef_mm;
+//        list_vx->at(3) = tile->ecef_tm;
+//    }
+//    if(quad == 2) {
+//        list_vx->at(0) = tile->ecef_ml;
+//        list_vx->at(1) = tile->ecef_bl;
+//        list_vx->at(2) = tile->ecef_bm;
+//        list_vx->at(3) = tile->ecef_mm;
+//    }
+//    if(quad == 4) {
+//        list_vx->at(0) = tile->ecef_mm;
+//        list_vx->at(1) = tile->ecef_bm;
+//        list_vx->at(2) = tile->ecef_br;
+//        list_vx->at(3) = tile->ecef_mr;
+//    }
+//    if(quad == 8) {
+//        list_vx->at(0) = tile->ecef_tl;
+//        list_vx->at(1) = tile->ecef_ml;
+//        list_vx->at(2) = tile->ecef_mm;
+//        list_vx->at(3) = tile->ecef_tm;
+//    }
 
-    }
-    if(quad == 2) {
-
-    }
-    if(quad == 4) {
-
-    }
-    if(quad == 8) {
-
-    }
     list_vx->at(0) = tile->ecef_tl;
     list_vx->at(1) = tile->ecef_bl;
     list_vx->at(2) = tile->ecef_br;
@@ -1141,7 +1152,7 @@ osg::ref_ptr<osg::Geometry> QuickBuildTileGeometry(VxTile * tile, uint8_t quad)
 
     osg::ref_ptr<osg::Vec4Array> list_cx =
             new osg::Vec4Array(1);
-    list_cx->at(0) = osg::Vec4(1.0,1.0,1.0,1.0);
+    list_cx->at(0) = K_COLOR_TABLE[tile->level];
 
     osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
     gm->setVertexArray(list_vx);
@@ -1168,23 +1179,23 @@ void BuildViewExtentsGeometry(VxTile * tile, osg::ref_ptr<osg::Group> &gp_vx_til
             gd->addDrawable(tile->gm_tl);
         }
 
-        if(!(tile->btm_left || tile->gm_bl)) {
-            // build gm_bl
-            tile->gm_bl = QuickBuildTileGeometry(tile,2);
-            gd->addDrawable(tile->gm_bl);
-        }
+//        if(!(tile->btm_left || tile->gm_bl)) {
+//            // build gm_bl
+//            tile->gm_bl = QuickBuildTileGeometry(tile,2);
+//            gd->addDrawable(tile->gm_bl);
+//        }
 
-        if(!(tile->btm_right || tile->gm_br)) {
-            // build gm_br
-            tile->gm_br = QuickBuildTileGeometry(tile,4);
-            gd->addDrawable(tile->gm_br);
-        }
+//        if(!(tile->btm_right || tile->gm_br)) {
+//            // build gm_br
+//            tile->gm_br = QuickBuildTileGeometry(tile,4);
+//            gd->addDrawable(tile->gm_br);
+//        }
 
-        if(!(tile->top_right || tile->gm_tr)) {
-            // build gm_tr
-            tile->gm_tr = QuickBuildTileGeometry(tile,8);
-            gd->addDrawable(tile->gm_tr);
-        }
+//        if(!(tile->top_right || tile->gm_tr)) {
+//            // build gm_tr
+//            tile->gm_tr = QuickBuildTileGeometry(tile,8);
+//            gd->addDrawable(tile->gm_tr);
+//        }
 
         if(gd->getNumDrawables() > 0) {
             gp_vx_tiles->addChild(gd);
@@ -1284,9 +1295,9 @@ bool BuildViewExtents(osg::Vec3d const &eye,
                 tile->top_right = nullptr;
             }
 
-            if(!(temp_clip == tile->gm_clip)) {
+//            if(!(temp_clip == tile->gm_clip)) {
                 tile->gm_dirty = true;
-            }
+//            }
         }
     }
 
@@ -1420,17 +1431,21 @@ int main(int argc, const char *argv[])
     // Bounding spheres for the base vx tiles
     auto gp_bboxes = BuildBaseViewExtentsGeometry(list_base_vx_tiles);
 
+    // Lod rings
+    osg::ref_ptr<osg::AutoTransform> xf_rings = BuildLodRingsNode();
+
     // View0 root
     osg::ref_ptr<osg::Group> gp_root0 = new osg::Group;
     gp_root0->addChild(gp_celestial);
-    gp_root0->addChild(gp_bboxes);
+//    gp_root0->addChild(gp_bboxes);
     gp_root0->addChild(gp_vx_tiles);
 
     // View1 root
     osg::ref_ptr<osg::Group> gp_root1 = new osg::Group;
     gp_root1->addChild(gp_celestial);
-    gp_root1->addChild(gp_bboxes);
+//    gp_root1->addChild(gp_bboxes);
     gp_root1->addChild(gp_vx_tiles);
+//    gp_root1->addChild(xf_rings);
 
     // disable lighting and enable blending
     gp_root0->getOrCreateStateSet()->setMode( GL_LIGHTING,osg::StateAttribute::OFF);
@@ -1456,7 +1471,7 @@ int main(int argc, const char *argv[])
         view->setCameraManipulator( new osgGA::TrackballManipulator );
     }
 
-    // Create view 1
+    // Create view 1 (this view shows View0's frustum)
     {
         osgViewer::View* view = new osgViewer::View;
         viewer.addView( view );
@@ -1488,6 +1503,9 @@ int main(int argc, const char *argv[])
             camera->getViewMatrixAsLookAt(cam_eye,cam_vpt,cam_up);
         }
 
+        // Update lod rings
+        xf_rings->setPosition(cam_eye);
+
         // Update the base view extent geometry
         {
             g_tile_count=0;
@@ -1498,11 +1516,11 @@ int main(int argc, const char *argv[])
 
             for(size_t i=0; i < list_base_vx_tiles.size(); i++) {
                 if(BuildViewExtents(cam_eye,list_base_vx_tiles[i])) {
-                    UpdateBaseViewExtentsGeometryColor(gp_bboxes,i,osg::Vec4(1.0,0.5,0.0,0.05));
+//                    UpdateBaseViewExtentsGeometryColor(gp_bboxes,i,osg::Vec4(1.0,0.5,0.0,0.05));
                     BuildViewExtentsGeometry(list_base_vx_tiles[i],gp_vx_tiles);
                 }
                 else {
-                    UpdateBaseViewExtentsGeometryColor(gp_bboxes,i,osg::Vec4(0.5,0.5,0.5,0.05));
+//                    UpdateBaseViewExtentsGeometryColor(gp_bboxes,i,osg::Vec4(0.5,0.5,0.5,0.05));
                 }
             }
             end = std::chrono::system_clock::now();

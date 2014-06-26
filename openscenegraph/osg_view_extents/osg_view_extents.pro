@@ -19,4 +19,4 @@ LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -losg
 LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -lOpenThreads
 
 HEADERS += obb.hpp tri.hpp
-SOURCES += main2.cpp
+SOURCES += obb_vis.cpp
