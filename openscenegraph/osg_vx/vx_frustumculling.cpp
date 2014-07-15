@@ -16,7 +16,7 @@ void BuildViewExtentsMinCamDist(VxTile * t,
                                 Frustum const &frustum,
                                 Plane const &horizon_plane)
 {
-    t->_fvis = CalcFrustumOBBIntersect(frustum,t->obb);
+    t->_fvis = CalcFrustumOBBIntersectSAT(frustum,t->obb);
     t->_hvis = !(CalcOBBOutsidePlane(horizon_plane,t->obb));
 
 
@@ -86,7 +86,7 @@ int main()
     auto gp_celestial = BuildCelestialSurfaceNode();
 
     // Base view extents
-    std::vector<VxTile*> list_base_vx_tiles = BuildBaseViewExtents(3);
+    std::vector<VxTile*> list_base_vx_tiles = BuildBaseViewExtents(5);
 
     osgViewer::CompositeViewer viewer;
     viewer.setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
@@ -152,6 +152,10 @@ int main()
         // new vxtiles
         BuildViewExtents(list_base_vx_tiles,frustum,horizon_plane);
         auto new_vxtiles = BuildViewExtentsNode(list_base_vx_tiles);
+//        auto new_vxtilesobb = BuildViewExtentsOBBNode(list_base_vx_tiles);
+
+        // temp new frustumobbproj
+        // auto new_frustumobbproj = BuildFrustumOBBProjNode(frustum,list_base_vx_tiles[0]->obb);
 
         // Update gp_root0
         {
@@ -161,12 +165,17 @@ int main()
                     gp_root0->removeChild(i);
                     i--;
                 }
+                else if(name == "vxtilesobb") {
+                    gp_root0->removeChild(i);
+                    i--;
+                }
                 else if(name == "horizonplane") {
                     gp_root0->removeChild(i);
                     i--;
                 }
             }
             gp_root0->addChild(new_vxtiles);
+//            gp_root0->addChild(new_vxtilesobb);
             gp_root0->addChild(new_horizon);
         }
 
@@ -191,7 +200,15 @@ int main()
                     gp_root1->removeChild(i);
                     i--;
                 }
+                else if(name == "vxtilesobb") {
+                    gp_root1->removeChild(i);
+                    i--;
+                }
                 else if(name == "horizonplane") {
+                    gp_root1->removeChild(i);
+                    i--;
+                }
+                else if(name == "frustumobbproj") {
                     gp_root1->removeChild(i);
                     i--;
                 }
@@ -201,7 +218,9 @@ int main()
             gp_root1->addChild(new_mincamdistline);
             gp_root1->addChild(new_lodrings);
             gp_root1->addChild(new_vxtiles);
+//            gp_root1->addChild(new_vxtilesobb);
             gp_root1->addChild(new_horizon);
+            //gp_root1->addChild(new_frustumobbproj);
         }
 
         viewer.frame();

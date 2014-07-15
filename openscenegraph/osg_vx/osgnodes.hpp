@@ -236,6 +236,13 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(osg::Camera * camera,
         frustum.list_vx[7] = FTL;
 
         // pyramid vx
+        frustum.list_pyr_vx[0] = &(frustum.eye);
+        frustum.list_pyr_vx[1] = &(frustum.list_vx[4]);
+        frustum.list_pyr_vx[2] = &(frustum.list_vx[5]);
+        frustum.list_pyr_vx[3] = &(frustum.list_vx[6]);
+        frustum.list_pyr_vx[4] = &(frustum.list_vx[7]);
+
+        // eye
         frustum.eye = eye;
     }
 
@@ -436,14 +443,18 @@ void BuildViewExtentsGeometry(VxTile const * t, osg::Group * gp)
 //    list_cx->at(0) = K_COLOR_TABLE[t->level];
 
 
+//    if(t->_fvis && t->_hvis) {
+//        list_cx->at(0) = osg::Vec4(0,1,1,1);
+//    }
+//    else if(t->_fvis) {
+//        list_cx->at(0) = osg::Vec4(0,1,0,1);
+//    }
+//    else if(t->_hvis) {
+//        list_cx->at(0) = osg::Vec4(0,0,1,1);
+//    }
+
     if(t->_fvis && t->_hvis) {
-        list_cx->at(0) = osg::Vec4(0,1,1,1);
-    }
-    else if(t->_fvis) {
         list_cx->at(0) = osg::Vec4(0,1,0,1);
-    }
-    else if(t->_hvis) {
-        list_cx->at(0) = osg::Vec4(0,0,1,1);
     }
     else {
         list_cx->at(0) = osg::Vec4(1,0,0,1);
@@ -493,6 +504,105 @@ osg::ref_ptr<osg::Group> BuildViewExtentsNode(std::vector<VxTile*> const &list_b
     gp->getOrCreateStateSet()->setRenderBinDetails(-1,"RenderBin");
 
     gp->setName("vxtiles");
+    return gp;
+}
+
+void BuildViewExtentsOBBGeometry(VxTile * tile, osg::Group * gp)
+{
+    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+
+    osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+
+    list_vx->at(0) =
+            tile->obb.center +
+            osg::Vec3d(tile->obb.ori[0]*-tile->obb.ext.x() +
+                       tile->obb.ori[1]*tile->obb.ext.y() +
+                       tile->obb.ori[2]*tile->obb.ext.z());
+
+    list_vx->at(1) =
+            tile->obb.center +
+            osg::Vec3d(tile->obb.ori[0]*-tile->obb.ext.x()+
+                       tile->obb.ori[1]*-tile->obb.ext.y()+
+                       tile->obb.ori[2]*tile->obb.ext.z());
+
+    list_vx->at(2) =
+            tile->obb.center +
+            osg::Vec3d(tile->obb.ori[0]*tile->obb.ext.x()+
+                       tile->obb.ori[1]*-tile->obb.ext.y()+
+                       tile->obb.ori[2]*tile->obb.ext.z());
+
+    list_vx->at(3) =
+            tile->obb.center +
+            osg::Vec3d(tile->obb.ori[0]*tile->obb.ext.x()+
+                       tile->obb.ori[1]*tile->obb.ext.y()+
+                       tile->obb.ori[2]*tile->obb.ext.z());
+
+    list_vx->at(4) =
+            tile->obb.center +
+            osg::Vec3d(tile->obb.ori[0]*-tile->obb.ext.x() +
+                       tile->obb.ori[1]*tile->obb.ext.y() +
+                       tile->obb.ori[2]*-tile->obb.ext.z());
+
+    list_vx->at(5) =
+            tile->obb.center +
+            osg::Vec3d(tile->obb.ori[0]*-tile->obb.ext.x()+
+                       tile->obb.ori[1]*-tile->obb.ext.y()+
+                       tile->obb.ori[2]*-tile->obb.ext.z());
+
+    list_vx->at(6) =
+            tile->obb.center +
+            osg::Vec3d(tile->obb.ori[0]*tile->obb.ext.x()+
+                       tile->obb.ori[1]*-tile->obb.ext.y()+
+                       tile->obb.ori[2]*-tile->obb.ext.z());
+
+    list_vx->at(7) =
+            tile->obb.center +
+            osg::Vec3d(tile->obb.ori[0]*tile->obb.ext.x()+
+                       tile->obb.ori[1]*tile->obb.ext.y()+
+                       tile->obb.ori[2]*-tile->obb.ext.z());
+
+
+    list_vx->push_back(tile->obb.center);
+
+    list_vx->push_back(tile->obb.faces[0].p);
+
+
+    osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+    for(size_t i=0; i < 8; i++) {
+        list_cx->push_back(osg::Vec4(1,0.5,0,0.5));
+    }
+
+    list_cx->push_back(osg::Vec4(1,0,1,1));
+    list_cx->push_back(osg::Vec4(1,1,1,1));
+
+
+    uint16_t list_ix_top_face[4] = { 0, 1, 2, 3 };
+    uint16_t list_ix_btm_face[4] = { 4, 5, 6, 7 };
+    uint16_t list_ix_edges[10] = { 0, 4, 1, 5, 2, 6, 3, 7 };
+    uint16_t list_ix_else[2] = { 8, 9 };
+
+    osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+    gm->setVertexArray(list_vx);
+    gm->setColorArray(list_cx,osg::Array::BIND_PER_VERTEX);
+    gm->addPrimitiveSet(new osg::DrawElementsUShort(osg::PrimitiveSet::LINE_LOOP,4,list_ix_top_face));
+    gm->addPrimitiveSet(new osg::DrawElementsUShort(osg::PrimitiveSet::LINE_LOOP,4,list_ix_btm_face));
+    gm->addPrimitiveSet(new osg::DrawElementsUShort(osg::PrimitiveSet::LINES,8,list_ix_edges));
+    gm->addPrimitiveSet(new osg::DrawElementsUShort(osg::PrimitiveSet::LINES,2,list_ix_else));
+
+    gd->addDrawable(gm);
+    gp->addChild(gd);
+}
+
+osg::ref_ptr<osg::Group> BuildViewExtentsOBBNode(std::vector<VxTile*> const &list_base_vx_tiles)
+{
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+
+    for(auto vx_tile : list_base_vx_tiles)
+    {
+        BuildViewExtentsOBBGeometry(vx_tile,gp.get());
+    }
+
+    gp->setName("vxtilesobb");
     return gp;
 }
 
@@ -546,6 +656,62 @@ osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera,
     }
 
     return gp_horizon_plane;
+}
+
+osg::ref_ptr<osg::Group> BuildFrustumOBBProjNode(Frustum const &frustum,
+                                                 OBB const &obb)
+{
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+
+    // Create a ring node
+    osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
+    {
+        // Create a ring of vertices
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+        double const rotate_by_rads = (2.0*K_PI/list_vx->size());
+
+        for(size_t j=0; j < list_vx->size(); j++){
+            list_vx->at(j) = osg::Vec3d(
+                        cos(rotate_by_rads*j),
+                        sin(rotate_by_rads*j),
+                        0);
+        }
+
+        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+        list_cx->push_back(osg::Vec4(1,1,0,1));
+
+        gm_ring->setVertexArray(list_vx);
+        gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+        gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+    }
+
+    // Create the line
+    double const obb_ext_length = obb.ext.length();
+
+    // Project Frustum vertices onto line
+    for(size_t i=0; i < frustum.list_vx.size(); i++)
+    {
+        double t = (frustum.list_vx[i]-obb.faces[0].p) * obb.faces[0].n;
+
+        osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
+        osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
+        gd_ring->addDrawable(gm_ring);
+        xf_ring->addChild(gd_ring);
+        xf_ring->setPosition(obb.faces[0].p + (obb.faces[0].n * t));
+        xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+
+        if(t > 0) {
+            xf_ring->setScale(obb_ext_length*0.2);
+        }
+        else {
+            xf_ring->setScale(obb_ext_length*0.1);
+        }
+
+        gp->addChild(xf_ring);
+    }
+
+    gp->setName("frustumobbproj");
+    return gp;
 }
 
 #endif // OSG_NODES_H

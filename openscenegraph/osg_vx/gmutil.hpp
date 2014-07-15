@@ -95,6 +95,7 @@ struct Frustum
         list_planes.resize(6);
         list_edges.resize(8);
         list_vx.resize(8);
+        list_pyr_vx.resize(5);
     }
 };
 
@@ -104,6 +105,8 @@ struct OBB
     osg::Vec3d center;
     osg::Vec3d ori[3]; // local orientation axes
     osg::Vec3d ext;    // positive half-extents
+
+    Plane faces[3];
 };
 
 // From Real-Time Collision Detection, Ericson
@@ -366,7 +369,7 @@ bool CalcHorizonPlane(osg::Vec3d const &eye,
 //////////////////////////////////////////////////////
 
 // From MathGeoLib
-void CalcOBBAxisProjection(OBB const &obb,
+void CalcOBBProjectionInterval(OBB const &obb,
                            osg::Vec3d const &axis,
                            double &min,
                            double &max)
@@ -379,13 +382,36 @@ void CalcOBBAxisProjection(OBB const &obb,
     max = pt+x+y+z;
 }
 
+void CalcPolyProjectionInterval(std::vector<osg::Vec3d> const &list_vx,
+                                osg::Vec3d const &axis,
+                                double &min,
+                                double &max)
+{
+    // Project each vertex in @list_vx along @axis
+    // and return the min and max of the projection
+    // interval
+
+    min = K_MAX_POS_DBL;
+    max = K_MIN_NEG_DBL;
+
+    for(auto const &vx : list_vx) {
+        double proj = vx*axis;
+        min = std::min(min,proj);
+        max = std::max(max,proj);
+    }
+}
+
 // From Eberly - The Method of Separating Axes
-int WhichSide(osg::Vec3d const &polyA_axis_dirn,
-              osg::Vec3d const &polyA_axis_pt,
-              std::vector<osg::Vec3d> const &polyB_list_vx)
+
+// WARN:
+// When CalcWhichSide is used, *ALL* planes of the
+// polyhedron must be tested (even if they're parallel)
+int CalcWhichSide(osg::Vec3d const &polyA_axis_dirn,
+                  osg::Vec3d const &polyA_axis_pt,
+                  std::vector<osg::Vec3d> const &polyB_list_vx)
 {
     int positive=0;
-//    int negative=0;
+    int negative=0;
 
     for(auto const & vx : polyB_list_vx)
     {
@@ -393,27 +419,20 @@ int WhichSide(osg::Vec3d const &polyA_axis_dirn,
         if(t > 0) {
             positive++;
         }
-//        else {
-//            negative++;
-//        }
+        else {
+            negative++;
+        }
+
+        if(positive && negative) {
+            // would it be cheaper to avoid all these ifs?
+            return 0;
+        }
     }
 
     return (positive ? 1 : -1);
 }
 
-bool CalcFrustumQuadIntersectSAT(Frustum const &frustum,
-                                 std::vector<osg::Vec3d const *> list_quad_vx)
-{
-    // Test the faces of the frustum
-    for(auto const & plane : frustum.list_planes)
-    {
-//        if(WhichSide(plane.n,plane.p,list_quad_vx) > 0) {
-//            return false;
-//        }
-    }
 
-    // Test the faces of the
-}
 
 bool CalcOBBOutsidePlane(Plane const &plane,
                          OBB const &obb)
@@ -447,6 +466,44 @@ bool CalcFrustumOBBIntersect(Frustum const &frustum,
     return true;
 }
 
+bool CalcFrustumOBBIntersectSAT(Frustum const &frustum,
+                                OBB const &obb)
+{
+    // Test the faces of the frustum
+    for(auto const & plane : frustum.list_planes)
+    {
+        if(CalcOBBOutsidePlane(plane,obb)) {
+            // bbox is outside this plane
+            return false;
+        }
+    }
+
+    // Test the faces of the OBB
+//    for(int i=0; i < 3; i++)
+//    {
+//        double obb_min,obb_max;
+//        CalcOBBProjectionInterval(obb,
+//                                  obb.faces[i].n,
+//                                  obb_min,
+//                                  obb_max);
+
+//        double frustum_min,frustum_max;
+//        CalcPolyProjectionInterval(frustum.list_vx,
+//                                   obb.faces[i].n,
+//                                   frustum_min,
+//                                   frustum_max);
+
+//        if((obb_min > frustum_max) || (frustum_min > obb_max)) {
+//            // there's an axis with no overlap so the polys dont intersect
+//            return false;
+//        }
+//    }
+
+    // TODO
+    // Test edge cross products
+
+    return true;
+}
 
 //////////////////////////////////////////////////////
 

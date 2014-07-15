@@ -419,7 +419,7 @@ osg::ref_ptr<osg::Group> CreateOBBNode()
 
     // debug start
 
-    osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+    osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(10);
     list_vx->at(0) =
             bbox_center +
             osg::Vec3d(bbox_ori[0]*-bbox_ext.x() +
@@ -468,20 +468,26 @@ osg::ref_ptr<osg::Group> CreateOBBNode()
                        bbox_ori[1]*bbox_ext.y()+
                        bbox_ori[2]*-bbox_ext.z());
 
+    list_vx->at(8) = bbox_center;
+
+    list_vx->at(9) =
+            bbox_center +
+            osg::Vec3d(bbox_ori[0]*bbox_ext.x());
+
 
     osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
     list_cx->push_back(osg::Vec4(1,0.5,0,0.5));
 
     uint16_t list_ix_top_face[4] = { 0, 1, 2, 3 };
     uint16_t list_ix_btm_face[4] = { 4, 5, 6, 7 };
-    uint16_t list_ix_edges[8] = { 0, 4, 1, 5, 2, 6, 3, 7 };
+    uint16_t list_ix_edges[10] = { 0, 4, 1, 5, 2, 6, 3, 7, 8, 9 };
 
     osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
     gm->setVertexArray(list_vx);
     gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
     gm->addPrimitiveSet(new osg::DrawElementsUShort(osg::PrimitiveSet::LINE_LOOP,4,list_ix_top_face));
     gm->addPrimitiveSet(new osg::DrawElementsUShort(osg::PrimitiveSet::LINE_LOOP,4,list_ix_btm_face));
-    gm->addPrimitiveSet(new osg::DrawElementsUShort(osg::PrimitiveSet::LINES,8,list_ix_edges));
+    gm->addPrimitiveSet(new osg::DrawElementsUShort(osg::PrimitiveSet::LINES,10,list_ix_edges));
 
 
     osg::ref_ptr<osg::Geode> gd = new osg::Geode;

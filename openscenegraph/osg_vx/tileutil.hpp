@@ -100,6 +100,14 @@ void CalcTileOBB(VxTile * tile)
             (tile->obb.ori[2] * (min_rst.z()+max_rst.z())*0.5);
 
     tile->obb.ext = (max_rst-min_rst)*0.5;
+
+    // 4. Save the unique face planes
+    for(int i=0; i < 3; i++) {
+        Plane &face = tile->obb.faces[i];
+        face.n = tile->obb.ori[i];
+        face.p = (face.n * tile->obb.ext[i]) + tile->obb.center;
+        face.d = face.n * face.p;
+    }
 }
 
 VxTile * BuildRootTile(uint8_t const level,
@@ -220,6 +228,9 @@ std::vector<VxTile*> BuildBaseViewExtents(uint8_t const level)
 
     for(size_t i=0; i < num_tiles_side; i++) { // lon
         for(size_t j=0; j < num_tiles_side; j++) { // lat
+
+//    for(size_t i=2; i < 3; i++) { // lon
+//        for(size_t j=2; j < 3; j++) { // lat
 
             double const min_lon = -180.0 + lon_step*i;
             double const max_lon = min_lon + lon_step;
