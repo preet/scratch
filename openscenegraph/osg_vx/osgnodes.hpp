@@ -65,7 +65,8 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
 }
 
 osg::ref_ptr<osg::Group> BuildFrustumNode(osg::Camera * camera,
-                                          Frustum & frustum)
+                                          Frustum & frustum,
+                                          double far_dist=0.0)
 {
     // Projection and ModelView matrices
 
@@ -95,7 +96,10 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(osg::Camera * camera,
 
     // Get near and far from the Projection matrix.
     const double near = proj(3,2) / (proj(2,2)-1.0);
-    const double far = proj(3,2) / (1.0+proj(2,2));
+    double far = proj(3,2) / (1.0+proj(2,2));
+    if(far_dist > 0.0) {
+        far = far_dist;
+    }
 
     // Get the sides of the near plane.
     const double nLeft = near * (proj(2,0)-1.0) / proj(0,0);
@@ -167,17 +171,17 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(osg::Camera * camera,
         frustum.list_planes[0].p = p_left;
         frustum.list_planes[0].d = d_left*p_left;
 
-        frustum.list_planes[1].n = d_right;
-        frustum.list_planes[1].p = p_right;
-        frustum.list_planes[1].d = d_right*p_right;
+        frustum.list_planes[1].n = d_btm;
+        frustum.list_planes[1].p = p_btm;
+        frustum.list_planes[1].d = d_btm*p_btm;
 
-        frustum.list_planes[2].n = d_top;
-        frustum.list_planes[2].p = p_top;
-        frustum.list_planes[2].d = d_top*p_top;
+        frustum.list_planes[2].n = d_right;
+        frustum.list_planes[2].p = p_right;
+        frustum.list_planes[2].d = d_right*p_right;
 
-        frustum.list_planes[3].n = d_btm;
-        frustum.list_planes[3].p = p_btm;
-        frustum.list_planes[3].d = d_btm*p_btm;
+        frustum.list_planes[3].n = d_top;
+        frustum.list_planes[3].p = p_top;
+        frustum.list_planes[3].d = d_top*p_top;
 
         frustum.list_planes[4].n = d_near;
         frustum.list_planes[4].p = p_near;
@@ -195,13 +199,13 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(osg::Camera * camera,
         frustum.list_edges[0].dirn_ab = NTL-NBL; // left
         frustum.list_edges[0].a = NBL;
 
-        frustum.list_edges[1].dirn_ab = NBL-NBR;
+        frustum.list_edges[1].dirn_ab = NBL-NBR; // btm
         frustum.list_edges[1].a = NBR;
 
-        frustum.list_edges[2].dirn_ab = NBR-NTR;
+        frustum.list_edges[2].dirn_ab = NBR-NTR; // right
         frustum.list_edges[2].a = NTR;
 
-        frustum.list_edges[3].dirn_ab = NTR-NTL;
+        frustum.list_edges[3].dirn_ab = NTR-NTL; // top
         frustum.list_edges[3].a = NTL;
 
         // side edges
@@ -218,12 +222,17 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(osg::Camera * camera,
         frustum.list_edges[7].a = NTR;
 
         // far edges
-        // (assume symmetric frustum so these
-        //  arent needed)
-//        g_list_frustum_edges[8] = FTL-FBL; // left
-//        g_list_frustum_edges[9] = FBL-FBR;
-//        g_list_frustum_edges[10] = FBR-FTR;
-//        g_list_frustum_edges[11] = FTR-FTL;
+        frustum.list_edges[8].dirn_ab = FTL-FBL; // left
+        frustum.list_edges[8].a = FBL;
+
+        frustum.list_edges[9].dirn_ab = FBL-FBR; // btm
+        frustum.list_edges[9].a = FBR;
+
+        frustum.list_edges[10].dirn_ab = FBR-FTR; // right
+        frustum.list_edges[10].a = FTR;
+
+        frustum.list_edges[11].dirn_ab = FTR-FTL; // top
+        frustum.list_edges[11].a = FTL;
 
         // frustum vx
         frustum.list_vx[0] = NBL;
@@ -713,5 +722,68 @@ osg::ref_ptr<osg::Group> BuildFrustumOBBProjNode(Frustum const &frustum,
     gp->setName("frustumobbproj");
     return gp;
 }
+
+osg::ref_ptr<osg::Group> BuildSurfacePoly(std::vector<osg::Vec3d> const &list_ecef)
+{
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+
+    // Create a ring node
+    osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
+    {
+        // Create a ring of vertices
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+        double const rotate_by_rads = (2.0*K_PI/list_vx->size());
+
+        for(size_t j=0; j < list_vx->size(); j++){
+            list_vx->at(j) = osg::Vec3d(
+                        cos(rotate_by_rads*j),
+                        sin(rotate_by_rads*j),
+                        0);
+        }
+
+        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+        list_cx->push_back(osg::Vec4(1,0,0,1));
+
+        gm_ring->setVertexArray(list_vx);
+        gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+        gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+    }
+
+    for(auto const & ecef : list_ecef) {
+        osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
+        osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
+        gd_ring->addDrawable(gm_ring);
+        xf_ring->addChild(gd_ring);
+        xf_ring->setScale(RAD_AV*0.05);
+        xf_ring->setPosition(ecef);
+        xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+        gp->addChild(xf_ring);
+    }
+
+    // Create poly edges
+    osg::ref_ptr<osg::Geometry> gm_edges = new osg::Geometry;
+    {
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
+        list_vx->reserve(list_ecef.size());
+
+        for(auto const & ecef : list_ecef) {
+            list_vx->push_back(ecef);
+        }
+
+        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+        list_cx->push_back(osg::Vec4(1,0,0,1));
+
+        gm_edges->setVertexArray(list_vx);
+        gm_edges->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+        gm_edges->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+
+        osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+        gd->addDrawable(gm_edges);
+        gp->addChild(gd);
+    }
+    gp->setName("surfacepoly");
+    return gp;
+}
+
 
 #endif // OSG_NODES_H

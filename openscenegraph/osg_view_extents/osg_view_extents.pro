@@ -18,5 +18,7 @@ LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -losgDB
 LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -losg
 LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -lOpenThreads
 
-HEADERS += obb.hpp tri.hpp geostuff.hpp vxtile.hpp
-SOURCES += obb_vis.cpp
+#HEADERS += obb.hpp tri.hpp geostuff.hpp vxtile.hpp
+#SOURCES += obb_vis.cpp
+
+SOURCES += main2.cpp

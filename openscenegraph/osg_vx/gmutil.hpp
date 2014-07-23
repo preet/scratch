@@ -1,9 +1,29 @@
+
+//   Copyright (C) 2014 Preet Desai (preet.desai@gmail.com)
+
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+
+//       http://www.apache.org/licenses/LICENSE-2.0
+
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+
+// Functions from MathGeoLib copyright Jukka Jylänki,
+// available under the Apache 2.0 license:
+// https://github.com/juj/MathGeoLib
+
 #ifndef GM_UTIL_H
 #define GM_UTIL_H
 
 #include <memory>
 #include <vector>
 #include <iostream>
+#include <cassert>
 
 #include <osg/Vec3d>
 
@@ -93,7 +113,7 @@ struct Frustum
     Frustum()
     {
         list_planes.resize(6);
-        list_edges.resize(8);
+        list_edges.resize(12);
         list_vx.resize(8);
         list_pyr_vx.resize(5);
     }
@@ -168,6 +188,21 @@ void CalcQuadraticEquationReal(double a, double b, double c,
         listRoots.push_back(qSeg1+qSeg2);
         listRoots.push_back(qSeg1-qSeg2);
     }
+}
+
+osg::Vec3d CalcPointPlaneProjection(osg::Vec3d const &point,
+                                    Plane const &plane)
+{
+    double t = ((plane.n*point)-plane.d)/(plane.n*plane.n);
+    return (point-(plane.n*t));
+}
+
+osg::Vec3d CalcPointRayProjection(osg::Vec3d const &point,
+                                  osg::Vec3d const &ray_point,
+                                  osg::Vec3d const &ray_dirn)
+{
+    double t = ((point-ray_point)*ray_dirn)/(ray_dirn*ray_dirn);
+    return (ray_point+(ray_dirn*t));
 }
 
 struct PointLLA
@@ -366,6 +401,24 @@ bool CalcHorizonPlane(osg::Vec3d const &eye,
     return true;
 }
 
+bool CalcRayPlaneIntersection(osg::Vec3d const &ray_pt,
+                              osg::Vec3d const &ray_dirn,
+                              Plane const &plane,
+                              osg::Vec3d &xsec,
+                              double &u)
+{
+    // ref: http://paulbourke.net/geometry/pointlineplane/
+    double const u_den = plane.n * (ray_dirn);
+    if(fabs(u_den) < 1E-4) {
+        return false;
+    }
+    double const u_num = plane.n * (plane.p - ray_pt);
+    u = u_num/u_den;
+    xsec = ray_pt+(ray_dirn*u);
+
+    return true;
+}
+
 //////////////////////////////////////////////////////
 
 // From MathGeoLib
@@ -432,7 +485,14 @@ int CalcWhichSide(osg::Vec3d const &polyA_axis_dirn,
     return (positive ? 1 : -1);
 }
 
-
+bool CalcSphereOutsidePlane(Plane const &plane,
+                            osg::Vec3d const &center,
+                            double const radius)
+{
+    // min distance between sphere and plane
+    double const dist = (plane.n * center) - plane.d;
+    return (dist > radius);
+}
 
 bool CalcOBBOutsidePlane(Plane const &plane,
                          OBB const &obb)
@@ -478,7 +538,7 @@ bool CalcFrustumOBBIntersectSAT(Frustum const &frustum,
         }
     }
 
-    // Test the faces of the OBB
+//    // Test the faces of the OBB
 //    for(int i=0; i < 3; i++)
 //    {
 //        double obb_min,obb_max;
@@ -499,8 +559,230 @@ bool CalcFrustumOBBIntersectSAT(Frustum const &frustum,
 //        }
 //    }
 
-    // TODO
-    // Test edge cross products
+//    // Test edge cross products
+//    std::vector<osg::Vec3d> list_obb_edges;
+//    for(size_t i=0; i < 3; i++) {
+//        list_obb_edges.push_back(obb.faces[i].p-obb.center);
+//    }
+
+//    std::vector<osg::Vec3d> list_frustum_edges;
+//    for(size_t i=4; i < 8; i++) {
+//        list_frustum_edges.push_back(frustum.list_vx[i] - frustum.eye);
+//    }
+
+//    for(size_t i=0; i < list_obb_edges.size(); i++) {
+//        for(size_t j=0; j < list_frustum_edges.size(); j++)
+//        {
+//            osg::Vec3d axis = list_obb_edges[i]^list_frustum_edges[j];
+
+//            double obb_min,obb_max;
+//            CalcOBBProjectionInterval(obb,
+//                                      axis,
+//                                      obb_min,
+//                                      obb_max);
+
+//            double frustum_min,frustum_max;
+//            CalcPolyProjectionInterval(frustum.list_vx,
+//                                       axis,
+//                                       frustum_min,
+//                                       frustum_max);
+
+//            if((obb_min > frustum_max) || (frustum_min > obb_max)) {
+//                // there's an axis with no overlap so the polys dont intersect
+//                return false;
+//            }
+//        }
+//    }
+
+    return true;
+}
+
+//////////////////////////////////////////////////////
+
+// From MathGeoLib
+osg::Vec3d CalcTriangleClosestPoint(osg::Vec3d const &a,
+                                    osg::Vec3d const &b,
+                                    osg::Vec3d const &c,
+                                    osg::Vec3d const &p)
+{
+    /** The code for Triangle-float3 test is from
+     *  Christer Ericson's Real-Time Collision Detection, pp. 141-142. */
+
+    // Check if P is in vertex region outside A.
+    osg::Vec3d ab = b - a;
+    osg::Vec3d ac = c - a;
+    osg::Vec3d ap = p - a;
+    float d1 = (ab*ap);
+    float d2 = (ac*ap);
+    if (d1 <= 0.f && d2 <= 0.f)
+    return a; // Barycentric coordinates are (1,0,0).
+
+    // Check if P is in vertex region outside B.
+    osg::Vec3d bp = p - b;
+    float d3 = (ab*bp);
+    float d4 = (ac*bp);
+    if (d3 >= 0.f && d4 <= d3)
+    return b; // Barycentric coordinates are (0,1,0).
+
+    // Check if P is in edge region of AB, and if so, return the projection of P onto AB.
+    float vc = d1*d4 - d3*d2;
+    if (vc <= 0.f && d1 >= 0.f && d3 <= 0.f)
+    {
+    float v = d1 / (d1 - d3);
+    return a + (ab*v); // The barycentric coordinates are (1-v, v, 0).
+    }
+
+    // Check if P is in vertex region outside C.
+    osg::Vec3d cp = p - c;
+    float d5 = (ab*cp);
+    float d6 = (ac*cp);
+    if (d6 >= 0.f && d5 <= d6)
+    return c; // The barycentric coordinates are (0,0,1).
+
+    // Check if P is in edge region of AC, and if so, return the projection of P onto AC.
+    float vb = d5*d2 - d1*d6;
+    if (vb <= 0.f && d2 >= 0.f && d6 <= 0.f)
+    {
+    float w = d2 / (d2 - d6);
+    return a + (ac*w); // The barycentric coordinates are (1-w, 0, w).
+    }
+
+    // Check if P is in edge region of BC, and if so, return the projection of P onto BC.
+    float va = d3*d6 - d5*d4;
+    if (va <= 0.f && d4 - d3 >= 0.f && d5 - d6 >= 0.f)
+    {
+    float w = (d4 - d3) / (d4 - d3 + d5 - d6);
+    return b + ((c - b)*w); // The barycentric coordinates are (0, 1-w, w).
+    }
+
+    // P must be inside the face region. Compute the closest point through its barycentric coordinates (u,v,w).
+    float denom = 1.f / (va + vb + vc);
+    float v = vb * denom;
+    float w = vc * denom;
+    return a + (ab * v) + (ac * w);
+}
+
+bool CalcTriangleIntersectsSphere(osg::Vec3d const &a,
+                                  osg::Vec3d const &b,
+                                  osg::Vec3d const &c,
+                                  osg::Vec3d const &sphere_center,
+                                  double sphere_radius)
+{
+    osg::Vec3d pt = CalcTriangleClosestPoint(a,b,c,sphere_center);
+
+    if((pt-sphere_center).length2() <= (sphere_radius*sphere_radius)) {
+        return true;
+    }
+    return false;
+}
+
+bool CalcSphereOutsideFrustumExact(Frustum const &frustum,
+                                   osg::Vec3d const &sphere_center,
+                                   double const sphere_radius)
+{
+    // For an exact test, first check if the sphere is
+    // completely contained in the frustum side planes
+
+    bool contained=true;
+
+    // First four planes are the side planes
+    for(size_t i=0; i < 4; i++) {
+        Plane const &plane = frustum.list_planes[i];
+        Plane plane_neg_n;
+        plane_neg_n.n = plane.n*-1.0;
+        plane_neg_n.p = plane.p;
+        plane_neg_n.d = plane_neg_n.n*plane_neg_n.p;
+        if(!CalcSphereOutsidePlane(plane_neg_n,
+                                   sphere_center,
+                                   sphere_radius))
+        {
+            contained = false;
+            break;
+        }
+    }
+
+    if(contained) {
+        std::cout << "###: in frustum " << std::endl;
+        return false;
+    }
+
+    // If the sphere isn't completely contained,
+    // treat the frustum as a mesh and check if any
+    // of its triangles intersect with the sphere
+
+    // Expect list_vx:
+    // list_vx[0] = NBL
+    // list_vx[1] = NBR
+    // list_vx[2] = NTR
+    // list_vx[3] = NTL
+    // list_vx[4] = FBL
+    // list_vx[5] = FBR
+    // list_vx[6] = FTR
+    // list_vx[7] = FTL
+
+    // 6 faces, 12 triangles
+    std::vector<osg::Vec3d const *> list_tris(12*3);
+
+    list_tris[0] = &(frustum.list_vx[0]);
+    list_tris[1] = &(frustum.list_vx[1]);
+    list_tris[2] = &(frustum.list_vx[2]);
+
+    list_tris[3] = &(frustum.list_vx[0]);
+    list_tris[4] = &(frustum.list_vx[2]);
+    list_tris[5] = &(frustum.list_vx[3]);
+
+    list_tris[6] = &(frustum.list_vx[1]);
+    list_tris[7] = &(frustum.list_vx[5]);
+    list_tris[8] = &(frustum.list_vx[6]);
+
+    list_tris[9] = &(frustum.list_vx[1]);
+    list_tris[10] = &(frustum.list_vx[6]);
+    list_tris[11] = &(frustum.list_vx[2]);
+
+    list_tris[12] = &(frustum.list_vx[3]);
+    list_tris[13] = &(frustum.list_vx[2]);
+    list_tris[14] = &(frustum.list_vx[6]);
+
+    list_tris[15] = &(frustum.list_vx[3]);
+    list_tris[16] = &(frustum.list_vx[6]);
+    list_tris[17] = &(frustum.list_vx[7]);
+
+    list_tris[18] = &(frustum.list_vx[0]);
+    list_tris[19] = &(frustum.list_vx[4]);
+    list_tris[20] = &(frustum.list_vx[7]);
+
+    list_tris[21] = &(frustum.list_vx[0]);
+    list_tris[22] = &(frustum.list_vx[7]);
+    list_tris[23] = &(frustum.list_vx[3]);
+
+    list_tris[24] = &(frustum.list_vx[0]);
+    list_tris[25] = &(frustum.list_vx[1]);
+    list_tris[26] = &(frustum.list_vx[5]);
+
+    list_tris[27] = &(frustum.list_vx[0]);
+    list_tris[28] = &(frustum.list_vx[5]);
+    list_tris[29] = &(frustum.list_vx[4]);
+
+    list_tris[30] = &(frustum.list_vx[4]);
+    list_tris[31] = &(frustum.list_vx[5]);
+    list_tris[32] = &(frustum.list_vx[6]);
+
+    list_tris[33] = &(frustum.list_vx[4]);
+    list_tris[34] = &(frustum.list_vx[6]);
+    list_tris[35] = &(frustum.list_vx[7]);
+
+    // Check each triangle
+    for(size_t i=0; i < list_tris.size(); i+=3) {
+        if(CalcTriangleIntersectsSphere(*(list_tris[i+0]),
+                                        *(list_tris[i+1]),
+                                        *(list_tris[i+2]),
+                                        sphere_center,
+                                        sphere_radius))
+        {
+            std::cout << "###: xsec frustum " << std::endl;
+            return false;
+        }
+    }
 
     return true;
 }
