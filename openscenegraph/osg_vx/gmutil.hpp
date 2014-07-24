@@ -69,11 +69,11 @@ double const K_MIN_NEG_DBL = -K_MAX_POS_DBL;
 //////////////////////////////////////////////////////
 
 std::vector<osg::Vec4> const K_COLOR_TABLE {
-    {0., 0., 0., 1.},
-    {41/255., 41/255., 41/255., 1.},
-    {102/255., 102/255., 102/255., 1.},
-    {140/255., 140/255., 140/255., 1.},
-    {200/255., 200/255., 200/255., 1.},
+    {252/255., 194/255., 0/255., 1.},
+    {202/255., 245/255., 29/255., 1.},
+    {0/255., 191/255., 0/255., 1.},
+    {100/255., 245/255., 174/255., 1.},
+    {0/255., 235/255., 231/255., 1.},
     {66/255., 206/255., 252/255., 1.},
     {124/255., 160/255., 252/255., 1.},
     {173/255., 146/255., 252/255., 1.},
@@ -374,7 +374,8 @@ bool BuildEarthSurfaceGeometry(double minLon, double minLat,
 }
 
 bool CalcHorizonPlane(osg::Vec3d const &eye,
-                      Plane & horizon_plane)
+                      Plane & horizon_plane,
+                      bool flip_normal)
 {
     // We need to clamp eye_length such that the
     // eye is outside of the celestial body surface
@@ -394,10 +395,15 @@ bool CalcHorizonPlane(osg::Vec3d const &eye,
     double const inv_dist = 1.0/eye_length;
 
     horizon_plane.n = eye*inv_dist;
+
+    // by similar triangles
     horizon_plane.p = horizon_plane.n * (RAD_AV*RAD_AV*inv_dist);
 
-    horizon_plane.n *= -1.0;
-    horizon_plane.d = horizon_plane.n * horizon_plane.p;
+    if(flip_normal) {
+        horizon_plane.n *= -1.0;
+    }
+    horizon_plane.d = horizon_plane.n * horizon_plane.p;  
+
     return true;
 }
 
@@ -417,6 +423,21 @@ bool CalcRayPlaneIntersection(osg::Vec3d const &ray_pt,
     xsec = ray_pt+(ray_dirn*u);
 
     return true;
+}
+
+
+osg::Vec3d CalcVectorRotation(osg::Vec3d const &input_vec,
+                              osg::Vec3d const &axis_normalized,
+                              double const angle_rads)
+{
+    double cos_angle_rads = cos(angle_rads);
+    double sin_angle_rads = sin(angle_rads);
+
+
+    osg::Vec3d rotated_vec =
+            (input_vec * cos_angle_rads) + ((axis_normalized^input_vec) * sin_angle_rads) + (axis_normalized*(axis_normalized*input_vec)*(1-cos_angle_rads));
+
+    return rotated_vec;
 }
 
 //////////////////////////////////////////////////////
@@ -702,7 +723,6 @@ bool CalcSphereOutsideFrustumExact(Frustum const &frustum,
     }
 
     if(contained) {
-        std::cout << "###: in frustum " << std::endl;
         return false;
     }
 
@@ -779,7 +799,6 @@ bool CalcSphereOutsideFrustumExact(Frustum const &frustum,
                                         sphere_center,
                                         sphere_radius))
         {
-            std::cout << "###: xsec frustum " << std::endl;
             return false;
         }
     }

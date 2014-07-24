@@ -13,10 +13,137 @@
 #include <osgnodes.hpp>
 
 
+enum IntersectionType: uint8_t
+{
+    XSEC_TRUE,
+    XSEC_FALSE,
+    XSEC_CONTAINED,
+    XSEC_COINCIDENT
+};
+
+IntersectionType CalcSphereSphereIntersection(osg::Vec3d const &centerA,
+                                              osg::Vec3d const &centerB,
+                                              double const radiusA,
+                                              double const radiusB,
+                                              Plane &xsec_plane,
+                                              double &xsec_radius)
+{
+    // ref:
+    // http://paulbourke.net/geometry/circlesphere/
+
+    double dist = (centerB-centerA).length();
+
+    if(dist > (radiusA+radiusB)) {
+        // The circles are too far away to intersect
+        return XSEC_FALSE;
+    }
+    else if(dist < fabs(radiusA-radiusB)) {
+        // One circle is contained within the other
+        return XSEC_CONTAINED;
+    }
+    else if((dist==0) && (radiusA==radiusB)) {
+        // The circles are coincident
+        return XSEC_COINCIDENT;
+    }
+
+    double const a = (radiusA*radiusA -
+                      radiusB*radiusB +
+                      dist*dist)/(2*dist);
+
+    xsec_plane.p = centerA + (centerB-centerA)*(a/dist);
+    xsec_plane.n = centerB-centerA;
+    xsec_plane.n.normalize();
+
+    xsec_radius = sqrt(radiusA*radiusA - a*a);
+
+    return XSEC_TRUE;
+}
+
+void CalcProjSphereLLAPoly(Plane const &horizon_plane,
+                           osg::Vec3d const &sphere_center,
+                           double const sphere_radius,
+                           std::vector<osg::Vec3d> &list_ecef)
+{
+    double const dist = sphere_center.length();
+
+    double const horizon_radius =
+            sqrt(RAD_AV*RAD_AV - horizon_plane.p*horizon_plane.p);
+
+    Plane xsec_plane;
+    double xsec_radius;
+
+    IntersectionType xsec_type =
+            CalcSphereSphereIntersection(osg::Vec3d(0,0,0),
+                                         sphere_center,
+                                         RAD_AV,
+                                         sphere_radius,
+                                         xsec_plane,
+                                         xsec_radius);
+
+    if(xsec_type == XSEC_FALSE) {
+        // std::cout << "###: no sphere/sphere xsec" << std::endl;
+        return;
+    }
+    else if(xsec_type == XSEC_COINCIDENT) {
+        // should never happen
+        return;
+    }
+    else if(xsec_type == XSEC_CONTAINED) {
+        if((dist+sphere_radius) < RAD_AV) {
+            // The planetary sphere contains the distal sphere;
+            // we should never get here
+            return;
+        }
+        // The distal sphere contains the planetary sphere
+        xsec_plane = horizon_plane;
+        xsec_radius = horizon_radius;
+    }
+    else {
+        double const dist2_horizon = (sphere_center-horizon_plane.p).length2();
+        double const dist2_xsec = (sphere_center-xsec_plane.p).length2();
+        if(dist2_horizon < dist2_xsec) {
+            xsec_plane = horizon_plane;
+            xsec_radius = horizon_radius;
+        }
+    }
+
+    // Create a ring of 8 points on the XY plane
+    double const xrd = 1.0;
+    double const irt = 1.0/sqrt(2.0);
+    osg::Vec3d const z_axis(0,0,1);
+    std::vector<osg::Vec3d> list_xsec_vx(8);
+    list_xsec_vx[0] = osg::Vec3d(xrd,0,0);
+    list_xsec_vx[1] = osg::Vec3d(irt,irt,0);
+    list_xsec_vx[2] = osg::Vec3d(0,xrd,0);
+    list_xsec_vx[3] = osg::Vec3d(-irt,irt,0);
+    list_xsec_vx[4] = osg::Vec3d(-xrd,0,0);
+    list_xsec_vx[5] = osg::Vec3d(-irt,-irt,0);
+    list_xsec_vx[6] = osg::Vec3d(0,-xrd,0);
+    list_xsec_vx[7] = osg::Vec3d(irt,-irt,0);
+
+    // Rotate the ring so that its aligned to the
+    // xsec plane's normal vector
+    osg::Vec3d axis = z_axis^xsec_plane.n;
+    axis.normalize();
+
+    if(axis.length2() > 1E-4) {
+        double angle_rads = acos(z_axis*xsec_plane.n);
+        for(auto &xsec_vx : list_xsec_vx) {
+            xsec_vx = CalcVectorRotation(xsec_vx,axis,angle_rads);
+        }
+    }
+
+    // Translate the ring using the xsec plane's 'center'
+    for(auto &xsec_vx : list_xsec_vx) {
+        xsec_vx = (xsec_vx*xsec_radius)+xsec_plane.p;
+    }
+
+    list_ecef = list_xsec_vx;
+}
 
 void CalcProjFrustumLLAPoly(Frustum const &frustum,
                             Plane const &horizon_plane,
-                            std::vector<osg::Vec3d> &list_ecef_xsec)
+                            std::vector<osg::Vec3d> &list_ecef)
 {   
     // Check none of the frustum edges are perpendicular
     // to the horizon plane normal to ensure they intersect
@@ -44,8 +171,7 @@ void CalcProjFrustumLLAPoly(Frustum const &frustum,
 
     // Use 8 points on the view frustum edges to find
     // the LLA polygon:
-    list_ecef_xsec.resize(8);
-//    std::vector<osg::Vec3d> list_ecef_xsec(8);
+    std::vector<osg::Vec3d> list_ecef_xsec(8);
     list_ecef_xsec[0] = frustum.list_vx[4]; // BL
     list_ecef_xsec[1] = (frustum.list_vx[4]+frustum.list_vx[5])*0.5;
     list_ecef_xsec[2] = frustum.list_vx[5]; // BR
@@ -97,23 +223,6 @@ void CalcProjFrustumLLAPoly(Frustum const &frustum,
                 return;
             }
 
-//            // Project points that did not intersect the
-//            // planetary body using the direction from the
-//            // center of the planet to the point
-//            osg::Vec3d const center_to_point =
-//                    list_ecef_xsec[i]-zero_vec;
-
-//            if(!CalcRayEarthIntersection(zero_vec,
-//                                         center_to_point,
-//                                         xsec_near,
-//                                         xsec_far))
-//            {
-//                std::cout << "###: ERROR: RE xsec center_to_point failed" << std::endl;
-//                return;
-//            }
-
-//            std::cout << "###: ping" << std::endl;
-
             // Use the intersection point that lies along
             // the positive projection (ie same direction)
             // as the direction vector
@@ -127,6 +236,8 @@ void CalcProjFrustumLLAPoly(Frustum const &frustum,
             list_ecef_xsec[i] = xsec_surf0;
         }
     }
+
+    list_ecef = list_ecef_xsec;
 }
 
 // Ensure that inside out projection works
@@ -224,13 +335,23 @@ int main()
         auto new_frustum = BuildFrustumNode(camera,frustum,far_dist);
 
         std::vector<osg::Vec3d> list_ecef;
+
+        // new surfacepoly
+        CalcProjSphereLLAPoly(horizon_plane,eye,K_LIST_LOD_DIST[2],list_ecef);
+        auto new_lodsurfacepoly = BuildSurfacePoly(list_ecef,
+                                                   K_COLOR_TABLE[2],
+                                                   eye.length()/100.0);
+        new_lodsurfacepoly->setName("lodsurfacepoly");
+
         CalcProjFrustumLLAPoly(frustum,horizon_plane,list_ecef);
+        auto new_frustumsurfacepoly = BuildSurfacePoly(list_ecef,
+                                                       osg::Vec4(0.25,0.25,0.25,1.0),
+                                                       eye.length()/100.0);
+        new_frustumsurfacepoly->setName("frustumsurfacepoly");
 
-        // new surf poly
-        auto new_surfacepoly = BuildSurfacePoly(list_ecef);
 
-//        // new lod rings
-//        auto new_lodrings = BuildLodRingsNode(eye);
+        // new lod rings
+        auto new_lodrings = BuildLodRingsNode(eye);
 
         // new min cam dist line node
         auto new_mincamdistline = BuildMinCamDistLineNode(eye);
@@ -243,13 +364,18 @@ int main()
                     gp_root0->removeChild(i);
                     i--;
                 }
-                else if(name == "surfacepoly") {
+                else if(name == "frustumsurfacepoly") {
+                    gp_root0->removeChild(i);
+                    i--;
+                }
+                else if(name == "lodsurfacepoly") {
                     gp_root0->removeChild(i);
                     i--;
                 }
             }
             gp_root0->addChild(new_horizon);
-            gp_root0->addChild(new_surfacepoly);
+            gp_root0->addChild(new_frustumsurfacepoly);
+            gp_root0->addChild(new_lodsurfacepoly);
         }
 
         // Update gp_root1
@@ -265,15 +391,19 @@ int main()
                     gp_root1->removeChild(i);
                     i--;
                 }
-//                else if(name == "lodrings") {
-//                    gp_root1->removeChild(i);
-//                    i--;
-//                }
+                else if(name == "lodrings") {
+                    gp_root1->removeChild(i);
+                    i--;
+                }
                 else if(name == "horizonplane") {
                     gp_root1->removeChild(i);
                     i--;
                 }
-                else if(name == "surfacepoly") {
+                else if(name == "frustumsurfacepoly") {
+                    gp_root1->removeChild(i);
+                    i--;
+                }
+                else if(name == "lodsurfacepoly") {
                     gp_root1->removeChild(i);
                     i--;
                 }
@@ -281,9 +411,10 @@ int main()
             // Add new nodes
             gp_root1->addChild(new_frustum);
             gp_root1->addChild(new_mincamdistline);
-//            gp_root1->addChild(new_lodrings);
+            gp_root1->addChild(new_lodrings);
             gp_root1->addChild(new_horizon);
-            gp_root1->addChild(new_surfacepoly);
+            gp_root1->addChild(new_frustumsurfacepoly);
+            gp_root1->addChild(new_lodsurfacepoly);
         }
 
         viewer.frame();

@@ -626,7 +626,7 @@ osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera,
     if(camera) {
         camera->getViewMatrixAsLookAt(eye,vpt,up);
 
-        if(CalcHorizonPlane(eye,horizon_plane)) {
+        if(CalcHorizonPlane(eye,horizon_plane,false)) {
             // Draw the plane as a circle centered on horizon_pt
             // with radius RAD_AV*0.5
             osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(16);
@@ -723,7 +723,9 @@ osg::ref_ptr<osg::Group> BuildFrustumOBBProjNode(Frustum const &frustum,
     return gp;
 }
 
-osg::ref_ptr<osg::Group> BuildSurfacePoly(std::vector<osg::Vec3d> const &list_ecef)
+osg::ref_ptr<osg::Group> BuildSurfacePoly(std::vector<osg::Vec3d> const &list_ecef,
+                                          osg::Vec4 const &cx,
+                                          double vx_size=1.0)
 {
     osg::ref_ptr<osg::Group> gp = new osg::Group;
 
@@ -742,7 +744,7 @@ osg::ref_ptr<osg::Group> BuildSurfacePoly(std::vector<osg::Vec3d> const &list_ec
         }
 
         osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
-        list_cx->push_back(osg::Vec4(1,0,0,1));
+        list_cx->push_back(cx);
 
         gm_ring->setVertexArray(list_vx);
         gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
@@ -754,7 +756,7 @@ osg::ref_ptr<osg::Group> BuildSurfacePoly(std::vector<osg::Vec3d> const &list_ec
         osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
         gd_ring->addDrawable(gm_ring);
         xf_ring->addChild(gd_ring);
-        xf_ring->setScale(RAD_AV*0.05);
+        xf_ring->setScale(vx_size);
         xf_ring->setPosition(ecef);
         xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
         gp->addChild(xf_ring);
@@ -771,7 +773,7 @@ osg::ref_ptr<osg::Group> BuildSurfacePoly(std::vector<osg::Vec3d> const &list_ec
         }
 
         osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
-        list_cx->push_back(osg::Vec4(1,0,0,1));
+        list_cx->push_back(cx);
 
         gm_edges->setVertexArray(list_vx);
         gm_edges->setColorArray(list_cx,osg::Array::BIND_OVERALL);
