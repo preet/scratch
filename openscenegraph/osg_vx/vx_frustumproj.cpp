@@ -141,33 +141,19 @@ void CalcProjSphereLLAPoly(Plane const &horizon_plane,
     list_ecef = list_xsec_vx;
 }
 
-void CalcProjFrustumLLAPoly(Frustum const &frustum,
+void CalcProjFrustumLLAPoly2(Frustum const &frustum,
                             Plane const &horizon_plane,
                             std::vector<osg::Vec3d> &list_ecef)
-{   
-    // Check none of the frustum edges are perpendicular
-    // to the horizon plane normal to ensure they intersect
-    // the plane.
-    osg::Vec3d eye_to_center = (frustum.eye)*-1.0;
-    eye_to_center.normalize();
+{
+    (void)horizon_plane;
 
-    for(size_t i=4; i < 8; i++) {
-        osg::Vec3d vx_to_eye = frustum.list_vx[i]-frustum.eye;
-        vx_to_eye.normalize();
-        // Sets the max angle between eye_to_center and
-        // a frustum edge to approximately 75 degrees
-        if(vx_to_eye*eye_to_center < 0.25) {
-            std::cout << "###: ERROR: degree threshold exceeded" << std::endl;
-            return;
-        }
-    }
+    osg::Vec3d const far_center = (frustum.list_vx[4]+frustum.list_vx[6])*0.5;
+    osg::Vec3d const view_dirn = (far_center-frustum.eye);
 
     // Check if the planet is in the view frustum
     if(CalcSphereOutsideFrustumExact(frustum,osg::Vec3d(0,0,0),RAD_AV)) {
         return;
     }
-
-    osg::Vec3d const zero_vec(0,0,0);
 
     // Use 8 points on the view frustum edges to find
     // the LLA polygon:
@@ -193,51 +179,134 @@ void CalcProjFrustumLLAPoly(Frustum const &frustum,
                                     xsec_near,
                                     xsec_far))
         {
-            list_ecef_xsec[i] = xsec_near;
-        }
-        else {
-            // Intersect rays that missed the planetary
-            // body onto the horizon plane
-            double u = -1;
-            osg::Vec3d xsec_horizon;
-            if(!(CalcRayPlaneIntersection(ray_pt,
-                                          ray_dirn,
-                                          horizon_plane,
-                                          xsec_horizon,
-                                          u) &&
-                 (u > 0)))
+            // should get these from the function?
+            double const u_near = (xsec_near-ray_pt)*ray_dirn;
+            double const u_far = (xsec_far-ray_pt)*ray_dirn;
+            if((u_near > 0) && (u_far > 0))
             {
-                std::cout << "###: ERROR: ray,horizon_plane xsec failed" << std::endl;
-                return;
-            }
+                if((xsec_near-frustum.eye)*view_dirn > 0.0) {
+                    list_ecef_xsec[i] = xsec_near;
+                }
+                else {
+                    list_ecef_xsec[i] = xsec_far;
+                }
 
-            // Project the horizon plane intersection points
-            // back onto the surface of the planet
-            if(!CalcRayEarthIntersection(zero_vec,
-                                         xsec_horizon,
-                                         xsec_near,
-                                         xsec_far))
-            {
-                // should never get here
-                std::cout << "###: ERROR: RE xsec horizon to surface failed" << std::endl;
-                return;
+                continue;
             }
-
-            // Use the intersection point that lies along
-            // the positive projection (ie same direction)
-            // as the direction vector
-            osg::Vec3d xsec_surf0;
-            if(xsec_horizon*xsec_near >= 0) {
-                xsec_surf0 = xsec_near;
-            }
-            else {
-                xsec_surf0 = xsec_far;
-            }
-            list_ecef_xsec[i] = xsec_surf0;
         }
+
+        // Project the rays that missed the planet
+        // back onto the surface of the planet
+        if(!CalcRayEarthIntersection(list_ecef_xsec[i],
+                                     list_ecef_xsec[i],
+                                     xsec_near,
+                                     xsec_far))
+        {
+            // should never get here
+            std::cout << "###: ERROR: 2RE xsec to surface failed" << std::endl;
+            return;
+        }
+
+        list_ecef_xsec[i] = xsec_near;
     }
 
     list_ecef = list_ecef_xsec;
+}
+
+void CalcProjFrustumLLAPoly(Frustum const &frustum,
+                            Plane const &horizon_plane,
+                            std::vector<osg::Vec3d> &list_ecef)
+{   
+    // Check if the planet is in the view frustum
+    if(CalcSphereOutsideFrustumExact(frustum,osg::Vec3d(0,0,0),RAD_AV)) {
+        return;
+    }
+
+    // Use 8 points on the view frustum edges to find
+    // the LLA polygon:
+    std::vector<osg::Vec3d> list_ecef_xsec(8);
+    list_ecef_xsec[0] = frustum.list_vx[4]; // BL
+    list_ecef_xsec[1] = (frustum.list_vx[4]+frustum.list_vx[5])*0.5;
+    list_ecef_xsec[2] = frustum.list_vx[5]; // BR
+    list_ecef_xsec[3] = (frustum.list_vx[5]+frustum.list_vx[6])*0.5;
+    list_ecef_xsec[4] = frustum.list_vx[6]; // TR
+    list_ecef_xsec[5] = (frustum.list_vx[6]+frustum.list_vx[7])*0.5;
+    list_ecef_xsec[6] = frustum.list_vx[7]; // TL
+    list_ecef_xsec[7] = (frustum.list_vx[7]+frustum.list_vx[4])*0.5;
+
+    list_ecef.clear();
+
+    osg::Vec3d const far_center = (frustum.list_vx[4]+frustum.list_vx[6])*0.5;
+    osg::Vec3d const view_dirn = (far_center-frustum.eye);
+
+    for(size_t i=0; i < list_ecef_xsec.size(); i++)
+    {
+        osg::Vec3d const &ray_pt = frustum.eye;
+        osg::Vec3d const ray_dirn = list_ecef_xsec[i]-frustum.eye;
+
+        osg::Vec3d xsec_near,xsec_far;
+        if(CalcRayEarthIntersection(ray_pt,
+                                    ray_dirn,
+                                    xsec_near,
+                                    xsec_far))
+        {
+            double const u_near = (xsec_near-ray_pt)*ray_dirn;
+            double const u_far = (xsec_far-ray_pt)*ray_dirn;
+            if((u_near > 0) && (u_far > 0))
+            {
+                if((xsec_near-frustum.eye)*view_dirn > 0.0) {
+                    list_ecef_xsec[i] = xsec_near;
+                }
+                else {
+                    list_ecef_xsec[i] = xsec_far;
+                }
+                list_ecef.push_back(list_ecef_xsec[i]);
+                continue;
+            }
+        }
+        // Project rays that missed the planetary
+        // body onto the horizon plane
+        osg::Vec3d const ecef_horizon =
+                list_ecef_xsec[i] -
+                (horizon_plane.n*((list_ecef_xsec[i]-horizon_plane.p)*horizon_plane.n));
+
+//        list_ecef.clear();
+//        list_ecef.push_back(list_ecef_xsec[i]);
+        list_ecef.push_back(ecef_horizon);
+
+//        return;
+
+        // Project the horizon plane intersection points
+        // back onto the surface of the planet
+
+//        osg::Vec3d const along_horizon =
+//                ecef_horizon-horizon_plane.p;
+
+//        if(along_horizon.length2() < 1.0) {
+//            xsec_near = horizon_plane.p;
+//        }
+//        else {
+//            if(!CalcRayEarthIntersection(ecef_horizon,
+//                                         along_horizon,
+//                                         xsec_near,
+//                                         xsec_far))
+//            {
+//                // should never get here
+//                std::cout << "###: ERROR: RE xsec to surface failed" << std::endl;
+//                std::cout << "###: along_horizon: " << along_horizon << std::endl;
+//                std::cout << "###: ecef_horizon: " << ecef_horizon << std::endl;
+//                list_ecef.clear();
+//                list_ecef.push_back(along_horizon);
+//                list_ecef.push_back(ecef_horizon);
+
+//                return;
+//            }
+//        }
+
+//        list_ecef_xsec[i] = xsec_near;
+    }
+
+//    list_ecef = list_ecef_xsec;
 }
 
 // Ensure that inside out projection works
@@ -299,7 +368,13 @@ int main()
         view->setUpViewInWindow( 10, 10, 640, 480 );
         view->setSceneData( gp_root0.get() );
         view->getCamera()->setClearColor(osg::Vec4(0.1,0.1,0.1,1.0));
-        view->setCameraManipulator( new osgGA::TrackballManipulator );
+
+        osg::ref_ptr<osgGA::TrackballManipulator> view_manip =
+                new osgGA::TrackballManipulator;
+        view_manip->setMinimumDistance(100);
+
+        view->setCameraManipulator(view_manip);
+
     }
 
     // Create view 1 (this view shows View0's frustum)
@@ -310,7 +385,12 @@ int main()
         view->setUpViewInWindow( 10, 510, 640, 480 );
         view->setSceneData( gp_root1.get() );
         view->getCamera()->setClearColor(osg::Vec4(0.1,0.1,0.1,1.0));
-        view->setCameraManipulator( new osgGA::TrackballManipulator );
+
+        osg::ref_ptr<osgGA::TrackballManipulator> view_manip =
+                new osgGA::TrackballManipulator;
+        view_manip->setMinimumDistance(100);
+
+        view->setCameraManipulator(view_manip);
     }
 
     while(!viewer.done())
@@ -337,16 +417,17 @@ int main()
         std::vector<osg::Vec3d> list_ecef;
 
         // new surfacepoly
-        CalcProjSphereLLAPoly(horizon_plane,eye,K_LIST_LOD_DIST[2],list_ecef);
+//        CalcProjSphereLLAPoly(horizon_plane,eye,K_LIST_LOD_DIST[2],list_ecef);
+        CalcProjFrustumLLAPoly2(frustum,horizon_plane,list_ecef);
         auto new_lodsurfacepoly = BuildSurfacePoly(list_ecef,
                                                    K_COLOR_TABLE[2],
-                                                   eye.length()/100.0);
+                                                   eye.length()/300.0);
         new_lodsurfacepoly->setName("lodsurfacepoly");
 
         CalcProjFrustumLLAPoly(frustum,horizon_plane,list_ecef);
         auto new_frustumsurfacepoly = BuildSurfacePoly(list_ecef,
-                                                       osg::Vec4(0.25,0.25,0.25,1.0),
-                                                       eye.length()/100.0);
+                                                       osg::Vec4(0.75,0.5,1.0,1.0),
+                                                       eye.length()/240.0);
         new_frustumsurfacepoly->setName("frustumsurfacepoly");
 
 
@@ -375,7 +456,7 @@ int main()
             }
             gp_root0->addChild(new_horizon);
             gp_root0->addChild(new_frustumsurfacepoly);
-            gp_root0->addChild(new_lodsurfacepoly);
+//            gp_root0->addChild(new_lodsurfacepoly);
         }
 
         // Update gp_root1
@@ -411,10 +492,10 @@ int main()
             // Add new nodes
             gp_root1->addChild(new_frustum);
             gp_root1->addChild(new_mincamdistline);
-            gp_root1->addChild(new_lodrings);
+//            gp_root1->addChild(new_lodrings);
             gp_root1->addChild(new_horizon);
             gp_root1->addChild(new_frustumsurfacepoly);
-            gp_root1->addChild(new_lodsurfacepoly);
+//            gp_root1->addChild(new_lodsurfacepoly);
         }
 
         viewer.frame();

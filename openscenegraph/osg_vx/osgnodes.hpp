@@ -38,7 +38,7 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
 
     osg::ref_ptr<osg::Vec4Array> cx_array =
             new osg::Vec4Array;
-    cx_array->push_back(osg::Vec4(0.2,0.2,0.2,0.1));
+    cx_array->push_back(osg::Vec4(0.35,0.35,0.35,0.1));
 
     osg::ref_ptr<osg::DrawElementsUShort> ix_array =
             new osg::DrawElementsUShort(GL_TRIANGLES);
@@ -626,12 +626,43 @@ osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera,
     if(camera) {
         camera->getViewMatrixAsLookAt(eye,vpt,up);
 
+        // Create a ring node
+        osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
+        {
+            // Create a ring of vertices
+            osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+            double const rotate_by_rads = (2.0*K_PI/list_vx->size());
+
+            for(size_t j=0; j < list_vx->size(); j++){
+                list_vx->at(j) = osg::Vec3d(
+                            cos(rotate_by_rads*j),
+                            sin(rotate_by_rads*j),
+                            0);
+            }
+
+            osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+            list_cx->push_back(osg::Vec4(1,1,0,1));
+
+            gm_ring->setVertexArray(list_vx);
+            gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+            gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+        }
+
+        osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
+        osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
+        gd_ring->addDrawable(gm_ring);
+        xf_ring->addChild(gd_ring);
+        xf_ring->setScale(eye.length()/300.0);
+        xf_ring->setPosition(horizon_plane.p);
+        xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+        gp_horizon_plane->addChild(xf_ring);
+
         if(CalcHorizonPlane(eye,horizon_plane,false)) {
             // Draw the plane as a circle centered on horizon_pt
             // with radius RAD_AV*0.5
             osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(16);
             double const rotate_by_rads = (2.0*K_PI/list_vx->size());
-            double const dist = RAD_AV*1.1;
+            double const dist = sqrt(RAD_AV*RAD_AV - horizon_plane.p*horizon_plane.p);
 
             // Rotate the circle so that its normal is
             // aligned to the horizon_norm

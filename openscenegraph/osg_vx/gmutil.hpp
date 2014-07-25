@@ -381,28 +381,33 @@ bool CalcHorizonPlane(osg::Vec3d const &eye,
     // eye is outside of the celestial body surface
 
     osg::Vec3d xsecNear,xsecFar;
-    if(!CalcRayEarthIntersection(eye,eye*-1.0,xsecNear,xsecFar)) {
+    if(!CalcRayEarthIntersection(eye,eye,xsecNear,xsecFar)) {
         return false;
     }
 
-    double const xsecNear_length = xsecNear.length();
-    double eye_length = eye.length();
+    horizon_plane.n = eye;
+    horizon_plane.n.normalize();
 
-    if((eye_length - xsecNear_length) < 500.0) { // clamp to 500m
-        return false;
+    double const eye_length2 = eye.length2();
+    double const xsec_length2 = xsecNear.length2();
+
+    osg::Vec3d eye_clamped = eye;
+    if((eye.length() - RAD_AV) < 5000.0) {
+        eye_clamped = (horizon_plane.n*(5000.0+RAD_AV));
     }
 
+    double eye_length = eye_clamped.length();
     double const inv_dist = 1.0/eye_length;
-
-    horizon_plane.n = eye*inv_dist;
 
     // by similar triangles
     horizon_plane.p = horizon_plane.n * (RAD_AV*RAD_AV*inv_dist);
 
+    std::cout << "###: " << (horizon_plane.p.length()) << std::endl;
+
     if(flip_normal) {
         horizon_plane.n *= -1.0;
     }
-    horizon_plane.d = horizon_plane.n * horizon_plane.p;  
+    horizon_plane.d = horizon_plane.n * horizon_plane.p;
 
     return true;
 }
