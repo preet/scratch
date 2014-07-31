@@ -141,9 +141,9 @@ void CalcProjSphereLLAPoly(Plane const &horizon_plane,
     list_ecef = list_xsec_vx;
 }
 
-void CalcProjFrustumLLAPoly2(Frustum const &frustum,
-                            Plane const &horizon_plane,
-                            std::vector<osg::Vec3d> &list_ecef)
+void CalcProjFrustumLLAPoly_Direct(Frustum const &frustum,
+                                   Plane const &horizon_plane,
+                                   std::vector<osg::Vec3d> &list_ecef)
 {
     (void)horizon_plane;
 
@@ -267,46 +267,24 @@ void CalcProjFrustumLLAPoly(Frustum const &frustum,
         // Project rays that missed the planetary
         // body onto the horizon plane
         osg::Vec3d const ecef_horizon =
-                list_ecef_xsec[i] -
-                (horizon_plane.n*((list_ecef_xsec[i]-horizon_plane.p)*horizon_plane.n));
+                CalcPointPlaneProjection(list_ecef_xsec[i],
+                                         horizon_plane);
 
-//        list_ecef.clear();
+        if(!CalcRayEarthIntersection(ecef_horizon,
+                                     ecef_horizon,
+                                     xsec_near,
+                                     xsec_far))
+        {
+            // should never get here
+            std::cout << "###: FATAL" << std::endl;
+            return;
+        }
+
+        list_ecef_xsec[i] = xsec_near;
 //        list_ecef.push_back(list_ecef_xsec[i]);
-        list_ecef.push_back(ecef_horizon);
-
-//        return;
-
-        // Project the horizon plane intersection points
-        // back onto the surface of the planet
-
-//        osg::Vec3d const along_horizon =
-//                ecef_horizon-horizon_plane.p;
-
-//        if(along_horizon.length2() < 1.0) {
-//            xsec_near = horizon_plane.p;
-//        }
-//        else {
-//            if(!CalcRayEarthIntersection(ecef_horizon,
-//                                         along_horizon,
-//                                         xsec_near,
-//                                         xsec_far))
-//            {
-//                // should never get here
-//                std::cout << "###: ERROR: RE xsec to surface failed" << std::endl;
-//                std::cout << "###: along_horizon: " << along_horizon << std::endl;
-//                std::cout << "###: ecef_horizon: " << ecef_horizon << std::endl;
-//                list_ecef.clear();
-//                list_ecef.push_back(along_horizon);
-//                list_ecef.push_back(ecef_horizon);
-
-//                return;
-//            }
-//        }
-
-//        list_ecef_xsec[i] = xsec_near;
     }
 
-//    list_ecef = list_ecef_xsec;
+    list_ecef = list_ecef_xsec;
 }
 
 // Ensure that inside out projection works
@@ -409,7 +387,7 @@ int main()
             double const eye_dist2 = eye.length2();
              double const rad_length2 = RAD_AV*RAD_AV;
             if(eye_dist2 > rad_length2) {
-               far_dist = sqrt(eye.length2() - (RAD_AV*RAD_AV));
+               far_dist = sqrt(eye_dist2 - (RAD_AV*RAD_AV));
             }
         }
         auto new_frustum = BuildFrustumNode(camera,frustum,far_dist);
@@ -417,22 +395,42 @@ int main()
         std::vector<osg::Vec3d> list_ecef;
 
         // new surfacepoly
-//        CalcProjSphereLLAPoly(horizon_plane,eye,K_LIST_LOD_DIST[2],list_ecef);
-        CalcProjFrustumLLAPoly2(frustum,horizon_plane,list_ecef);
-        auto new_lodsurfacepoly = BuildSurfacePoly(list_ecef,
-                                                   K_COLOR_TABLE[2],
-                                                   eye.length()/300.0);
-        new_lodsurfacepoly->setName("lodsurfacepoly");
 
-        CalcProjFrustumLLAPoly(frustum,horizon_plane,list_ecef);
-        auto new_frustumsurfacepoly = BuildSurfacePoly(list_ecef,
-                                                       osg::Vec4(0.75,0.5,1.0,1.0),
-                                                       eye.length()/240.0);
+        osg::ref_ptr<osg::Group> new_lodsurfacepoly;
+        osg::ref_ptr<osg::Group> new_frustumsurfacepoly;
+
+        if(eye.length() > RAD_AV) {
+
+            new_lodsurfacepoly = new osg::Group;
+            for(size_t i=0; i < K_LIST_LOD_DIST.size(); i++) {
+                list_ecef.clear();
+                CalcProjSphereLLAPoly(horizon_plane,eye,K_LIST_LOD_DIST[i],list_ecef);
+                if(!(list_ecef.empty())) {
+                    new_lodsurfacepoly->addChild(BuildSurfacePoly(list_ecef,
+                                                                  K_COLOR_TABLE[i],
+                                                                  eye.length()/1200.0));
+                }
+            }
+
+            CalcProjFrustumLLAPoly(frustum,horizon_plane,list_ecef);
+            new_frustumsurfacepoly = BuildSurfacePoly(list_ecef,
+                                                      osg::Vec4(0.75,0.5,1.0,1.0),
+                                                      eye.length()/1200.0);
+
+//            std::cout << "###: _out" << std::endl;
+        }
+        else {
+            new_lodsurfacepoly = new osg::Group;
+            new_frustumsurfacepoly = new osg::Group;
+
+//            std::cout << "###: _in" << std::endl;
+        }
+
+        new_lodsurfacepoly->setName("lodsurfacepoly");
         new_frustumsurfacepoly->setName("frustumsurfacepoly");
 
-
         // new lod rings
-        auto new_lodrings = BuildLodRingsNode(eye);
+//        auto new_lodrings = BuildLodRingsNode(eye);
 
         // new min cam dist line node
         auto new_mincamdistline = BuildMinCamDistLineNode(eye);
@@ -456,7 +454,7 @@ int main()
             }
             gp_root0->addChild(new_horizon);
             gp_root0->addChild(new_frustumsurfacepoly);
-//            gp_root0->addChild(new_lodsurfacepoly);
+            gp_root0->addChild(new_lodsurfacepoly);
         }
 
         // Update gp_root1
@@ -495,11 +493,11 @@ int main()
 //            gp_root1->addChild(new_lodrings);
             gp_root1->addChild(new_horizon);
             gp_root1->addChild(new_frustumsurfacepoly);
-//            gp_root1->addChild(new_lodsurfacepoly);
+            gp_root1->addChild(new_lodsurfacepoly);
         }
 
         viewer.frame();
-    }
 
+    }
     return 0;
 }

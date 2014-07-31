@@ -659,7 +659,7 @@ osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera,
 
         if(CalcHorizonPlane(eye,horizon_plane,false)) {
             // Draw the plane as a circle centered on horizon_pt
-            // with radius RAD_AV*0.5
+            // with radius == dist
             osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(16);
             double const rotate_by_rads = (2.0*K_PI/list_vx->size());
             double const dist = sqrt(RAD_AV*RAD_AV - horizon_plane.p*horizon_plane.p);

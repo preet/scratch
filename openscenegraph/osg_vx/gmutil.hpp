@@ -402,7 +402,7 @@ bool CalcHorizonPlane(osg::Vec3d const &eye,
     // by similar triangles
     horizon_plane.p = horizon_plane.n * (RAD_AV*RAD_AV*inv_dist);
 
-    std::cout << "###: " << (horizon_plane.p.length()) << std::endl;
+//    std::cout << "###: " << (horizon_plane.p.length()) << std::endl;
 
     if(flip_normal) {
         horizon_plane.n *= -1.0;
