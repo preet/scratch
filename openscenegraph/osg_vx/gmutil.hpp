@@ -40,24 +40,26 @@
 // average radius
 #define RAD_AV 6371000.0
 
-// WGS84 ellipsoid parameters
-// (http://en.wikipedia.org/wiki/WGS_84)
-#define ELL_SEMI_MAJOR 6378137.0            // meters
-#define ELL_SEMI_MAJOR_EXP2 40680631590769.0
+//// WGS84 ellipsoid parameters
+//// (http://en.wikipedia.org/wiki/WGS_84)
+//#define ELL_SEMI_MAJOR 6378137.0            // meters
+//#define ELL_SEMI_MAJOR_EXP2 40680631590769.0
 
-#define ELL_SEMI_MINOR 6356752.3142         // meters
-#define ELL_SEMI_MINOR_EXP2 40408299984087.1
+//#define ELL_SEMI_MINOR 6356752.3142         // meters
+//#define ELL_SEMI_MINOR_EXP2 40408299984087.1
 
-#define ELL_F 1.0/298.257223563
-#define ELL_ECC_EXP2 6.69437999014e-3
-#define ELL_ECC2_EXP2 6.73949674228e-3
+//#define ELL_F 1.0/298.257223563
+//#define ELL_ECC_EXP2 6.69437999014e-3
+//#define ELL_ECC2_EXP2 6.73949674228e-3
 
-// circumference
-#define CIR_EQ 40075017.0   // around equator  (meters)
-#define CIR_MD 40007860.0   // around meridian (meters)
-#define CIR_AV 40041438.0   // average (meters)
+//// circumference
+//#define CIR_EQ 40075017.0   // around equator  (meters)
+//#define CIR_MD 40007860.0   // around meridian (meters)
+//#define CIR_AV 40041438.0   // average (meters)
 
 //////////////////////////////////////////////////////
+
+double const RAD_AV_INV_EXP2 = (1.0/6371000.0)*(1.0/6371000.0);
 
 size_t const K_MAX_LOD = 18;
 double const K_MAX_LOD_AREA_REF_M = 150*150;
@@ -223,47 +225,29 @@ struct PointLLA
 
 PointLLA ConvECEFToLLA(const osg::Vec3d &pointECEF)
 {
+    double radius = pointECEF.length();
+
     PointLLA pointLLA;
-
-    double p = (sqrt(pow(pointECEF.x(),2) + pow(pointECEF.y(),2)));
-    double th = atan2(pointECEF.z()*ELL_SEMI_MAJOR, p*ELL_SEMI_MINOR);
-    double sinTh = sin(th);
-    double cosTh = cos(th);
-
-    // calc longitude
-    pointLLA.lon = atan2(pointECEF.y(), pointECEF.x());
-
-    // calc latitude
-    pointLLA.lat = atan2(pointECEF.z() +
-                         ELL_ECC2_EXP2*ELL_SEMI_MINOR*sinTh*sinTh*sinTh,
-                         p - ELL_ECC_EXP2*ELL_SEMI_MAJOR*cosTh*cosTh*cosTh);
-    // calc altitude
-    double sinLat = sin(pointLLA.lat);
-    double N = ELL_SEMI_MAJOR / (sqrt(1-(ELL_ECC_EXP2*sinLat*sinLat)));
-    pointLLA.alt = (p/cos(pointLLA.lat)) - N;
-
-    // convert from rad to deg
-    pointLLA.lon = pointLLA.lon * K_RAD2DEG;
-    pointLLA.lat = pointLLA.lat * K_RAD2DEG;
+    pointLLA.lon = (atan2(pointECEF.y(),pointECEF.x()))*K_RAD2DEG;
+    pointLLA.lat = (asin(pointECEF.z()/radius))*K_RAD2DEG;
+    pointLLA.alt = radius-RAD_AV;
 
     return pointLLA;
 }
 
 osg::Vec3d ConvLLAToECEF(const PointLLA &pointLLA)
 {
-    osg::Vec3d pointECEF;
-
     // remember to convert deg->rad
     double sinLat = sin(pointLLA.lat * K_DEG2RAD);
     double sinLon = sin(pointLLA.lon * K_DEG2RAD);
     double cosLat = cos(pointLLA.lat * K_DEG2RAD);
     double cosLon = cos(pointLLA.lon * K_DEG2RAD);
+    double radius = RAD_AV+pointLLA.alt;
 
-    // v = radius of curvature (meters)
-    double v = ELL_SEMI_MAJOR / (sqrt(1-(ELL_ECC_EXP2*sinLat*sinLat)));
-    pointECEF.x() = (v + pointLLA.alt) * cosLat * cosLon;
-    pointECEF.y() = (v + pointLLA.alt) * cosLat * sinLon;
-    pointECEF.z() = ((1-ELL_ECC_EXP2)*v + pointLLA.alt)*sinLat;
+    osg::Vec3d pointECEF;
+    pointECEF.x() = cosLat * cosLon * radius;
+    pointECEF.y() = cosLat * sinLon * radius;
+    pointECEF.z() = sinLat * radius;
 
     return pointECEF;
 }
@@ -273,17 +257,26 @@ bool CalcRayEarthIntersection(osg::Vec3d const &rayPoint,
                               osg::Vec3d &xsecNear,
                               osg::Vec3d &xsecFar)
 {
-    double a = ((rayDirn.x()*rayDirn.x()) / ELL_SEMI_MAJOR_EXP2) +
-               ((rayDirn.y()*rayDirn.y()) / ELL_SEMI_MAJOR_EXP2) +
-               ((rayDirn.z()*rayDirn.z()) / ELL_SEMI_MINOR_EXP2);
+    // The solution for intersection points between a ray
+    // and the Earth's surface is a quadratic equation
 
-    double b = (2*rayPoint.x()*rayDirn.x()/ELL_SEMI_MAJOR_EXP2) +
-               (2*rayPoint.y()*rayDirn.y()/ELL_SEMI_MAJOR_EXP2) +
-               (2*rayPoint.z()*rayDirn.z()/ELL_SEMI_MINOR_EXP2);
+    // first calculate the quadratic equation params:
+    // a(x^2) + b(x) + c
 
-    double c = ((rayPoint.x()*rayPoint.x()) / ELL_SEMI_MAJOR_EXP2) +
-               ((rayPoint.y()*rayPoint.y()) / ELL_SEMI_MAJOR_EXP2) +
-               ((rayPoint.z()*rayPoint.z()) / ELL_SEMI_MINOR_EXP2) - 1;
+    // Earth is approximated as a sphere:
+    // x^2+y^2+z^2 = RAD_AV^2
+
+    double a = ((rayDirn.x()*rayDirn.x()) * RAD_AV_INV_EXP2) +
+               ((rayDirn.y()*rayDirn.y()) * RAD_AV_INV_EXP2) +
+               ((rayDirn.z()*rayDirn.z()) * RAD_AV_INV_EXP2);
+
+    double b = (2*rayPoint.x()*rayDirn.x() * RAD_AV_INV_EXP2) +
+               (2*rayPoint.y()*rayDirn.y() * RAD_AV_INV_EXP2) +
+               (2*rayPoint.z()*rayDirn.z() * RAD_AV_INV_EXP2);
+
+    double c = ((rayPoint.x()*rayPoint.x()) * RAD_AV_INV_EXP2) +
+               ((rayPoint.y()*rayPoint.y()) * RAD_AV_INV_EXP2) +
+               ((rayPoint.z()*rayPoint.z()) * RAD_AV_INV_EXP2) - 1;
 
     std::vector<double> listRoots;
     CalcQuadraticEquationReal(a,b,c,listRoots);
@@ -305,7 +298,7 @@ bool CalcRayEarthIntersection(osg::Vec3d const &rayPoint,
             xsecFar.y() = rayPoint.y() + listRoots[1]*rayDirn.y();
             xsecFar.z() = rayPoint.z() + listRoots[1]*rayDirn.z();
 
-            if((rayPoint-xsecNear).length2() > (rayPoint-xsecFar).length2())
+            if((xsecNear-rayPoint).length2() > (xsecFar-rayPoint).length2())
             {
                 osg::Vec3d temp = xsecNear;
                 xsecNear = xsecFar;
@@ -374,8 +367,7 @@ bool BuildEarthSurfaceGeometry(double minLon, double minLat,
 }
 
 bool CalcHorizonPlane(osg::Vec3d const &eye,
-                      Plane & horizon_plane,
-                      bool flip_normal)
+                      Plane & horizon_plane)
 {
     // We need to clamp eye_length such that the
     // eye is outside of the celestial body surface
@@ -401,12 +393,6 @@ bool CalcHorizonPlane(osg::Vec3d const &eye,
 
     // by similar triangles
     horizon_plane.p = horizon_plane.n * (RAD_AV*RAD_AV*inv_dist);
-
-//    std::cout << "###: " << (horizon_plane.p.length()) << std::endl;
-
-    if(flip_normal) {
-        horizon_plane.n *= -1.0;
-    }
     horizon_plane.d = horizon_plane.n * horizon_plane.p;
 
     return true;
@@ -443,6 +429,45 @@ osg::Vec3d CalcVectorRotation(osg::Vec3d const &input_vec,
             (input_vec * cos_angle_rads) + ((axis_normalized^input_vec) * sin_angle_rads) + (axis_normalized*(axis_normalized*input_vec)*(1-cos_angle_rads));
 
     return rotated_vec;
+}
+
+osg::Vec3d CalcGnomonicProjOrigin(Plane const &horizon_plane,
+                                  double const min_angle_degs=10.0)
+{
+    // For a true gnomonic projection, the projection
+    // origin should be at the center of the planet.
+
+    // However, if the horizon plane is too close to the
+    // center (or contains it), points on the horizon plane
+    // can't be projected to another plane with the same
+    // normal as the projection rays will be parallel to
+    // said plane.
+
+    // The projection origin has to be moved back behind
+    // the center of the planet in this case. How far its
+    // moved back is determined by min_angle_degs.
+
+    double const min_angle_rads =
+            fabs(min_angle_degs*K_DEG2RAD);
+
+    double const p_length = horizon_plane.p.length();
+
+    double const angle_rads =
+            atan2(p_length,RAD_AV);
+
+//    std::cout << "###: " << angle_rads*K_RAD2DEG << std::endl;
+
+    if(fabs(angle_rads) > min_angle_rads) {
+        // We can use the true center
+        return osg::Vec3d(0,0,0);
+    }
+
+    double min_p_length = tan(min_angle_rads)*RAD_AV;
+    osg::Vec3d proj_center = horizon_plane.p;
+    proj_center.normalize();
+    proj_center = proj_center * (min_p_length-p_length) * -1.0;
+
+    return proj_center;
 }
 
 //////////////////////////////////////////////////////

@@ -16,8 +16,14 @@ void BuildViewExtentsMinCamDist(VxTile * t,
                                 Frustum const &frustum,
                                 Plane const &horizon_plane)
 {
-    t->_fvis = CalcFrustumOBBIntersectSAT(frustum,t->obb);
-    t->_hvis = !(CalcOBBOutsidePlane(horizon_plane,t->obb));
+//    t->_fvis = CalcFrustumOBBIntersectSAT(frustum,t->obb);
+    t->_fvis = true;
+//    t->_hvis = false;
+
+    Plane flipped_hp = horizon_plane;
+    flipped_hp.n *= -1.0;
+    flipped_hp.d = flipped_hp.n*flipped_hp.p;
+    t->_hvis = !(CalcOBBOutsidePlane(flipped_hp,t->obb));
 
 
 //    if(t->level == (K_MAX_LOD-1)) {

@@ -462,7 +462,14 @@ void BuildViewExtentsGeometry(VxTile const * t, osg::Group * gp)
 //        list_cx->at(0) = osg::Vec4(0,0,1,1);
 //    }
 
-    if(t->_fvis && t->_hvis) {
+//    if(t->_fvis && t->_hvis) {
+//        list_cx->at(0) = osg::Vec4(0,1,0,1);
+//    }
+//    else {
+//        list_cx->at(0) = osg::Vec4(1,0,0,1);
+//    }
+
+    if(t->_hvis) {
         list_cx->at(0) = osg::Vec4(0,1,0,1);
     }
     else {
@@ -657,7 +664,7 @@ osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera,
         xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
         gp_horizon_plane->addChild(xf_ring);
 
-        if(CalcHorizonPlane(eye,horizon_plane,false)) {
+        if(CalcHorizonPlane(eye,horizon_plane)) {
             // Draw the plane as a circle centered on horizon_pt
             // with radius == dist
             osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(16);
@@ -696,6 +703,45 @@ osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera,
     }
 
     return gp_horizon_plane;
+}
+
+osg::ref_ptr<osg::Group> BuildRingNode(osg::Vec3d const &center,
+                                       osg::Vec4 const &color,
+                                       double const radius)
+{
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    // Create a ring node
+    osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
+    {
+        // Create a ring of vertices
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+        double const rotate_by_rads = (2.0*K_PI/list_vx->size());
+
+        for(size_t j=0; j < list_vx->size(); j++){
+            list_vx->at(j) = osg::Vec3d(
+                        cos(rotate_by_rads*j),
+                        sin(rotate_by_rads*j),
+                        0);
+        }
+
+        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+        list_cx->push_back(color);
+
+        gm_ring->setVertexArray(list_vx);
+        gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+        gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+    }
+
+    osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
+    osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
+    gd_ring->addDrawable(gm_ring);
+    xf_ring->addChild(gd_ring);
+    xf_ring->setScale(radius);
+    xf_ring->setPosition(center);
+    xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+    gp->addChild(xf_ring);
+
+    return gp;
 }
 
 osg::ref_ptr<osg::Group> BuildFrustumOBBProjNode(Frustum const &frustum,
@@ -759,6 +805,9 @@ osg::ref_ptr<osg::Group> BuildSurfacePoly(std::vector<osg::Vec3d> const &list_ec
                                           double vx_size=1.0)
 {
     osg::ref_ptr<osg::Group> gp = new osg::Group;
+    if(list_ecef.empty()) {
+        return gp;
+    }
 
     // Create a ring node
     osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;

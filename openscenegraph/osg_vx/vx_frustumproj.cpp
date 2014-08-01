@@ -59,6 +59,25 @@ IntersectionType CalcSphereSphereIntersection(osg::Vec3d const &centerA,
     return XSEC_TRUE;
 }
 
+bool CalcGnomonicProjPoly(std::vector<osg::Vec3d> const &list_ecef,
+                          osg::Vec3d const &proj_center,
+                          Plane const &plane,
+                          std::vector<osg::Vec3d> &list_proj_vx)
+{
+    list_proj_vx.resize(list_ecef.size());
+    for(size_t i=0; i < list_ecef.size(); i++) {
+        double u;
+        if(!CalcRayPlaneIntersection(proj_center,
+                                     list_ecef[i]-proj_center,
+                                     plane,
+                                     list_proj_vx[i],
+                                     u)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void CalcProjSphereLLAPoly(Plane const &horizon_plane,
                            osg::Vec3d const &sphere_center,
                            double const sphere_radius,
@@ -271,7 +290,7 @@ void CalcProjFrustumLLAPoly(Frustum const &frustum,
                                          horizon_plane);
 
         if(!CalcRayEarthIntersection(ecef_horizon,
-                                     ecef_horizon,
+                                     horizon_plane.p - ecef_horizon,
                                      xsec_near,
                                      xsec_far))
         {
@@ -398,36 +417,65 @@ int main()
 
         osg::ref_ptr<osg::Group> new_lodsurfacepoly;
         osg::ref_ptr<osg::Group> new_frustumsurfacepoly;
+        osg::ref_ptr<osg::Group> new_projcenter;
 
         if(eye.length() > RAD_AV) {
 
+            osg::Vec3d proj_center = CalcGnomonicProjOrigin(horizon_plane);
+            Plane tangent_plane = horizon_plane;
+            tangent_plane.p = horizon_plane.n * RAD_AV;
+            tangent_plane.d = tangent_plane.n * tangent_plane.p;
+
+            // lodsurfacepoly
             new_lodsurfacepoly = new osg::Group;
-            for(size_t i=0; i < K_LIST_LOD_DIST.size(); i++) {
+            for(size_t i=0; i < K_LIST_LOD_DIST.size(); i++)
+            {
                 list_ecef.clear();
+                std::vector<osg::Vec3d> list_proj_vx;
+
                 CalcProjSphereLLAPoly(horizon_plane,eye,K_LIST_LOD_DIST[i],list_ecef);
-                if(!(list_ecef.empty())) {
-                    new_lodsurfacepoly->addChild(BuildSurfacePoly(list_ecef,
+                if(CalcGnomonicProjPoly(list_ecef,proj_center,tangent_plane,list_proj_vx)) {
+                    new_lodsurfacepoly->addChild(BuildSurfacePoly(list_proj_vx,
                                                                   K_COLOR_TABLE[i],
                                                                   eye.length()/1200.0));
                 }
             }
 
-            CalcProjFrustumLLAPoly(frustum,horizon_plane,list_ecef);
-            new_frustumsurfacepoly = BuildSurfacePoly(list_ecef,
-                                                      osg::Vec4(0.75,0.5,1.0,1.0),
-                                                      eye.length()/1200.0);
+            // frustumsurfacepoly
+            {
+                list_ecef.clear();
+                std::vector<osg::Vec3d> list_proj_vx;
+
+                CalcProjFrustumLLAPoly(frustum,horizon_plane,list_ecef);
+                if(CalcGnomonicProjPoly(list_ecef,proj_center,tangent_plane,list_proj_vx)) {
+                    new_frustumsurfacepoly = BuildSurfacePoly(list_proj_vx,
+                                                              osg::Vec4(0.75,0.5,1.0,1.0),
+                                                              eye.length()/1200.0);
+                }
+                else {
+                    new_frustumsurfacepoly = new osg::Group;
+                }
+            }
+
+            new_projcenter = new osg::Group;
+
+
+//            new_projcenter = BuildRingNode(proj_center,
+//                                           osg::Vec4(1.0,0.0,0.0,1.0),
+//                                           eye.length()/300.0);
 
 //            std::cout << "###: _out" << std::endl;
         }
         else {
             new_lodsurfacepoly = new osg::Group;
             new_frustumsurfacepoly = new osg::Group;
-
+            new_projcenter = new osg::Group;
 //            std::cout << "###: _in" << std::endl;
         }
 
         new_lodsurfacepoly->setName("lodsurfacepoly");
         new_frustumsurfacepoly->setName("frustumsurfacepoly");
+        new_projcenter->setName("projcenter");
 
         // new lod rings
 //        auto new_lodrings = BuildLodRingsNode(eye);
@@ -451,10 +499,15 @@ int main()
                     gp_root0->removeChild(i);
                     i--;
                 }
+                else if(name == "projcenter") {
+                    gp_root0->removeChild(i);
+                    i--;
+                }
             }
             gp_root0->addChild(new_horizon);
             gp_root0->addChild(new_frustumsurfacepoly);
             gp_root0->addChild(new_lodsurfacepoly);
+            gp_root0->addChild(new_projcenter);
         }
 
         // Update gp_root1
@@ -486,6 +539,10 @@ int main()
                     gp_root1->removeChild(i);
                     i--;
                 }
+                else if(name == "projcenter") {
+                    gp_root1->removeChild(i);
+                    i--;
+                }
             }
             // Add new nodes
             gp_root1->addChild(new_frustum);
@@ -494,6 +551,7 @@ int main()
             gp_root1->addChild(new_horizon);
             gp_root1->addChild(new_frustumsurfacepoly);
             gp_root1->addChild(new_lodsurfacepoly);
+            gp_root1->addChild(new_projcenter);
         }
 
         viewer.frame();
