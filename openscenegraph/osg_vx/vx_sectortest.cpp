@@ -29,48 +29,48 @@ osg::Vec4 CalcRainbowGradient(double cVal)
     size_t n = size_t(m);
 
     double fraction = m-n;
-    unsigned char t = int(fraction*255);
+    unsigned char t = int(fraction*200);
 
     switch(n)   {
         case 0:   {
-            R = 255;
+            R = 200;
             G = t;
             B = 0;
             break;
         }
         case 1:   {
-            R = 255 - t;
-            G = 255;
+            R = 200 - t;
+            G = 200;
             B = 0;
             break;
         }
         case 2:   {
             R = 0;
-            G = 255;
+            G = 200;
             B = t;
             break;
         }
         case 3:   {
             R = 0;
-            G = 255 - t;
-            B = 255;
+            G = 200 - t;
+            B = 200;
             break;
         }
         case 4:   {
             R = t;
             G = 0;
-            B = 255;
+            B = 200;
             break;
         }
         case 5:   {
-            R = 255;
+            R = 200;
             G = 0;
-            B = 255 - t;
+            B = 200 - t;
             break;
         }
     }
 
-    osg::Vec4 myColor(R/255.0,G/255.0,B/255.0,0.5);
+    osg::Vec4 myColor(R/255.0,G/255.0,B/255.0,1.0);
 
     return myColor;
 }
@@ -164,6 +164,206 @@ void CalcCandidatesForSectorLon(osg::Vec3d const &proj_n,
     }
 }
 
+struct SectorProjDesc
+{
+    SectorProjDesc(double min_lon_degs,
+                   double min_lat_degs,
+                   double max_lon_degs,
+                   double max_lat_degs) :
+        min_lon_degs(min_lon_degs),
+        min_lat_degs(min_lat_degs),
+        max_lon_degs(max_lon_degs),
+        max_lat_degs(max_lat_degs),
+        sin_min_lon(sin(min_lon_degs*K_DEG2RAD)),
+        cos_min_lon(cos(min_lon_degs*K_DEG2RAD)),
+        sin_max_lon(sin(max_lon_degs*K_DEG2RAD)),
+        cos_max_lon(cos(max_lon_degs*K_DEG2RAD)),
+        sin_min_lat(sin(min_lat_degs*K_DEG2RAD)),
+        cos_min_lat(cos(min_lat_degs*K_DEG2RAD)),
+        sin_max_lat(sin(max_lat_degs*K_DEG2RAD)),
+        cos_max_lat(cos(max_lat_degs*K_DEG2RAD))
+    {
+
+    }
+
+    double const min_lon_degs;
+    double const min_lat_degs;
+    double const max_lon_degs;
+    double const max_lat_degs;
+
+    double const sin_min_lon;
+    double const cos_min_lon;
+
+    double const sin_max_lon;
+    double const cos_max_lon;
+
+    double const sin_min_lat;
+    double const cos_min_lat;
+
+    double const sin_max_lat;
+    double const cos_max_lat;
+};
+
+void CalcProjMaxForSector(SectorProjDesc const &sector,
+                          osg::Vec3d const &proj_axis, // must be normalized
+                          osg::Vec3d const &proj_xsec,
+                          PointLLA &lla_max,
+                          double &proj_max)
+{
+    PointLLA const lla_xsec = ConvECEFToLLA(proj_xsec);
+
+    // list of candidate lla and proj values
+    std::vector<PointLLA> list_cand_lla;
+    list_cand_lla.reserve(8);
+
+    std::vector<double> list_cand_f;
+    list_cand_f.reserve(8);
+
+    if(lla_xsec.lon < sector.min_lon_degs ||
+       lla_xsec.lon > sector.max_lon_degs) {
+        // If the crit lon is outside the sector range, the
+        // corner points of the sector are candidates:
+
+        // f(min_lon,min_lat)
+        list_cand_lla.emplace_back(sector.min_lon_degs,sector.min_lat_degs);
+        list_cand_f.push_back(EvalProjVectorSphere(proj_axis,
+                                                   sector.sin_min_lon,
+                                                   sector.cos_min_lon,
+                                                   sector.sin_min_lat,
+                                                   sector.cos_min_lat));
+        // f(min_lon,max_lat)
+        list_cand_lla.emplace_back(sector.min_lon_degs,sector.max_lat_degs);
+        list_cand_f.push_back(EvalProjVectorSphere(proj_axis,
+                                                   sector.sin_min_lon,
+                                                   sector.cos_min_lon,
+                                                   sector.sin_max_lat,
+                                                   sector.cos_max_lat));
+        // f(max_lon,min_lat)
+        list_cand_lla.emplace_back(sector.max_lon_degs,sector.min_lat_degs);
+        list_cand_f.push_back(EvalProjVectorSphere(proj_axis,
+                                                   sector.sin_max_lon,
+                                                   sector.cos_max_lon,
+                                                   sector.sin_min_lat,
+                                                   sector.cos_min_lat));
+        // f(max_lon,max_lat)
+        list_cand_lla.emplace_back(sector.max_lon_degs,sector.max_lat_degs);
+        list_cand_f.push_back(EvalProjVectorSphere(proj_axis,
+                                                   sector.sin_max_lon,
+                                                   sector.cos_max_lon,
+                                                   sector.sin_max_lat,
+                                                   sector.cos_max_lat));
+
+        // Additional candidates are the critical latitudes
+        // along the min and max longitude edges:
+
+        // Min longitude edge
+        CalcCandidatesForSectorLon(proj_axis,
+                                   sector.min_lon_degs,
+                                   sector.sin_min_lon,
+                                   sector.cos_min_lon,
+                                   sector.min_lat_degs,
+                                   sector.max_lat_degs,
+                                   list_cand_lla,
+                                   list_cand_f);
+
+        // Max longitude edge
+        CalcCandidatesForSectorLon(proj_axis,
+                                   sector.max_lon_degs,
+                                   sector.sin_max_lon,
+                                   sector.cos_max_lon,
+                                   sector.min_lat_degs,
+                                   sector.max_lat_degs,
+                                   list_cand_lla,
+                                   list_cand_f);
+    }
+    else {
+        // If the xsec lon is within the sector range,
+        // get candidates for all possible latitudes
+        // along xsec lon (min, max, crit)
+
+        double const sin_crit_lon = sin(lla_xsec.lon*K_DEG2RAD);
+        double const cos_crit_lon = cos(lla_xsec.lon*K_DEG2RAD);
+
+        // f(crit_lon,min_lat)
+        list_cand_lla.emplace_back(lla_xsec.lon,sector.min_lat_degs);
+        list_cand_f.push_back(EvalProjVectorSphere(proj_axis,
+                                                   sin_crit_lon,
+                                                   cos_crit_lon,
+                                                   sector.sin_min_lat,
+                                                   sector.cos_min_lat));
+
+        // f(crit_lon,max_lat)
+        list_cand_lla.emplace_back(lla_xsec.lon,sector.max_lat_degs);
+        list_cand_f.push_back(EvalProjVectorSphere(proj_axis,
+                                                   sin_crit_lon,
+                                                   cos_crit_lon,
+                                                   sector.sin_max_lat,
+                                                   sector.cos_max_lat));
+
+        // Additional candidates are crit latitudes along crit lon
+        CalcCandidatesForSectorLon(proj_axis,
+                                   lla_xsec.lon,
+                                   sin_crit_lon,
+                                   cos_crit_lon,
+                                   sector.min_lat_degs,
+                                   sector.max_lat_degs,
+                                   list_cand_lla,
+                                   list_cand_f);
+    }
+
+    proj_max = K_MIN_NEG_DBL;
+    for(size_t i=0; i < list_cand_lla.size(); i++) {
+        if(list_cand_f[i] > proj_max) {
+            proj_max = list_cand_f[i];
+            lla_max = list_cand_lla[i];
+        }
+    }
+
+}
+
+bool CalcProjMinMaxForSector(SectorProjDesc const &sector,
+                             osg::Vec3d proj_axis,
+                             double &proj_min,
+                             double &proj_max,
+                             PointLLA &lla_min,
+                             PointLLA &lla_max)
+{
+    proj_axis.normalize();
+    osg::Vec3d proj_axis_flip = proj_axis*-1.0;
+
+    // Calculate the xsec of proj_n and the planet to find
+    // the points where proj_min and proj_max occur for the
+    // entire planet
+
+    // TODO CalcRayEarthIntersection should be done once
+    // outside of this function, not per tile!
+    osg::Vec3d xsec_max,xsec_min;
+    if(!CalcRayEarthIntersection(osg::Vec3d(0,0,0),
+                                 proj_axis,
+                                 xsec_max,
+                                 xsec_min))
+    {
+        std::cout << "###: CalcProjIntervalsForSector: "
+                     "xsec earth failed" << std::endl;
+        return false;
+    }
+
+    // Swap xsec_max and min if required
+    {
+        double proj_max_full = xsec_max*proj_axis;
+        double proj_min_full = xsec_min*proj_axis;
+        if(proj_max_full < proj_min_full) {
+            std::swap(proj_max_full,proj_min_full);
+            std::swap(xsec_max,xsec_min);
+        }
+    }
+
+    CalcProjMaxForSector(sector,proj_axis,xsec_max,lla_max,proj_max);
+    CalcProjMaxForSector(sector,proj_axis_flip,xsec_min,lla_min,proj_min);
+
+    return true;
+}
+
 bool CalcProjMinMaxForSector(double const min_lon_degs,
                              double const min_lat_degs,
                              double const max_lon_degs,
@@ -214,6 +414,7 @@ bool CalcProjMinMaxForSector(double const min_lon_degs,
 
     double const sin_max_lat = sin(max_lat_degs*K_DEG2RAD);
     double const cos_max_lat = cos(max_lat_degs*K_DEG2RAD);
+
 
     // list of candidate lla and proj values
     std::vector<PointLLA> list_cand_lla;
@@ -438,14 +639,15 @@ int main()
     // Sector geometry
     auto gp_sectorprojmap = BuildProjIntervalSectorMap(-90,0,0,90,12,12,osg::Vec3d(0,0,1));
     gp_sectorprojmap->getOrCreateStateSet()->setMode( GL_DEPTH_TEST,osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+    SectorProjDesc sector(-90,0,0,90);
 
     auto gp_sectormax = BuildFacingCircle(osg::Vec3d(0,0,0),1000.0,8,osg::Vec4(1,1,1,1));
     gp_sectormax->setName("sectormax");
-    gp_sectorprojmap->getOrCreateStateSet()->setMode( GL_DEPTH_TEST,osg::StateAttribute::OFF | osg::StateAttribute::OVERRIDE);
     gp_sectormax->getOrCreateStateSet()->setRenderBinDetails(10,"RenderBin");
 
-//    auto gp_sectormin = BuildFacingCircle(osg::Vec3d(0,0,0),1000.0,8,osg::Vec4(1,1,1,1));
-//    gp_sectormin->setName("sectormin");
+    auto gp_sectormin = BuildFacingCircle(osg::Vec3d(0,0,0),1000.0,8,osg::Vec4(0.5,0.5,0.5,1));
+    gp_sectormin->setName("sectormin");
+    gp_sectormin->getOrCreateStateSet()->setRenderBinDetails(11,"RenderBin");
 
     osgViewer::CompositeViewer viewer;
     viewer.setThreadingModel(osgViewer::ViewerBase::SingleThreaded);
@@ -455,12 +657,14 @@ int main()
     gp_root0->addChild(gp_celestial);
     gp_root0->addChild(gp_sectorprojmap);
     gp_root0->addChild(gp_sectormax);
+    gp_root0->addChild(gp_sectormin);
 
     // View1 root
     osg::ref_ptr<osg::Group> gp_root1 = new osg::Group;
     gp_root1->addChild(gp_celestial);
     gp_root1->addChild(gp_sectorprojmap);
     gp_root1->addChild(gp_sectormax);
+    gp_root1->addChild(gp_sectormin);
 
     // disable lighting and enable blending
     gp_root0->getOrCreateStateSet()->setMode( GL_LIGHTING,osg::StateAttribute::OFF);
@@ -532,11 +736,9 @@ int main()
         {
             PointLLA lla_min,lla_max;
             double proj_min,proj_max;
-            CalcProjMinMaxForSector(-90,0,0,90,eye,proj_min,proj_max,lla_min,lla_max);
-
-//            lla_max.alt = 0;
-            std::cout << "###: lla: " << lla_max.lon << ", " << lla_max.lat << std::endl;
+            CalcProjMinMaxForSector(sector,eye,proj_min,proj_max,lla_min,lla_max);
             UpdateFacingCircle(ConvLLAToECEF(lla_max),eye.length()/250.0,gp_sectormax);
+            UpdateFacingCircle(ConvLLAToECEF(lla_min),eye.length()/250.0,gp_sectormin);
         }
 
         // Update gp_root0
