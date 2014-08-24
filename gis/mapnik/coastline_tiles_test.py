@@ -36,7 +36,7 @@ vMap.layers.append(vLayer)
 
 ### ======================================
 ### Save tiles based on zoom level
-vMaxZoom = 3;
+vMaxZoom = 1;
 
 for i in range(vMaxZoom+1):
 	print 'level: ' + str(i);

@@ -30,7 +30,7 @@ style.rules.append(rule)
 _map.append_style('MyStyle',style)
 
 # get the shapefile
-input_file = mapnik.Shapefile(file='/home/preet/Documents/maps/shapefiles/coastline/osm_full/polygons.shp')
+input_file = mapnik.Shapefile(file='/home/preet/Documents/maps/shapefiles/coastline/osm_mar2013_full/land_polygons.shp')
 
 # create a layer and add shapefile and style
 layer = mapnik.Layer('world');

@@ -398,6 +398,32 @@ bool CalcHorizonPlane(osg::Vec3d const &eye,
     return true;
 }
 
+bool calcHorizonPlane(osg::Vec3d const &eye,
+                      Plane & horizon_plane)
+{
+    double const clamp_dist_m = 5000;
+
+    horizon_plane.n = eye;
+    horizon_plane.n.normalize();
+
+    double const min_dist = clamp_dist_m+RAD_AV;
+    double const min_dist2 = min_dist*min_dist;
+
+    osg::Vec3d eye_clamped = eye;
+    if(eye_clamped.length2() < min_dist2) {
+        eye_clamped = (horizon_plane.n*min_dist);
+    }
+
+    double eye_length = eye_clamped.length();
+    double const inv_dist = 1.0/eye_length;
+
+    // by similar triangles
+    horizon_plane.p = horizon_plane.n * (RAD_AV*RAD_AV*inv_dist);
+    horizon_plane.d = horizon_plane.n*horizon_plane.p;
+
+    return true;
+}
+
 bool CalcRayPlaneIntersection(osg::Vec3d const &ray_pt,
                               osg::Vec3d const &ray_dirn,
                               Plane const &plane,

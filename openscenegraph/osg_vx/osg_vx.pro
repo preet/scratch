@@ -19,5 +19,5 @@ LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -losg
 LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -lOpenThreads
 
 #HEADERS += obb.hpp tri.hpp geostuff.hpp vxtile.hpp
-#SOURCES += vx_frustumculling.cpp
-SOURCES += vx_frustumproj.cpp
+HEADERS += clipper.hpp
+SOURCES += vx_sectortest.cpp clipper.cpp

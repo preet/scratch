@@ -12,6 +12,8 @@
 //
 #include <osgnodes.hpp>
 
+#include <clipper.hpp>
+
 
 enum IntersectionType: uint8_t
 {
@@ -20,6 +22,41 @@ enum IntersectionType: uint8_t
     XSEC_CONTAINED,
     XSEC_COINCIDENT
 };
+
+bool CalcCameraNearFarDist(osg::Vec3d const &eye,
+                           osg::Vec3d const &view_dirn,
+                           double const pin_surf_dist_m,
+                           double &dist_near,
+                           double &dist_far)
+{
+    double const radius = RAD_AV;
+    double const eye_dist2 = eye.length2();
+
+    if(eye_dist2 > (radius*radius)) {
+        // The near distance is set to the length of the
+        // the line segment of the eye projected onto
+        // the plane with n==view_dirn and p==(0,0,0)
+        // less the radius
+        Plane plane;
+        plane.n = (view_dirn*-1.0);
+        plane.n.normalize();
+        plane.p = osg::Vec3d(0,0,0);
+        plane.d = (plane.n*plane.p);
+
+        osg::Vec3d xsec = CalcPointPlaneProjection(eye,plane);
+        dist_near = (eye-xsec).length() - (radius+pin_surf_dist_m);
+
+        if(dist_near < 1.0) {
+            dist_near = 1.0;
+        }
+
+        // The far distance is set to the tangential distance
+        // from the eye to the horizon (see horizon plane)
+        dist_far = sqrt(eye_dist2 - radius*radius);
+        return true;
+    }
+    return false;
+}
 
 IntersectionType CalcSphereSphereIntersection(osg::Vec3d const &centerA,
                                               osg::Vec3d const &centerB,
@@ -78,7 +115,129 @@ bool CalcGnomonicProjPoly(std::vector<osg::Vec3d> const &list_ecef,
     return true;
 }
 
-void CalcProjSphereLLAPoly(Plane const &horizon_plane,
+bool CalcGnomonicProjIntersectionPoly(osg::Vec3d const &proj_center,
+                                      Plane const &tangent_plane,
+                                      std::vector<osg::Vec3d> const &poly_frustum,
+                                      std::vector<osg::Vec3d> const &poly_lod_sphere,
+                                      std::vector<osg::Vec3d> & poly_xsec,
+                                      std::vector<osg::Vec3d> & poly_tangent)
+{
+    if(poly_lod_sphere.empty()) {
+        return false;
+    }
+
+    // Calculate the rotation matrix to rotate the
+    // tangent plane to the xy plane and its inverse
+    osg::Vec3d const &from = tangent_plane.n;
+    osg::Vec3d to(0,0,1);
+
+    osg::Matrixd xf_tangent_to_xy;
+    xf_tangent_to_xy.makeRotate(from,to);
+
+    osg::Matrixd xf_xy_to_tangent =
+            osg::Matrixd::inverse(xf_tangent_to_xy);
+
+    // Project poly_frustum onto tangent_plane using proj_center,
+    // align it to the xy plane, and save it to a clipper poly
+    ClipperLib::Path poly1;
+    std::vector<osg::Vec3d> proj_poly_frustum(poly_frustum.size());
+    for(size_t i=0; i < poly_frustum.size(); i++) {
+        // surface -> tangent_plane
+        double u;
+        if(!CalcRayPlaneIntersection(proj_center,
+                                     poly_frustum[i]-proj_center,
+                                     tangent_plane,
+                                     proj_poly_frustum[i],
+                                     u)) {
+            return false;
+        }
+        // tangent_plane -> xy plane
+        proj_poly_frustum[i] = proj_poly_frustum[i] * xf_tangent_to_xy;
+
+        ClipperLib::cInt x = proj_poly_frustum[i].x()*100.0;
+        ClipperLib::cInt y = proj_poly_frustum[i].y()*100.0;
+        poly1.push_back(ClipperLib::IntPoint(x,y));
+    }
+
+    double const z_xy_plane = proj_poly_frustum[0].z();
+
+    // Project poly_lod_sphere onto tangent_plane using proj_center,
+    // align it to the xy plane, and save it to a clipper poly
+    ClipperLib::Path poly2;
+    std::vector<osg::Vec3d> proj_poly_lod_sphere(poly_lod_sphere.size());
+    for(size_t i=0; i < poly_lod_sphere.size(); i++) {
+        // surface -> tangent_plane
+        double u;
+        if(!CalcRayPlaneIntersection(proj_center,
+                                     poly_lod_sphere[i]-proj_center,
+                                     tangent_plane,
+                                     proj_poly_lod_sphere[i],
+                                     u)) {
+            return false;
+        }
+        // tangent_plane -> xy plane
+        proj_poly_lod_sphere[i] = proj_poly_lod_sphere[i] * xf_tangent_to_xy;
+
+        ClipperLib::cInt x = proj_poly_lod_sphere[i].x()*100.0;
+        ClipperLib::cInt y = proj_poly_lod_sphere[i].y()*100.0;
+        poly2.push_back(ClipperLib::IntPoint(x,y));
+    }
+
+    poly_tangent = proj_poly_lod_sphere;
+    for(size_t i=0; i < poly_tangent.size(); i++) {
+        poly_tangent[i] = poly_tangent[i] * xf_xy_to_tangent;
+    }
+
+    // intersection using clipper
+    ClipperLib::Clipper clipper;
+    ClipperLib::Paths result;
+    clipper.AddPath(poly1,ClipperLib::ptSubject,true);
+    clipper.AddPath(poly2,ClipperLib::ptClip,true);
+    if(!clipper.Execute(ClipperLib::ctIntersection,result)) {
+        std::cout << "ERROR: CalcGnomonicProjIntersection: "
+                      "Could not calc xsec region" << std::endl;
+        return false;
+    }
+    if(result.empty()) {
+//        std::cout << "WARN: CalcGnomonicProjIntersection: "
+//                      "zero intersections" << std::endl;
+        poly_xsec.clear();
+        return true;
+    }
+    if(result.size() > 1) {
+        std::cout << "ERROR: CalcGnomonicProjIntersection: "
+                     "multiple intersections: "
+                   << result.size() << std::endl;
+        return false;
+    }
+    poly_xsec.resize(result[0].size());
+
+
+    for(size_t i=0; i < poly_xsec.size(); i++) {
+        // xy plane -> tangent_plane
+        poly_xsec[i] =
+                osg::Vec3d(double(result[0][i].X)*0.01,
+                           double(result[0][i].Y)*0.01,
+                           z_xy_plane) * xf_xy_to_tangent;
+
+        // tangent_plane -> planet surface
+        osg::Vec3d xsec_near,xsec_far;
+        if(!CalcRayEarthIntersection(poly_xsec[i],
+                                     proj_center-poly_xsec[i],
+                                     xsec_near,
+                                     xsec_far))
+        {
+            std::cout << "ERROR: CalcGnomonicProjIntersection: "
+                          "could not reproject xsec area" << std::endl;
+            return false;
+        }
+        poly_xsec[i] = xsec_near;
+    }
+
+    return true;
+}
+
+void CalcProjSpherePoly(Plane const &horizon_plane,
                            osg::Vec3d const &sphere_center,
                            double const sphere_radius,
                            std::vector<osg::Vec3d> &list_ecef)
@@ -160,7 +319,7 @@ void CalcProjSphereLLAPoly(Plane const &horizon_plane,
     list_ecef = list_xsec_vx;
 }
 
-void CalcProjFrustumLLAPoly_Direct(Frustum const &frustum,
+void CalcProjFrustumPoly_Direct(Frustum const &frustum,
                                    Plane const &horizon_plane,
                                    std::vector<osg::Vec3d> &list_ecef)
 {
@@ -232,7 +391,7 @@ void CalcProjFrustumLLAPoly_Direct(Frustum const &frustum,
     list_ecef = list_ecef_xsec;
 }
 
-void CalcProjFrustumLLAPoly(Frustum const &frustum,
+void CalcProjFrustumPoly(Frustum const &frustum,
                             Plane const &horizon_plane,
                             std::vector<osg::Vec3d> &list_ecef)
 {   
@@ -401,19 +560,14 @@ int main()
         auto new_horizon = BuildHorizonPlaneNode(camera,horizon_plane);
 
         // new camera frustum node
-        double far_dist = 0.0;
-        {
-            double const eye_dist2 = eye.length2();
-             double const rad_length2 = RAD_AV*RAD_AV;
-            if(eye_dist2 > rad_length2) {
-               far_dist = sqrt(eye_dist2 - (RAD_AV*RAD_AV));
-            }
+
+        double far_dist,near_dist;
+        if(!CalcCameraNearFarDist(eye,vpt-eye,20000.0,near_dist,far_dist)) {
+            far_dist=0.0;
+            near_dist=0.0;
         }
-        auto new_frustum = BuildFrustumNode(camera,frustum,far_dist);
 
-        std::vector<osg::Vec3d> list_ecef;
-
-        // new surfacepoly
+        auto new_frustum = BuildFrustumNode(camera,frustum,near_dist,far_dist);
 
         osg::ref_ptr<osg::Group> new_lodsurfacepoly;
         osg::ref_ptr<osg::Group> new_frustumsurfacepoly;
@@ -426,45 +580,58 @@ int main()
             tangent_plane.p = horizon_plane.n * RAD_AV;
             tangent_plane.d = tangent_plane.n * tangent_plane.p;
 
+            std::vector<osg::Vec3d> poly_frustum_surf;
+            CalcProjFrustumPoly(frustum,horizon_plane,poly_frustum_surf);
+
+            std::vector<osg::Vec3d> poly_frustum_tangent;
+            if(!CalcGnomonicProjPoly(poly_frustum_surf,
+                                     proj_center,
+                                     tangent_plane,
+                                     poly_frustum_tangent)) {
+                poly_frustum_tangent.clear();
+            }
+
+            std::vector<std::vector<osg::Vec3d>> list_polys_xsec(K_LIST_LOD_DIST.size());
+            std::vector<std::vector<osg::Vec3d>> list_polys_tangent(K_LIST_LOD_DIST.size());
+            for(size_t i=0; i < K_LIST_LOD_DIST.size(); i++) {
+                std::vector<osg::Vec3d> poly_lod_sphere;
+                CalcProjSpherePoly(horizon_plane,eye,K_LIST_LOD_DIST[i],poly_lod_sphere);
+
+                // xsec
+                if(!CalcGnomonicProjIntersectionPoly(proj_center,
+                                                     tangent_plane,
+                                                     poly_frustum_surf,
+                                                     poly_lod_sphere,
+                                                     list_polys_xsec[i],
+                                                     list_polys_tangent[i]))
+                {
+                    list_polys_xsec[i].clear();
+                    //list_polys_tangent[i].clear();
+                }
+            }
+
+
+
+
             // lodsurfacepoly
             new_lodsurfacepoly = new osg::Group;
-            for(size_t i=0; i < K_LIST_LOD_DIST.size(); i++)
-            {
-                list_ecef.clear();
-                std::vector<osg::Vec3d> list_proj_vx;
-
-                CalcProjSphereLLAPoly(horizon_plane,eye,K_LIST_LOD_DIST[i],list_ecef);
-                if(CalcGnomonicProjPoly(list_ecef,proj_center,tangent_plane,list_proj_vx)) {
-                    new_lodsurfacepoly->addChild(BuildSurfacePoly(list_proj_vx,
-                                                                  K_COLOR_TABLE[i],
-                                                                  eye.length()/1200.0));
-                }
+            for(size_t i=0; i < list_polys_xsec.size(); i++) {
+                new_lodsurfacepoly->addChild(BuildSurfacePoly(list_polys_tangent[i],
+                                                              K_COLOR_TABLE[i],
+                                                              eye.length()/1200.0));
             }
 
             // frustumsurfacepoly
             {
-                list_ecef.clear();
-                std::vector<osg::Vec3d> list_proj_vx;
-
-                CalcProjFrustumLLAPoly(frustum,horizon_plane,list_ecef);
-                if(CalcGnomonicProjPoly(list_ecef,proj_center,tangent_plane,list_proj_vx)) {
-                    new_frustumsurfacepoly = BuildSurfacePoly(list_proj_vx,
-                                                              osg::Vec4(0.75,0.5,1.0,1.0),
-                                                              eye.length()/1200.0);
-                }
-                else {
-                    new_frustumsurfacepoly = new osg::Group;
-                }
+                new_frustumsurfacepoly = BuildSurfacePoly(poly_frustum_tangent,
+                                                          osg::Vec4(0.75,0.5,1.0,1.0),
+                                                          eye.length()/1200.0);
             }
 
             new_projcenter = new osg::Group;
-
-
 //            new_projcenter = BuildRingNode(proj_center,
 //                                           osg::Vec4(1.0,0.0,0.0,1.0),
 //                                           eye.length()/300.0);
-
-//            std::cout << "###: _out" << std::endl;
         }
         else {
             new_lodsurfacepoly = new osg::Group;
@@ -476,6 +643,10 @@ int main()
         new_lodsurfacepoly->setName("lodsurfacepoly");
         new_frustumsurfacepoly->setName("frustumsurfacepoly");
         new_projcenter->setName("projcenter");
+
+
+
+
 
         // new lod rings
 //        auto new_lodrings = BuildLodRingsNode(eye);
@@ -559,3 +730,4 @@ int main()
     }
     return 0;
 }
+

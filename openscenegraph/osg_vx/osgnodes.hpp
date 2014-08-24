@@ -38,7 +38,8 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
 
     osg::ref_ptr<osg::Vec4Array> cx_array =
             new osg::Vec4Array;
-    cx_array->push_back(osg::Vec4(0.35,0.35,0.35,0.1));
+//    cx_array->push_back(osg::Vec4(0.35,0.35,0.35,0.1));
+    cx_array->push_back(osg::Vec4(0,0,0,1));
 
     osg::ref_ptr<osg::DrawElementsUShort> ix_array =
             new osg::DrawElementsUShort(GL_TRIANGLES);
@@ -66,6 +67,7 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
 
 osg::ref_ptr<osg::Group> BuildFrustumNode(osg::Camera * camera,
                                           Frustum & frustum,
+                                          double near_dist=0.0,
                                           double far_dist=0.0)
 {
     // Projection and ModelView matrices
@@ -95,8 +97,12 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(osg::Camera * camera,
     osg::Matrixd const mv_inv = osg::Matrixd::inverse( mv );
 
     // Get near and far from the Projection matrix.
-    const double near = proj(3,2) / (proj(2,2)-1.0);
+    double near = proj(3,2) / (proj(2,2)-1.0);
     double far = proj(3,2) / (1.0+proj(2,2));
+
+    if(near_dist > 0.0) {
+        near = near_dist;
+    }
     if(far_dist > 0.0) {
         far = far_dist;
     }
@@ -147,7 +153,7 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(osg::Camera * camera,
     FTL = FTL* mv_inv;
 
     // get the normals for the frustum planes
-    osg::Vec3d p_left = NBL+ (FTL-NBL)*0.5;
+    osg::Vec3d p_left = (NBL+FTL)*0.5;
     osg::Vec3d d_left = (FTL-NTL)^(NBL-NTL); d_left.normalize();
 
     osg::Vec3d p_right = (NBR+FTR)*0.5;
@@ -344,7 +350,7 @@ osg::ref_ptr<osg::Group> BuildMinCamDistLineNode(osg::Vec3d const &eye)
         list_vx->at(1) = xsecNear;
 
         osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array(1);
-        list_cx->at(0) = osg::Vec4(1,0,0,1);
+        list_cx->at(0) = osg::Vec4(1,1,1,1);
 
         osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
         gm->setVertexArray(list_vx);
@@ -357,6 +363,56 @@ osg::ref_ptr<osg::Group> BuildMinCamDistLineNode(osg::Vec3d const &eye)
     }
 
     return gp;
+}
+
+osg::ref_ptr<osg::AutoTransform> BuildFacingCircle(osg::Vec3d const &position,
+                                                   double const scale,
+                                                   size_t const num_vx,
+                                                   osg::Vec4 const &color)
+{
+    // Create a ring node
+    osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
+    {
+        // Create a ring of vertices
+
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
+        double const rotate_by_rads = (2.0*K_PI/num_vx);
+
+        for(size_t j=0; j < num_vx; j++){
+            list_vx->push_back(osg::Vec3d(0,0,0));
+            list_vx->push_back(osg::Vec3d(cos(rotate_by_rads*j),
+                                          sin(rotate_by_rads*j),
+                                          0));
+            list_vx->push_back(osg::Vec3d(cos(rotate_by_rads*(j+1)),
+                                          sin(rotate_by_rads*(j+1)),
+                                          0));
+        }
+
+        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+        list_cx->push_back(color);
+
+        gm_ring->setVertexArray(list_vx);
+        gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+        gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::TRIANGLES,0,list_vx->size()));
+    }
+
+    osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
+    osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
+    gd_ring->addDrawable(gm_ring);
+    xf_ring->addChild(gd_ring);
+    xf_ring->setScale(scale);
+    xf_ring->setPosition(position);
+    xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+
+    return xf_ring;
+}
+
+void UpdateFacingCircle(osg::Vec3d const &position,
+                        double const scale,
+                        osg::AutoTransform * xf)
+{
+    xf->setPosition(position);
+    xf->setScale(scale);
 }
 
 osg::ref_ptr<osg::AutoTransform> BuildLodRingsNode(osg::Vec3d const &eye)
@@ -664,7 +720,7 @@ osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera,
         xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
         gp_horizon_plane->addChild(xf_ring);
 
-        if(CalcHorizonPlane(eye,horizon_plane)) {
+        if(calcHorizonPlane(eye,horizon_plane)) {
             // Draw the plane as a circle centered on horizon_pt
             // with radius == dist
             osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(16);
