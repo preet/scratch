@@ -15,14 +15,6 @@
 #include <clipper.hpp>
 
 
-enum IntersectionType: uint8_t
-{
-    XSEC_TRUE,
-    XSEC_FALSE,
-    XSEC_CONTAINED,
-    XSEC_COINCIDENT
-};
-
 bool CalcCameraNearFarDist(osg::Vec3d const &eye,
                            osg::Vec3d const &view_dirn,
                            double const pin_surf_dist_m,
@@ -616,14 +608,14 @@ int main()
             // lodsurfacepoly
             new_lodsurfacepoly = new osg::Group;
             for(size_t i=0; i < list_polys_xsec.size(); i++) {
-                new_lodsurfacepoly->addChild(BuildSurfacePoly(list_polys_tangent[i],
+                new_lodsurfacepoly->addChild(BuildSurfacePoly(list_polys_xsec[i],
                                                               K_COLOR_TABLE[i],
                                                               eye.length()/1200.0));
             }
 
             // frustumsurfacepoly
             {
-                new_frustumsurfacepoly = BuildSurfacePoly(poly_frustum_tangent,
+                new_frustumsurfacepoly = BuildSurfacePoly(poly_frustum_surf,
                                                           osg::Vec4(0.75,0.5,1.0,1.0),
                                                           eye.length()/1200.0);
             }

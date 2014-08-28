@@ -549,15 +549,13 @@ void UpdateProjIntervalSectorMap(osg::Group * gp,
         proj_max = std::max(proj_max,p);
         proj_min = std::min(proj_min,p);
     }
-    double const delta = fabs(proj_min);
-    proj_max += fabs(delta);
-
+    proj_max -= proj_min;
 
     osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
     list_cx->reserve(list_p.size());
 
     for(size_t i=0; i < list_p.size(); i++) {
-        osg::Vec4 cx = CalcRainbowGradient((list_p[i]+delta)/proj_max);
+        osg::Vec4 cx = CalcRainbowGradient((list_p[i]-proj_min)/proj_max);
         list_cx->push_back(cx);
     }
 
@@ -637,9 +635,9 @@ int main()
     auto gp_celestial = BuildCelestialSurfaceNode();
 
     // Sector geometry
-    auto gp_sectorprojmap = BuildProjIntervalSectorMap(-90,0,0,90,12,12,osg::Vec3d(0,0,1));
+    auto gp_sectorprojmap = BuildProjIntervalSectorMap(-90,15,90,65,24,24,osg::Vec3d(0,0,1));
     gp_sectorprojmap->getOrCreateStateSet()->setMode( GL_DEPTH_TEST,osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
-    SectorProjDesc sector(-90,0,0,90);
+    SectorProjDesc sector(-90,15,90,65);
 
     auto gp_sectormax = BuildFacingCircle(osg::Vec3d(0,0,0),1000.0,8,osg::Vec4(1,1,1,1));
     gp_sectormax->setName("sectormax");

@@ -91,6 +91,14 @@ std::vector<osg::Vec4> const K_COLOR_TABLE {
     {255/255., 255/255., 255/255., 1.}
 };
 
+enum IntersectionType: uint8_t
+{
+    XSEC_TRUE,
+    XSEC_FALSE,
+    XSEC_CONTAINED,
+    XSEC_COINCIDENT
+};
+
 struct Plane
 {
     osg::Vec3d n;   // plane normal; no guarantee n is normalized!
@@ -205,6 +213,29 @@ osg::Vec3d CalcPointRayProjection(osg::Vec3d const &point,
 {
     double t = ((point-ray_point)*ray_dirn)/(ray_dirn*ray_dirn);
     return (ray_point+(ray_dirn*t));
+}
+
+IntersectionType CalcLinePlaneIntersection(osg::Vec3d const &a,
+                                           osg::Vec3d const &b,
+                                           Plane const &plane,
+                                           osg::Vec3d &xsec_pt,
+                                           double &u)
+{
+    osg::Vec3d ab = b-a;
+    double const denom = plane.n * ab;
+
+    if(fabs(denom) < 1E-4) {
+        // The line is parallel to the plane
+        if(fabs(plane.n * (plane.p-a)) < 1E-4) {
+            // The line is coincident with the plane
+            return XSEC_COINCIDENT;
+        }
+        return XSEC_FALSE;
+    }
+
+    u = (plane.n*(plane.p-a))/denom;
+    xsec_pt = a + ab*u;
+    return XSEC_TRUE;
 }
 
 struct PointLLA
