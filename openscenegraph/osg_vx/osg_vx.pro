@@ -20,4 +20,5 @@ LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -lOpenThreads
 
 #HEADERS += obb.hpp tri.hpp geostuff.hpp vxtile.hpp
 HEADERS += clipper.hpp
-SOURCES += vx_tilegen.cpp clipper.cpp
+#SOURCES += vx_frustumproj.cpp clipper.cpp
+SOURCES += vx_tilegen3.cpp clipper.cpp

@@ -2,6 +2,8 @@
 #define TILE_UTIL_H
 
 #include <gmutil.hpp>
+#include <osg/ref_ptr>
+#include <osg/Group>
 
 struct VxTile
 {
@@ -36,6 +38,12 @@ struct VxTile
 
     bool _fvis;
     bool _hvis;
+
+    bool _s;
+
+    osg::ref_ptr<osg::Group> _gp;
+
+    VxTile() : _s(true) {}
 };
 
 void CalcTileOBB(VxTile * tile)
@@ -150,7 +158,8 @@ VxTile * BuildRootTile(uint8_t const level,
 }
 
 std::unique_ptr<VxTile> BuildChildTile(VxTile * parent,
-                                       uint8_t const quadrant)
+                                       uint8_t const quadrant,
+                                       bool calc_obb=true)
 {
     std::unique_ptr<VxTile> t(new VxTile);
 
@@ -213,7 +222,9 @@ std::unique_ptr<VxTile> BuildChildTile(VxTile * parent,
     t->ecef_MT = ConvLLAToECEF(PointLLA(t->midLon,t->maxLat));
     t->ecef_MM = ConvLLAToECEF(PointLLA(t->midLon,t->midLat));
 
-    CalcTileOBB(t.get());
+    if(calc_obb) {
+        CalcTileOBB(t.get());
+    }
 
     return t;
 }

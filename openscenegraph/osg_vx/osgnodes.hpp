@@ -56,6 +56,7 @@ osg::ref_ptr<osg::Group> BuildCelestialSurfaceNode()
     // geode
     osg::ref_ptr<osg::Geode> gd = new osg::Geode;
     gd->addDrawable(gm.get());
+    gd->getOrCreateStateSet()->setRenderBinDetails(-101,"RenderBin");
 
     // group
     osg::ref_ptr<osg::Group> gp = new osg::Group;
@@ -641,29 +642,32 @@ void BuildViewExtentsGeometryAsPolyLines(VxTile const * t,
                                          osg::Group * gp)
 {
     if(t->level > 2) {
-        osg::ref_ptr<osg::Geode> gd = new osg::Geode;
 
-        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
-        list_vx->at(0) = *(t->p_ecef_LT);
-        list_vx->at(1) = t->ecef_LM;
-        list_vx->at(2) = *(t->p_ecef_LB);
-        list_vx->at(3) = t->ecef_MB;
-        list_vx->at(4) = *(t->p_ecef_RB);
-        list_vx->at(5) = t->ecef_RM;
-        list_vx->at(6) = *(t->p_ecef_RT);
-        list_vx->at(7) = t->ecef_MT;
+        if(t->_s && (!(t->tile_LB))) {
+            osg::ref_ptr<osg::Geode> gd = new osg::Geode;
 
-        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array(1);
-        list_cx->at(0) = K_COLOR_TABLE[t->level];
+            osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+            list_vx->at(0) = *(t->p_ecef_LT);
+            list_vx->at(1) = t->ecef_LM;
+            list_vx->at(2) = *(t->p_ecef_LB);
+            list_vx->at(3) = t->ecef_MB;
+            list_vx->at(4) = *(t->p_ecef_RB);
+            list_vx->at(5) = t->ecef_RM;
+            list_vx->at(6) = *(t->p_ecef_RT);
+            list_vx->at(7) = t->ecef_MT;
 
-        osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
-        gm->setVertexArray(list_vx);
-        gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
-        gm->addPrimitiveSet(new osg::DrawArrays(
-            osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+            osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array(1);
+            list_cx->at(0) = K_COLOR_TABLE[t->level];
 
-        gd->addDrawable(gm);
-        gp->addChild(gd);
+            osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+            gm->setVertexArray(list_vx);
+            gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+            gm->addPrimitiveSet(new osg::DrawArrays(
+                osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+
+            gd->addDrawable(gm);
+            gp->addChild(gd);
+        }
     }
 
     if(t->tile_LT) {
@@ -678,6 +682,95 @@ void BuildViewExtentsGeometryAsPolyLines(VxTile const * t,
     if(t->tile_RT) {
         BuildViewExtentsGeometryAsPolyLines(t->tile_RT.get(),gp);
     }
+}
+
+void BuildTilesAsPolyLines(VxTile const * t,
+                           osg::Group * gp)
+{
+    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+
+    osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+    list_vx->at(0) = *(t->p_ecef_LT);
+    list_vx->at(1) = t->ecef_LM;
+    list_vx->at(2) = *(t->p_ecef_LB);
+    list_vx->at(3) = t->ecef_MB;
+    list_vx->at(4) = *(t->p_ecef_RB);
+    list_vx->at(5) = t->ecef_RM;
+    list_vx->at(6) = *(t->p_ecef_RT);
+    list_vx->at(7) = t->ecef_MT;
+
+    osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array(1);
+    list_cx->at(0) = K_COLOR_TABLE[t->level];
+
+    osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+    gm->setVertexArray(list_vx);
+    gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+    gm->addPrimitiveSet(new osg::DrawArrays(
+        osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+
+    gd->addDrawable(gm);
+    gp->addChild(gd);
+}
+
+osg::ref_ptr<osg::Group> BuildTileGeometry(VxTile const * t)
+{
+    std::vector<osg::Vec3d> list_vx;
+    std::vector<osg::Vec2d> list_tx;
+    std::vector<size_t> list_ix;
+
+    BuildEarthSurfaceGeometry(t->minLon,
+                              t->minLat,
+                              t->maxLon,
+                              t->maxLat,
+                              2 + size_t(floor(pow(2,4-(t->level)))),
+                              2 + size_t(floor(pow(2,4-(t->level)))),
+                              list_vx,
+                              list_tx,
+                              list_ix);
+
+    osg::ref_ptr<osg::Vec3dArray> vx_array = new osg::Vec3dArray;
+    osg::ref_ptr<osg::Vec3Array> nx_array = new osg::Vec3Array;
+
+    for(auto const &vx : list_vx) {
+        vx_array->push_back(vx);
+
+        auto nx = vx;
+        nx.normalize();
+        nx_array->push_back(nx);
+    }
+
+    osg::ref_ptr<osg::Vec4Array> cx_array =
+            new osg::Vec4Array;
+    cx_array->push_back(K_COLOR_TABLE[t->level]);
+
+    osg::ref_ptr<osg::DrawElementsUShort> ix_array =
+            new osg::DrawElementsUShort(GL_TRIANGLES);
+    for(auto const ix : list_ix) {
+        ix_array->push_back(ix);
+    }
+
+    // geometry
+    osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+    gm->setVertexArray(vx_array.get());
+    gm->setNormalArray(nx_array.get(),osg::Array::Binding::BIND_PER_VERTEX);
+    gm->setColorArray(cx_array,osg::Array::Binding::BIND_OVERALL);
+    gm->addPrimitiveSet(ix_array.get());
+
+    // geode
+    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+    gd->addDrawable(gm.get());
+    gd->getOrCreateStateSet()->setRenderBinDetails(-101 + t->level,"RenderBin");
+    gd->getOrCreateStateSet()->setMode(
+                GL_LIGHTING, osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+    gd->getOrCreateStateSet()->setMode(
+                GL_CULL_FACE, osg::StateAttribute::ON | osg::StateAttribute::OVERRIDE);
+
+
+    // geometry;
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->addChild(gd);
+
+    return gp;
 }
 
 osg::ref_ptr<osg::Group> BuildViewExtentsNode(std::vector<VxTile*> const &list_base_vx_tiles)

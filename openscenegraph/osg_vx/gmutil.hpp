@@ -139,6 +139,18 @@ struct OBB
     Plane faces[3];
 };
 
+struct GeoBounds
+{
+    GeoBounds() :
+        minLat(0),maxLat(0),
+        minLon(0),maxLon(0)
+    {}
+
+    double minLat; double maxLat;
+    double minLon; double maxLon;
+};
+
+
 // From Real-Time Collision Detection, Ericson
 double CalcMinDist2PointOBB(osg::Vec3d const &p,
                             OBB const &obb)
@@ -185,6 +197,23 @@ std::vector<double> CalcLodDistances()
 
 std::vector<double> K_LIST_LOD_DIST = CalcLodDistances();
 
+bool CalcPointInPoly(std::vector<osg::Vec2d> const &listVx,
+                     osg::Vec2d const &vxTest)
+{
+    // ref: hxxp://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+    int i,j;
+    bool c = false;
+    size_t nvert = listVx.size();
+
+    for (i = 0, j = nvert-1; i < nvert; j = i++) {
+      if ( ((listVx[i].y()>vxTest.y()) != (listVx[j].y()>vxTest.y())) &&
+            (vxTest.x() < (listVx[j].x()-listVx[i].x()) * (vxTest.y()-listVx[i].y()) /
+            (listVx[j].y()-listVx[i].y()) + listVx[i].x()) )
+         c = !c;
+    }
+    return c;
+}
+
 void CalcQuadraticEquationReal(double a, double b, double c,
                                std::vector<double> &listRoots)
 {
@@ -205,6 +234,12 @@ osg::Vec3d CalcPointPlaneProjection(osg::Vec3d const &point,
 {
     double t = ((plane.n*point)-plane.d)/(plane.n*plane.n);
     return (point-(plane.n*t));
+}
+
+double CalcPointPlaneSignedDistance(osg::Vec3d const &point,
+                                    Plane const &plane)
+{
+    return (((plane.n*point)-plane.d)/(plane.n*plane.n));
 }
 
 osg::Vec3d CalcPointRayProjection(osg::Vec3d const &point,
@@ -235,6 +270,62 @@ IntersectionType CalcLinePlaneIntersection(osg::Vec3d const &a,
 
     u = (plane.n*(plane.p-a))/denom;
     xsec_pt = a + ab*u;
+    return XSEC_TRUE;
+}
+
+IntersectionType CalcLinePlaneIntersection(Edge const &line,
+                                           Plane const &plane,
+                                           double &u)
+{
+    double const denom = plane.n * line.dirn_ab;
+    if(fabs(denom) < 1E-4) {
+        // The line is parallel to the plane
+        if(fabs(plane.n * (plane.p-line.a)) < 1E-4) {
+            // The line is coincident with the plane
+            return XSEC_COINCIDENT;
+        }
+        return XSEC_FALSE;
+    }
+
+    u = (plane.n*(plane.p-line.a))/denom;
+    return XSEC_TRUE;
+}
+
+IntersectionType CalcSphereSphereIntersection(osg::Vec3d const &centerA,
+                                              osg::Vec3d const &centerB,
+                                              double const radiusA,
+                                              double const radiusB,
+                                              Plane &xsec_plane,
+                                              double &xsec_radius)
+{
+    // ref:
+    // http://paulbourke.net/geometry/circlesphere/
+
+    double dist = (centerB-centerA).length();
+
+    if(dist > (radiusA+radiusB)) {
+        // The circles are too far away to intersect
+        return XSEC_FALSE;
+    }
+    else if(dist < fabs(radiusA-radiusB)) {
+        // One circle is contained within the other
+        return XSEC_CONTAINED;
+    }
+    else if((dist==0) && (radiusA==radiusB)) {
+        // The circles are coincident
+        return XSEC_COINCIDENT;
+    }
+
+    double const a = (radiusA*radiusA -
+                      radiusB*radiusB +
+                      dist*dist)/(2*dist);
+
+    xsec_plane.p = centerA + (centerB-centerA)*(a/dist);
+    xsec_plane.n = centerB-centerA;
+    xsec_plane.n.normalize();
+
+    xsec_radius = sqrt(radiusA*radiusA - a*a);
+
     return XSEC_TRUE;
 }
 
@@ -397,6 +488,26 @@ bool BuildEarthSurfaceGeometry(double minLon, double minLat,
     return true;
 }
 
+// From Real-Time Collision Detection p. 210
+bool CalcPlanePlaneIntersection(Plane const &p1,
+                                Plane const &p2,
+                                osg::Vec3d &xsec_p,
+                                osg::Vec3d &xsec_d)
+{
+    // xsec line direction
+    xsec_d = p1.n^p2.n;
+
+    // if d is ~0, the planes are parallel
+    double denom = xsec_d*xsec_d;
+    if(denom < 1E-3) {
+        return false;
+    }
+
+    // xsec line point
+    xsec_p = ((p2.n*p1.d - p1.n*p2.d)^xsec_d) / denom;
+    return true;
+}
+
 bool CalcHorizonPlane(osg::Vec3d const &eye,
                       Plane & horizon_plane)
 {
@@ -412,7 +523,9 @@ bool CalcHorizonPlane(osg::Vec3d const &eye,
     horizon_plane.n.normalize();
 
     double const eye_length2 = eye.length2();
+    (void)eye_length2;
     double const xsec_length2 = xsecNear.length2();
+    (void)xsec_length2;
 
     osg::Vec3d eye_clamped = eye;
     if((eye.length() - RAD_AV) < 5000.0) {
@@ -486,45 +599,6 @@ osg::Vec3d CalcVectorRotation(osg::Vec3d const &input_vec,
             (input_vec * cos_angle_rads) + ((axis_normalized^input_vec) * sin_angle_rads) + (axis_normalized*(axis_normalized*input_vec)*(1-cos_angle_rads));
 
     return rotated_vec;
-}
-
-osg::Vec3d CalcGnomonicProjOrigin(Plane const &horizon_plane,
-                                  double const min_angle_degs=10.0)
-{
-    // For a true gnomonic projection, the projection
-    // origin should be at the center of the planet.
-
-    // However, if the horizon plane is too close to the
-    // center (or contains it), points on the horizon plane
-    // can't be projected to another plane with the same
-    // normal as the projection rays will be parallel to
-    // said plane.
-
-    // The projection origin has to be moved back behind
-    // the center of the planet in this case. How far its
-    // moved back is determined by min_angle_degs.
-
-    double const min_angle_rads =
-            fabs(min_angle_degs*K_DEG2RAD);
-
-    double const p_length = horizon_plane.p.length();
-
-    double const angle_rads =
-            atan2(p_length,RAD_AV);
-
-//    std::cout << "###: " << angle_rads*K_RAD2DEG << std::endl;
-
-    if(fabs(angle_rads) > min_angle_rads) {
-        // We can use the true center
-        return osg::Vec3d(0,0,0);
-    }
-
-    double min_p_length = tan(min_angle_rads)*RAD_AV;
-    osg::Vec3d proj_center = horizon_plane.p;
-    proj_center.normalize();
-    proj_center = proj_center * (min_p_length-p_length) * -1.0;
-
-    return proj_center;
 }
 
 //////////////////////////////////////////////////////
@@ -894,6 +968,180 @@ bool CalcSphereOutsideFrustumExact(Frustum const &frustum,
 }
 
 //////////////////////////////////////////////////////
+
+
+enum AngleRange
+{
+    DEG_0_360,
+    DEG_180_180
+};
+
+double CalcValidAngleDegs(double angle, AngleRange range)
+{
+    if(range == DEG_0_360)   {
+        angle = fmod(angle,360);
+        if(angle < 0)
+        {   angle += 360;   }
+
+        return angle;
+    }
+    else   { // DEG_180_180
+        angle = fmod(angle+180,360);
+        if(angle < 0)
+        {   angle += 360;   }
+
+        return angle-180;
+    }
+}
+
+bool CalcMinGeoBoundsFromLLAPoly(PointLLA const &camLLA,
+                                 std::vector<PointLLA> const &listPLLA,
+                                 std::vector<GeoBounds> &listBounds)
+{
+    listBounds.clear();
+    if(listPLLA.size() < 3)   {
+        std::cout << "WARN: CalcGeoBounds: "
+                    "Insufficient coords (min 3)\n";
+        return false;
+    }
+
+    std::vector<double> listLonDegs(listPLLA.size());
+    for(size_t i=0; i < listPLLA.size(); i++)   {
+        listLonDegs[i] = listPLLA[i].lon;
+    }
+    listLonDegs.push_back(listLonDegs[0]); // wrap around
+
+    // Walk along the polygon keeping track of
+    // max/min angles traveled
+    bool is360 = false;
+    double travelDegs = 0;
+    double maxTravelDegsCW = 0;
+    double maxTravelDegsCCW = 0;
+    for(size_t i=1; i < listLonDegs.size(); i++)   {
+        double angleDelta = listLonDegs[i]-listLonDegs[i-1];
+
+        // Get both CW and CCW angles for the delta
+        double angleCW,angleCCW;
+        if(angleDelta > 0.0)   {
+            angleCCW = angleDelta;
+            angleCW = angleCCW-360.0;
+        }
+        else if(angleDelta < 0.0)  {
+            angleCW = angleDelta;
+            angleCCW = 360.0+angleCW;
+        }
+        else   {
+            continue;
+        }
+
+        // We track the shortest distance in degrees
+        // between subsequent polygon points
+        if(fabs(angleCCW) < fabs(angleCW))   {
+            travelDegs += angleCCW;
+            maxTravelDegsCCW = std::max(maxTravelDegsCCW,travelDegs);
+        }
+        else if(fabs(angleCW) < fabs(angleCCW))   {
+            travelDegs += angleCW;
+            maxTravelDegsCW  = std::min(maxTravelDegsCW,travelDegs);
+        }
+        else   {
+            // This case indicates angleCW == angleCCW, which
+            // means that the polygon segment passes through
+            // the center of a circle of longitudes. We consider
+            // this to mean the polygon segments travel the
+            // full range from -180 to 180 degrees longitude.
+            is360 = true;
+            break;
+        }
+    }
+    maxTravelDegsCW = fabs(maxTravelDegsCW);
+
+    // Check if the polygon traveled 360 degrees.
+    // Allow for an error in degrees.
+    double checkError = 5.0;
+    double check360 = 360.0 - checkError;
+
+    if(is360 ||
+       (maxTravelDegsCCW > check360) ||
+       (maxTravelDegsCW  > check360))
+    {
+        GeoBounds b; b.minLon = -180.0; b.maxLon = 180.0;
+        listBounds.push_back(b);
+        is360 = true;
+    }
+    else   {
+        // Save longitude bounds taking the antemeridian
+        // discontinuity into account
+
+        // Set startLon as one of the extreme lon values
+        // by adding the furthest traveled CCW distance
+        double startLon = listPLLA[0].lon;
+
+        if(startLon+maxTravelDegsCCW > 180.0)   {
+            double maxLon = startLon+maxTravelDegsCCW;
+            maxLon = CalcValidAngleDegs(maxLon,DEG_180_180);
+
+            GeoBounds a,b;
+            a.minLon = -180.0; a.maxLon = maxLon;
+            b.minLon = startLon-maxTravelDegsCW; b.maxLon = 180.0;
+            listBounds.push_back(a);
+            listBounds.push_back(b);
+
+            std::cout << "//: ping: " << a.minLon << ", " << a.maxLon << ",,, " << b.minLon << ", " << b.maxLon << std::endl;
+        }
+        else if(startLon-maxTravelDegsCW < -180.0)   {
+            double minLon = startLon-maxTravelDegsCW;
+            minLon = CalcValidAngleDegs(minLon,DEG_180_180);
+
+            GeoBounds a,b;
+            a.minLon = minLon; a.maxLon = 180.0;
+            b.minLon = -180.0; b.maxLon = startLon+maxTravelDegsCCW;
+            listBounds.push_back(a);
+            listBounds.push_back(b);
+
+            std::cout << "//: pong: " << a.minLon << ", " << a.maxLon << ",,, " << b.minLon << ", " << b.maxLon << std::endl;
+        }
+        else   {
+            GeoBounds b;
+            b.minLon = startLon-maxTravelDegsCW;
+            b.maxLon = startLon+maxTravelDegsCCW;
+            listBounds.push_back(b);
+        }
+    }
+
+    // Latitude Range
+
+    // Its possible that the max and min latitude lie
+    // on the surface between the given polygon points.
+
+    // We very roughly try to account for this by
+    // adding the latitude at the pole closest to
+    // the camera as a critical latitude to compare
+    // the existing latitudes with.
+    double critLat = listPLLA[0].lat;
+    if(is360)   {
+        // check if the camera is above or below the 'equator'
+        critLat = (camLLA.lat > 0) ? 90 : -90;
+        std::cout << "#: is360 and critLat @ " << critLat << std::endl;
+    }
+
+    // calc min/max for latitude
+    double minLat = 90; double maxLat = -90;
+    for(size_t i=0; i < listPLLA.size(); i++)   {
+        minLat = std::min(minLat,listPLLA[i].lat);
+        maxLat = std::max(maxLat,listPLLA[i].lat);
+    }
+    minLat = std::min(minLat,critLat);
+    maxLat = std::max(maxLat,critLat);
+
+    // save lat
+    for(size_t i=0; i < listBounds.size(); i++)   {
+        listBounds[i].minLat = minLat;
+        listBounds[i].maxLat = maxLat;
+    }
+
+    return true;
+}
 
 
 #endif // GM_UTIL_H
