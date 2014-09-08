@@ -1087,7 +1087,7 @@ bool CalcMinGeoBoundsFromLLAPoly(PointLLA const &camLLA,
             listBounds.push_back(a);
             listBounds.push_back(b);
 
-            std::cout << "//: ping: " << a.minLon << ", " << a.maxLon << ",,, " << b.minLon << ", " << b.maxLon << std::endl;
+//            std::cout << "//: ping: " << a.minLon << ", " << a.maxLon << ",,, " << b.minLon << ", " << b.maxLon << std::endl;
         }
         else if(startLon-maxTravelDegsCW < -180.0)   {
             double minLon = startLon-maxTravelDegsCW;
@@ -1099,7 +1099,7 @@ bool CalcMinGeoBoundsFromLLAPoly(PointLLA const &camLLA,
             listBounds.push_back(a);
             listBounds.push_back(b);
 
-            std::cout << "//: pong: " << a.minLon << ", " << a.maxLon << ",,, " << b.minLon << ", " << b.maxLon << std::endl;
+//            std::cout << "//: pong: " << a.minLon << ", " << a.maxLon << ",,, " << b.minLon << ", " << b.maxLon << std::endl;
         }
         else   {
             GeoBounds b;
@@ -1122,7 +1122,7 @@ bool CalcMinGeoBoundsFromLLAPoly(PointLLA const &camLLA,
     if(is360)   {
         // check if the camera is above or below the 'equator'
         critLat = (camLLA.lat > 0) ? 90 : -90;
-        std::cout << "#: is360 and critLat @ " << critLat << std::endl;
+//        std::cout << "#: is360 and critLat @ " << critLat << std::endl;
     }
 
     // calc min/max for latitude

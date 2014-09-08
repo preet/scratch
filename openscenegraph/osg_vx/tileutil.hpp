@@ -7,6 +7,8 @@
 
 struct VxTile
 {
+    uint64_t id;
+
     double minLon;
     double maxLon;
 
