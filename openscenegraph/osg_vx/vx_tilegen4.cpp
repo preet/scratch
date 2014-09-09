@@ -133,10 +133,13 @@ osg::ref_ptr<osg::Group> BuildTileGeometry(Tile const * t)
     std::vector<osg::Vec2d> list_tx;
     std::vector<size_t> list_ix;
 
-    BuildEarthSurfaceGeometry(t->min_lon,
-                              t->min_lat,
-                              t->max_lon,
-                              t->max_lat,
+    double eps_lon = 0; //(t->max_lon-t->min_lon) * 0.01;
+    double eps_lat = 0; //(t->max_lat-t->min_lat) * 0.01;
+
+    BuildEarthSurfaceGeometry(t->min_lon+eps_lon,
+                              t->min_lat+eps_lat,
+                              t->max_lon-eps_lon,
+                              t->max_lat-eps_lat,
                               2 + size_t(floor(pow(2,4-(t->GetLevel())))),
                               2 + size_t(floor(pow(2,4-(t->GetLevel())))),
                               list_vx,
@@ -154,9 +157,16 @@ osg::ref_ptr<osg::Group> BuildTileGeometry(Tile const * t)
         nx_array->push_back(nx);
     }
 
-    osg::ref_ptr<osg::Vec4Array> cx_array =
-            new osg::Vec4Array;
-    cx_array->push_back(K_COLOR_TABLE[t->GetLevel()]);
+    osg::ref_ptr<osg::Vec4Array> cx_array = new osg::Vec4Array;
+    for (auto const &tx : list_tx) {
+        osg::Vec4 cx = K_COLOR_TABLE[t->GetLevel()];
+        double mag = tx.length();
+        cx.r() *= mag;
+        cx.g() *= mag;
+        cx.b() *= mag;
+        cx.a() *= mag;
+        cx_array->push_back(cx);
+    }
 
     osg::ref_ptr<osg::DrawElementsUShort> ix_array =
             new osg::DrawElementsUShort(GL_TRIANGLES);
@@ -168,7 +178,7 @@ osg::ref_ptr<osg::Group> BuildTileGeometry(Tile const * t)
     osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
     gm->setVertexArray(vx_array.get());
     gm->setNormalArray(nx_array.get(),osg::Array::Binding::BIND_PER_VERTEX);
-    gm->setColorArray(cx_array,osg::Array::Binding::BIND_OVERALL);
+    gm->setColorArray(cx_array,osg::Array::Binding::BIND_PER_VERTEX);
     gm->addPrimitiveSet(ix_array.get());
 
     // geode
@@ -309,12 +319,14 @@ void GenBaseTilesForGeoBounds(GeoBounds const &geobounds,
     double const start_lon = floor(geobounds.minLon/lon_div_degs) * lon_div_degs;
     double const start_lat = floor(geobounds.minLat/lat_div_degs) * lat_div_degs;
 
-    uint32_t x = ((geobounds.minLon+180.0)/lon_div_degs);
+//    uint32_t x = ((geobounds.minLon+180.0)/lon_div_degs);
 
     for(double lon = start_lon;
         lon < geobounds.maxLon;
         lon += lon_div_degs)
     {
+        uint32_t x = (((lon+0.5*lon_div_degs)+180.0)/lon_div_degs);
+
         for(double lat = start_lat;
             lat < geobounds.maxLat;
             lat += lat_div_degs)
