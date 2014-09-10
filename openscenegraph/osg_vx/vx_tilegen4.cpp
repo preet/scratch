@@ -19,39 +19,25 @@
 double const K_GT_NEPS = -1E-6;
 double const K_GT_EPS = 1E-6;
 
-struct Tile
+struct STile
 {
-    uint64_t id;
-
     // id:
     // z  x      y
     // FF FFFFFF FFFFFF
     // z: tile level (8 bits)
     // x: tile x (24 bits)
     // y: tile y (24 bits)
+    uint64_t const id;
 
-    double min_lon;
-    double max_lon;
+    STile * tile_LT;
+    STile * tile_LB;
+    STile * tile_RB;
+    STile * tile_RT;
 
-    double min_lat;
-    double max_lat;
-
-    Tile * tile_LT;
-    Tile * tile_LB;
-    Tile * tile_RB;
-    Tile * tile_RT;
-
-    Tile() :
-        id(0),
-        tile_LT(nullptr),
-        tile_LB(nullptr),
-        tile_RB(nullptr),
-        tile_RT(nullptr)
-//        parent(nullptr)
-    {}
-
-    Tile(uint64_t id) :
-        id(id),
+    STile(uint8_t level,
+          uint32_t x,
+          uint32_t y) :
+        id(GetIdFromLevelXY(level,x,y)),
         tile_LT(nullptr),
         tile_LB(nullptr),
         tile_RB(nullptr),
@@ -77,32 +63,6 @@ struct Tile
         return (id & 0x00000000FFFFFF);
     }
 
-    void SetLevel(uint8_t level)
-    {
-        uint64_t level64 = level;
-        level64 = level64 << 48;
-
-        id = id & 0x00FFFFFFFFFFFF;
-        id = id | level64;
-    }
-
-    void SetX(uint32_t x)
-    {
-        uint64_t x64 = x;
-        x64 = x64 << 24;
-
-        id = id & 0xFF000000FFFFFF;
-        id = id | x64;
-    }
-
-    void SetY(uint32_t y)
-    {
-        uint64_t y64 = y;
-
-        id = id & 0xFFFFFFFF000000;
-        id = id | y64;
-    }
-
     static uint64_t GetIdFromLevelXY(uint8_t level,
                                      uint32_t x,
                                      uint32_t y)
@@ -119,6 +79,106 @@ struct Tile
     }
 };
 
+//struct Tile
+//{
+//    uint64_t id;
+
+//    // id:
+//    // z  x      y
+//    // FF FFFFFF FFFFFF
+//    // z: tile level (8 bits)
+//    // x: tile x (24 bits)
+//    // y: tile y (24 bits)
+
+//    double min_lon;
+//    double max_lon;
+
+//    double min_lat;
+//    double max_lat;
+
+//    Tile * tile_LT;
+//    Tile * tile_LB;
+//    Tile * tile_RB;
+//    Tile * tile_RT;
+
+//    Tile() :
+//        id(0),
+//        tile_LT(nullptr),
+//        tile_LB(nullptr),
+//        tile_RB(nullptr),
+//        tile_RT(nullptr)
+////        parent(nullptr)
+//    {}
+
+//    Tile(uint64_t id) :
+//        id(id),
+//        tile_LT(nullptr),
+//        tile_LB(nullptr),
+//        tile_RB(nullptr),
+//        tile_RT(nullptr)
+//    {}
+
+//    uint8_t GetLevel() const
+//    {
+//        uint64_t level = (id & 0xFF000000000000);
+//        level = level >> 48;
+//        return level;
+//    }
+
+//    uint32_t GetX() const
+//    {
+//        uint64_t x = (id & 0x00FFFFFF000000);
+//        x = x >> 24;
+//        return x;
+//    }
+
+//    uint32_t GetY() const
+//    {
+//        return (id & 0x00000000FFFFFF);
+//    }
+
+//    void SetLevel(uint8_t level)
+//    {
+//        uint64_t level64 = level;
+//        level64 = level64 << 48;
+
+//        id = id & 0x00FFFFFFFFFFFF;
+//        id = id | level64;
+//    }
+
+//    void SetX(uint32_t x)
+//    {
+//        uint64_t x64 = x;
+//        x64 = x64 << 24;
+
+//        id = id & 0xFF000000FFFFFF;
+//        id = id | x64;
+//    }
+
+//    void SetY(uint32_t y)
+//    {
+//        uint64_t y64 = y;
+
+//        id = id & 0xFFFFFFFF000000;
+//        id = id | y64;
+//    }
+
+//    static uint64_t GetIdFromLevelXY(uint8_t level,
+//                                     uint32_t x,
+//                                     uint32_t y)
+//    {
+//        uint64_t level64 = level;
+//        uint64_t x64 = x;
+//        uint64_t y64 = y;
+//        uint64_t tile_id = 0;
+//        tile_id |= level64 << 48;
+//        tile_id |= x64 << 24;
+//        tile_id |= y64;
+
+//        return tile_id;
+//    }
+//};
+
 bool GeoBoundsIsValid(GeoBounds const &b)
 {
     if(b.minLon == 0 && b.maxLon == 0 && b.minLat == 0 && b.maxLat == 0) {
@@ -127,19 +187,43 @@ bool GeoBoundsIsValid(GeoBounds const &b)
     return true;
 }
 
-osg::ref_ptr<osg::Group> BuildTileGeometry(Tile const * t)
+bool GeoBoundsOverlap(GeoBounds const &a,
+                      GeoBounds const &b)
+{
+    if(a.minLon > b.maxLon ||
+       a.maxLon < b.minLon ||
+       a.minLat > b.maxLat ||
+       a.maxLat < b.minLat)
+    {   // outside
+        return false;
+    }
+    return true;
+}
+
+osg::ref_ptr<osg::Group> BuildTileGeometry(GeoBounds const &root_bounds,
+                                           STile const * t)
 {
     std::vector<osg::Vec3d> list_vx;
     std::vector<osg::Vec2d> list_tx;
     std::vector<size_t> list_ix;
 
-    double eps_lon = 0; //(t->max_lon-t->min_lon) * 0.01;
-    double eps_lat = 0; //(t->max_lat-t->min_lat) * 0.01;
 
-    BuildEarthSurfaceGeometry(t->min_lon+eps_lon,
-                              t->min_lat+eps_lat,
-                              t->max_lon-eps_lon,
-                              t->max_lat-eps_lat,
+
+    double lon_div_degs = (root_bounds.maxLon-root_bounds.minLon)/pow(2,t->GetLevel());
+    double lat_div_degs = (root_bounds.maxLat-root_bounds.minLat)/pow(2,t->GetLevel());
+
+    double min_lon = lon_div_degs*t->GetX() + root_bounds.minLon;
+    double max_lon = min_lon+lon_div_degs;
+
+    double min_lat = lat_div_degs*t->GetY() + root_bounds.minLat;
+    double max_lat = min_lat+lat_div_degs;
+
+//    std::cout << "###: " << int(t->GetLevel()) << " | " << min_lon << "," << max_lon << " | " << min_lat << "," << max_lat << std::endl;
+
+    BuildEarthSurfaceGeometry(min_lon,
+                              min_lat,
+                              max_lon,
+                              max_lat,
                               2 + size_t(floor(pow(2,4-(t->GetLevel())))),
                               2 + size_t(floor(pow(2,4-(t->GetLevel())))),
                               list_vx,
@@ -199,48 +283,49 @@ osg::ref_ptr<osg::Group> BuildTileGeometry(Tile const * t)
 }
 
 void BuildQuadTreeGeometry(osg::ref_ptr<osg::Group> &gp,
-                           Tile * tile)
+                           GeoBounds const &root_bounds,
+                           STile * tile)
 {
-    gp->addChild(BuildTileGeometry(tile));
+    gp->addChild(BuildTileGeometry(root_bounds,tile));
 
     if(tile->tile_LT) {
-        BuildQuadTreeGeometry(gp,tile->tile_LT);
+        BuildQuadTreeGeometry(gp,root_bounds,tile->tile_LT);
     }
 
     if(tile->tile_LB) {
-        BuildQuadTreeGeometry(gp,tile->tile_LB);
+        BuildQuadTreeGeometry(gp,root_bounds,tile->tile_LB);
     }
 
     if(tile->tile_RB) {
-        BuildQuadTreeGeometry(gp,tile->tile_RB);
+        BuildQuadTreeGeometry(gp,root_bounds,tile->tile_RB);
     }
 
     if(tile->tile_RT) {
-        BuildQuadTreeGeometry(gp,tile->tile_RT);
+        BuildQuadTreeGeometry(gp,root_bounds,tile->tile_RT);
     }
 }
 
-void BuildUpTileToRoot(std::map<uint64_t,std::unique_ptr<Tile>> &list_id_tiles,
-                       Tile * tile)
+void BuildUpTileToRoot(std::map<uint64_t,std::unique_ptr<STile>> &list_id_tiles,
+                       STile * tile)
 {
     while(tile->GetLevel() > 0) {
-
         // Get or create this tile's parent
-        Tile * parent;
+        STile * parent;
         bool parent_is_new = false;
         uint8_t const parent_level = tile->GetLevel()-1;
         uint32_t const parent_x = tile->GetX()/2;
         uint32_t const parent_y = tile->GetY()/2;
-        uint64_t parent_id = Tile::GetIdFromLevelXY(parent_level,
+        uint64_t parent_id = STile::GetIdFromLevelXY(parent_level,
                                                     parent_x,
                                                     parent_y);
-
-//        std::cout << "###: searchforid: " << parent_id << std::endl;
         auto it = list_id_tiles.find(parent_id);
         if(it == list_id_tiles.end()) {
             it = list_id_tiles.insert(
-                        std::pair<uint64_t,std::unique_ptr<Tile>>(
-                            parent_id,std::unique_ptr<Tile>(new Tile(parent_id)))).first;
+                        std::pair<uint64_t,std::unique_ptr<STile>>(
+                            parent_id,std::unique_ptr<STile>(
+                                new STile(parent_level,
+                                          parent_x,
+                                          parent_y)))).first;
             parent_is_new = true;
         }
         parent = it->second.get();
@@ -248,58 +333,23 @@ void BuildUpTileToRoot(std::map<uint64_t,std::unique_ptr<Tile>> &list_id_tiles,
         // Determine whether this tile is its parent's
         // LT,LB,RB, or RT tile and save a reference
         if(tile->GetX() == parent_x*2) { // left
-            if(tile->GetY() == parent_y*2) { // top
-                parent->tile_LT = tile;
-            }
-            else {
+            if(tile->GetY() == parent_y*2) { // bottom
                 parent->tile_LB = tile;
+            }
+            else { // top
+                parent->tile_LT = tile;
             }
         }
         else { // right
-            if(tile->GetY() == parent_y*2) { // top
-                parent->tile_RT = tile;
-            }
-            else {
+            if(tile->GetY() == parent_y*2) { // bottom
                 parent->tile_RB = tile;
+            }
+            else { // top
+                parent->tile_RT = tile;
             }
         }
 
-        if(parent_is_new)
-        {
-            double const parent_width = 2.0*(tile->max_lon-tile->min_lon);
-            double const parent_height= 2.0*(tile->max_lat-tile->min_lat);
-
-            if(tile->GetX() == parent_x*2) { // left
-                parent->min_lon = tile->min_lon;
-                parent->max_lon = tile->min_lon+parent_width;
-                if(tile->GetY() == parent_y*2) { // top
-                    parent->max_lat = tile->max_lat;
-                    parent->min_lat = tile->max_lat-parent_height;
-                }
-                else {
-                    parent->min_lat = tile->min_lat;
-                    parent->max_lat = tile->min_lat+parent_height;
-                }
-            }
-            else { // right
-                parent->max_lon = tile->max_lon;
-                parent->min_lon = tile->max_lon-parent_width;
-                if(tile->GetY() == parent_y*2) { // top
-                    parent->max_lat = tile->max_lat;
-                    parent->min_lat = tile->max_lat-parent_height;
-                }
-                else {
-                    parent->min_lat = tile->min_lat;
-                    parent->max_lat = tile->min_lat+parent_height;
-                }
-            }
-
-//            std::cout << "###: " << int(tile->GetLevel())
-//                      << " | " << tile->min_lon << "," << tile->max_lon
-//                      << " | " << tile->min_lat << "," << tile->max_lat
-//                      << " | " << bool(tile->GetX() == parent_x*2)
-//                      << std::endl;
-
+        if(parent_is_new) {
             tile = parent;
         }
         else {
@@ -308,60 +358,136 @@ void BuildUpTileToRoot(std::map<uint64_t,std::unique_ptr<Tile>> &list_id_tiles,
     }
 }
 
-void GenBaseTilesForGeoBounds(GeoBounds const &geobounds,
+struct vec2
+{
+    vec2(uint32_t x, uint32_t y) :
+        x(x),
+        y(y)
+    {}
+
+    uint32_t x;
+    uint32_t y;
+};
+
+void GrowTilesUpToRoot(std::map<uint64_t,std::unique_ptr<STile>> &list_id_tiles,
+                       STile * tile)
+{
+    while(tile->GetLevel() > 0) {
+        // Get this this tile's coordinates
+        vec2 const xy(tile->GetX(),tile->GetY());
+
+        // Get tiles on the same level but to
+        // adjacent in LB,RB,RT,LT
+        std::vector<vec2> list_xy;
+        list_xy.emplace_back(xy.x-1.0, xy.y-1.0); // LB
+        list_xy.emplace_back(xy.x+1.0, xy.y-1.0); // RB
+        list_xy.emplace_back(xy.x+1.0, xy.y+1.0); // RT
+        list_xy.emplace_back(xy.x-1.0, xy.y+1.0); // LT
+
+        uint8_t const parent_level = tile->GetLevel()-1;
+        for(auto const &adj_xy : list_xy)
+        {
+            // Get or create this adj_xy's parent
+            STile * parent;
+            uint32_t const parent_x = adj_xy.x/2;
+            uint32_t const parent_y = adj_xy.y/2;
+            uint64_t parent_id = STile::GetIdFromLevelXY(parent_level,
+                                                         parent_x,
+                                                         parent_y);
+            auto it = list_id_tiles.find(parent_id);
+            if(it == list_id_tiles.end()) {
+                it = list_id_tiles.insert(
+                            std::pair<uint64_t,std::unique_ptr<STile>>(
+                                parent_id,std::unique_ptr<STile>(
+                                    new STile(parent_level,
+                                              parent_x,
+                                              parent_y)))).first;
+                //parent_is_new = true;
+            }
+            parent = it->second.get();
+
+            // Check if this parent is @tile's parent as well
+            if((xy.x/2 == parent_x) && (xy.y/2 == parent_y))
+            {
+                // Determine whether this tile is its parent's
+                // LT,LB,RB, or RT tile and save a reference
+                if(tile->GetX() == parent_x*2) { // left
+                    if(tile->GetY() == parent_y*2) { // bottom
+                        parent->tile_LB = tile;
+                    }
+                    else { // top
+                        parent->tile_LT = tile;
+                    }
+                }
+                else { // right
+                    if(tile->GetY() == parent_y*2) { // bottom
+                        parent->tile_RB = tile;
+                    }
+                    else { // top
+                        parent->tile_RT = tile;
+                    }
+                }
+
+                // The parent is also the next seed tile
+                tile = parent;
+            }
+        }
+    }
+}
+
+void GenBaseTilesForGeoBounds(GeoBounds const &root_bounds,
+                              GeoBounds const &tile_bounds,
                               uint8_t const level,
                               double const lon_div_degs,
                               double const lat_div_degs,
-                              std::map<uint64_t,std::unique_ptr<Tile>> &list_id_tiles)
+                              std::map<uint64_t,std::unique_ptr<STile>> &list_id_tiles)
 {
-//    std::cout << "###: " << int(level) << ": " << ((geobounds.maxLon-geobounds.minLon)/lon_div_degs) * ((geobounds.maxLat-geobounds.minLat)/lat_div_degs) << std::endl;
+    // Create bounds that are the intersection
+    // of root_bounds and tile_bounds
+    if(!GeoBoundsOverlap(root_bounds,tile_bounds)) {
+//        std::cout << "#: no overlap, 1: ("
+//                  << root_bounds.minLon << "," << root_bounds.maxLon << "),("
+//                  << root_bounds.minLat << "," << root_bounds.maxLat << "), 2:("
+//                  << tile_bounds.minLon << "," << tile_bounds.maxLon << "),("
+//                  << tile_bounds.minLat << "," << tile_bounds.maxLat << ")" << std::endl;
+        return;
+    }
 
-    double const start_lon = floor(geobounds.minLon/lon_div_degs) * lon_div_degs;
-    double const start_lat = floor(geobounds.minLat/lat_div_degs) * lat_div_degs;
+    GeoBounds xsec_bounds;
+    xsec_bounds.minLon = std::max(root_bounds.minLon,tile_bounds.minLon);
+    xsec_bounds.maxLon = std::min(root_bounds.maxLon,tile_bounds.maxLon);
+    xsec_bounds.minLat = std::max(root_bounds.minLat,tile_bounds.minLat);
+    xsec_bounds.maxLat = std::min(root_bounds.maxLat,tile_bounds.maxLat);
 
-//    uint32_t x = ((geobounds.minLon+180.0)/lon_div_degs);
+    uint32_t const start_x = (xsec_bounds.minLon-root_bounds.minLon)/lon_div_degs;
+    uint32_t const end_x = (xsec_bounds.maxLon-root_bounds.minLon)/lon_div_degs;
 
-    for(double lon = start_lon;
-        lon < geobounds.maxLon;
-        lon += lon_div_degs)
+    uint32_t const start_y = (xsec_bounds.minLat-root_bounds.minLat)/lat_div_degs;
+    uint32_t const end_y = (xsec_bounds.maxLat-root_bounds.minLat)/lat_div_degs;
+
+//    std::cout << "###: " << start_x << "," << end_x << "|" << start_y << "," << end_y << std::endl;
+
+    for(uint32_t x = start_x; x <= end_x; x++)
     {
-        uint32_t x = (((lon+0.5*lon_div_degs)+180.0)/lon_div_degs);
-
-        for(double lat = start_lat;
-            lat < geobounds.maxLat;
-            lat += lat_div_degs)
+        for(uint32_t y = start_y; y <= end_y; y++)
         {
-            uint32_t y = ((90.0-(lat+0.5*lon_div_degs))/lat_div_degs);
-            uint64_t id = Tile::GetIdFromLevelXY(level,x,y);
+            uint64_t id = STile::GetIdFromLevelXY(level,x,y);
             auto it = list_id_tiles.find(id);
-            if(it == list_id_tiles.end()) {
+            if(it == list_id_tiles.end())
+            {
                 it = list_id_tiles.insert(
-                            std::pair<uint64_t,std::unique_ptr<Tile>>(
-                                id,std::unique_ptr<Tile>(new Tile(id)))).first;
+                            std::pair<uint64_t,std::unique_ptr<STile>>(
+                                id,std::unique_ptr<STile>(new STile(level,x,y)))).first;
 
-                Tile * tile = it->second.get();
-                tile->min_lon = lon;
-                tile->max_lon = lon+lon_div_degs;
-                tile->min_lat = lat;
-                tile->max_lat = lat+lat_div_degs;
-
-//                if(level == 1) {
-//                    std::cout << "###: "
-//                              << geobounds.minLat
-//                              << "," << geobounds.maxLat
-//                              << " / " << tile->min_lat
-//                              << "," << tile->max_lat
-//                              << " / " << tile->GetX()
-//                              << "," << tile->GetY()
-//                              << std::endl;
-//                }
-
-                BuildUpTileToRoot(list_id_tiles,tile);
+//                STile * tile = it->second.get();
+//                BuildUpTileToRoot(list_id_tiles,tile);
             }
         }
-        x++;
     }
 }
+
+
+
 
 int main()
 {
@@ -488,14 +614,22 @@ int main()
         }
 
         // Create a tile list and add the root tile
-        std::map<uint64_t,std::unique_ptr<Tile>> list_id_tiles;
-        list_id_tiles.insert(std::pair<uint64_t,std::unique_ptr<Tile>>(
-                                 0,std::unique_ptr<Tile>(new Tile(0))));
-        Tile * root_tile = list_id_tiles.find(0)->second.get();
-        root_tile->min_lon = -180.0;
-        root_tile->max_lon = 180.0;
-        root_tile->min_lat = -90.0;
-        root_tile->max_lat = 90.0;
+        std::map<uint64_t,std::unique_ptr<STile>> list_id_tiles;
+        list_id_tiles.insert(std::pair<uint64_t,std::unique_ptr<STile>>(
+                                 0,std::unique_ptr<STile>(new STile(0,0,0))));
+
+        STile * root_tile = list_id_tiles.find(0)->second.get();
+
+        GeoBounds root_bounds;
+//        root_bounds.minLon = -180.0;
+//        root_bounds.maxLon = 180.0;
+//        root_bounds.minLat = -90.0;
+//        root_bounds.maxLat = 90.0;
+
+        root_bounds.minLon = -180.0;
+        root_bounds.maxLon = 0.0;
+        root_bounds.minLat = -90.0;
+        root_bounds.maxLat = 90.0;
 
         // Intersect gnomonic projections of distance spheres
         // and the camera frustum and create tiles for the
@@ -530,12 +664,31 @@ int main()
                 CalcMinGeoBoundsFromLLAPoly(lla_eye,list_lla,tempbb);
                 if(!tempbb.empty()) {
                     // Create tiles for this geobounds
-                    GenBaseTilesForGeoBounds(tempbb[0],i,
-                                             360.0/pow(2,i),
-                                             180.0/pow(2,i),
+                    GenBaseTilesForGeoBounds(root_bounds,
+                                             tempbb[0],
+                                             i,
+                                             (root_bounds.maxLon-root_bounds.minLon)/pow(2,i),
+                                             (root_bounds.maxLat-root_bounds.minLat)/pow(2,i),
                                              list_id_tiles);
                 }
             }
+        }
+
+        // List of ordered base tiles (high lod -> low lod)
+        size_t const num_base_tiles = list_id_tiles.size();
+        std::vector<STile*> list_base_tiles(num_base_tiles);
+        {
+            size_t ix=1;
+            for(auto it = list_id_tiles.begin();
+                it != list_id_tiles.end(); ++it)
+            {
+                list_base_tiles[num_base_tiles-ix] = it->second.get();
+                ix++;
+            }
+        }
+
+        for(STile * tile : list_base_tiles) {
+            BuildUpTileToRoot(list_id_tiles,tile);
         }
 
         // ==================================================== //
@@ -575,7 +728,7 @@ int main()
 
         // new vx tiles node
         osg::ref_ptr<osg::Group> new_vxtiles = new osg::Group;
-        BuildQuadTreeGeometry(new_vxtiles,root_tile);
+        BuildQuadTreeGeometry(new_vxtiles,root_bounds,root_tile);
         new_vxtiles->setName("vxtiles");
 
 
