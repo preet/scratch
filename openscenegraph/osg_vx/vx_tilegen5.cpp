@@ -269,58 +269,108 @@ void BuildQuadtreeFromTileList(std::map<uint64_t,std::unique_ptr<STile>> &list_i
     }
 }
 
-void BuildUpTileToRoot(std::map<uint64_t,std::unique_ptr<STile>> &list_id_tiles,
+struct vec2
+{
+    vec2(uint32_t x, uint32_t y) :
+        x(x),
+        y(y)
+    {}
+
+    uint32_t x;
+    uint32_t y;
+};
+
+void GrowTilesUpToRoot(uint8_t const root_lon_divs,
+                       uint8_t const root_lat_divs,
+                       std::map<uint64_t,std::unique_ptr<STile>> &list_id_tiles,
                        STile * tile)
 {
     while(tile->GetLevel() > 0) {
-        // Get or create this tile's parent
-        STile * parent;
-        bool parent_is_new = false;
+        //
+        uint32_t x_max = (pow(2,tile->GetLevel())*root_lon_divs)-1;
+        uint32_t y_max = (pow(2,tile->GetLevel())*root_lat_divs)-1;
+
+        // Get this this tile's coordinates
+        vec2 const xy(tile->GetX(),tile->GetY());
+
+        uint32_t x_L = (xy.x == 0) ? x_max : xy.x-1; // wrap
+        uint32_t x_R = (xy.x == x_max) ? 0 : xy.x+1; // wrap
+        uint32_t y_B = (xy.y == 0) ? 0 : xy.y-1;            // clamp for now (TODO)
+        uint32_t y_T = (xy.y == y_max) ? y_max : xy.y+1;    // clamp for now (TODO)
+
+//        std::cout << "###: " << int(tile->GetLevel())
+//                  << ", x_max: " << x_max
+//                  << ", x_L: " << x_L
+//                  << ", x_R: " << x_R << std::endl;
+
+        // Get tiles on the same level but to
+        // adjacent in LB,RB,RT,LT
+
+        // what about -180? .x -1 doesn't work
+
+        std::vector<vec2> list_xy;
+        list_xy.emplace_back(x_L,y_B); // LB
+        list_xy.emplace_back(x_R,y_B); // RB
+        list_xy.emplace_back(x_R,y_T); // RT
+        list_xy.emplace_back(x_L,y_T); // LT
+
         uint8_t const parent_level = tile->GetLevel()-1;
-        uint32_t const parent_x = tile->GetX()/2;
-        uint32_t const parent_y = tile->GetY()/2;
-        uint64_t parent_id = STile::GetIdFromLevelXY(parent_level,
-                                                    parent_x,
-                                                    parent_y);
-        auto it = list_id_tiles.find(parent_id);
-        if(it == list_id_tiles.end()) {
-            it = list_id_tiles.insert(
-                        std::pair<uint64_t,std::unique_ptr<STile>>(
-                            parent_id,std::unique_ptr<STile>(
-                                new STile(parent_level,
-                                          parent_x,
-                                          parent_y)))).first;
-            parent_is_new = true;
-        }
-        parent = it->second.get();
+        for(auto const &adj_xy : list_xy)
+        {
+            // Get or create this adj_xy's parent
+            STile * parent;
+            uint32_t const parent_x = adj_xy.x/2;
+            uint32_t const parent_y = adj_xy.y/2;
+//            if(parent_level == 1) {
+//                std::cout << "######: " << parent_x << "," << parent_y << std::endl;
+//            }
+            uint64_t parent_id = STile::GetIdFromLevelXY(parent_level,
+                                                         parent_x,
+                                                         parent_y);
+            auto it = list_id_tiles.find(parent_id);
+            if(it == list_id_tiles.end()) {
+                it = list_id_tiles.insert(
+                            std::pair<uint64_t,std::unique_ptr<STile>>(
+                                parent_id,std::unique_ptr<STile>(
+                                    new STile(parent_level,
+                                              parent_x,
+                                              parent_y)))).first;
+            }
+            parent = it->second.get();
 
-        // Determine whether this tile is its parent's
-        // LT,LB,RB, or RT tile and save a reference
-        if(tile->GetX() == parent_x*2) { // left
-            if(tile->GetY() == parent_y*2) { // bottom
-                parent->tile_LB = tile;
+            // Check if this parent is @tile's parent as well
+            if((xy.x/2 == parent_x) && (xy.y/2 == parent_y))
+            {
+                // The parent is also the next seed tile
+                tile = parent;
             }
-            else { // top
-                parent->tile_LT = tile;
-            }
-        }
-        else { // right
-            if(tile->GetY() == parent_y*2) { // bottom
-                parent->tile_RB = tile;
-            }
-            else { // top
-                parent->tile_RT = tile;
-            }
-        }
-
-        if(parent_is_new) {
-            tile = parent;
-        }
-        else {
-            break;
         }
     }
+
+//    std::cout << "###: A " << std::endl;
+//    for(auto it = list_id_tiles.begin();
+//        it != list_id_tiles.end(); ++it)
+//    {
+//        STile * t = it->second.get();
+//        std::cout << "###: "
+//                  << int(t->GetLevel())
+//                  << ","
+//                  << t->GetX()
+//                  << ","
+//                  << t->GetY()
+//                  << std::endl;
+//    }
 }
+
+struct TileGeoDesc
+{
+    double min_lon;
+    double max_lon;
+    double min_lat;
+    double max_lat;
+    uint8_t lon_divs;
+    uint8_t lat_divs;
+};
 
 bool GenBaseTilesForGeoBounds(GeoBounds const &tile_bounds,
                               uint8_t const level,
@@ -545,12 +595,10 @@ int main()
                 std::vector<GeoBounds> list_geobb;
                 CalcMinGeoBoundsFromLLAPoly(lla_eye,list_lla,list_geobb);
                 for(auto const &geobb : list_geobb) {
-                    // Create tiles for this geobounds
-                    int k=i;
-
                     // If the number of tiles in the geo bounds for this
                     // level exceeds max_tiles, keep reducing the tile level
                     // until the number of tiles <= max_tiles.
+                    int k=i;
                     uint8_t max_tiles = 8;
                     while(k > -1) {
                         if(GenBaseTilesForGeoBounds(geobb,k,2,1,max_tiles,list_id_tiles)) {
@@ -576,8 +624,12 @@ int main()
         }
 
         for(STile * tile : list_base_tiles) {
-            BuildUpTileToRoot(list_id_tiles,tile);
+            GrowTilesUpToRoot(2,1,list_id_tiles,tile);
         }
+
+//        if(!list_base_tiles.empty()) {
+//            GrowTilesUpToRoot(2,1,list_id_tiles,list_base_tiles[0]);
+//        }
 
         BuildQuadtreeFromTileList(list_id_tiles,list_root_tiles[0]);
         BuildQuadtreeFromTileList(list_id_tiles,list_root_tiles[1]);

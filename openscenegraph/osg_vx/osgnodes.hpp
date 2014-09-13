@@ -739,9 +739,17 @@ osg::ref_ptr<osg::Group> BuildTileGeometry(VxTile const * t)
         nx_array->push_back(nx);
     }
 
-    osg::ref_ptr<osg::Vec4Array> cx_array =
-            new osg::Vec4Array;
-    cx_array->push_back(K_COLOR_TABLE[t->level]);
+    osg::ref_ptr<osg::Vec4Array> cx_array = new osg::Vec4Array;
+    for (auto const &tx : list_tx) {
+        osg::Vec4 cx;
+        cx = K_COLOR_TABLE[t->level];
+        double mag = tx.length();
+        cx.r() *= mag;
+        cx.g() *= mag;
+        cx.b() *= mag;
+        cx.a() *= mag;
+        cx_array->push_back(cx);
+    }
 
     osg::ref_ptr<osg::DrawElementsUShort> ix_array =
             new osg::DrawElementsUShort(GL_TRIANGLES);
@@ -753,7 +761,7 @@ osg::ref_ptr<osg::Group> BuildTileGeometry(VxTile const * t)
     osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
     gm->setVertexArray(vx_array.get());
     gm->setNormalArray(nx_array.get(),osg::Array::Binding::BIND_PER_VERTEX);
-    gm->setColorArray(cx_array,osg::Array::Binding::BIND_OVERALL);
+    gm->setColorArray(cx_array,osg::Array::Binding::BIND_PER_VERTEX);
     gm->addPrimitiveSet(ix_array.get());
 
     // geode

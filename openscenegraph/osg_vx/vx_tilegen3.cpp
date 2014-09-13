@@ -154,9 +154,65 @@ bool CheckTileOverlapsGeoBounds(GeoBounds const &geobb,
     return true;
 }
 
+bool CheckTileOverlapsGeoBounds(std::vector<GeoBounds> const &list_geobb,
+                                std::unique_ptr<VxTile> &tile)
+{
+    for(auto const &geobb: list_geobb)
+    {
+        if(!(tile->minLon > geobb.maxLon ||
+             tile->maxLon < geobb.minLon ||
+             tile->minLat > geobb.maxLat ||
+             tile->maxLat < geobb.minLat))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod_geobb,
+                             std::unique_ptr<VxTile> &tile)
+{
+    // If the next lod's geobounds exist and this tile
+    // intersects with them, subdivide the tile
+    if(CheckTileOverlapsGeoBounds(list_lod_geobb[tile->level+1],tile))
+    {
+        tile->tile_LT = BuildChildTile(tile.get(),0,false);
+        tile->tile_LB = BuildChildTile(tile.get(),1,false);
+        tile->tile_RB = BuildChildTile(tile.get(),2,false);
+        tile->tile_RT = BuildChildTile(tile.get(),3,false);
+
+        GenQuadTreeForGeoBounds(list_lod_geobb,tile->tile_LT);
+        GenQuadTreeForGeoBounds(list_lod_geobb,tile->tile_LB);
+        GenQuadTreeForGeoBounds(list_lod_geobb,tile->tile_RB);
+        GenQuadTreeForGeoBounds(list_lod_geobb,tile->tile_RT);
+
+        // Draw this tile if it has any empty children
+        if(tile->tile_LT == nullptr ||
+           tile->tile_LB == nullptr ||
+           tile->tile_RB == nullptr ||
+           tile->tile_RT == nullptr)
+        {
+            tile->_gp = BuildTileGeometry(tile.get());
+        }
+    }
+    else {
+        // Else draw this tile if it intersects with the
+        // current lod geobounds
+        if(CheckTileOverlapsGeoBounds(list_lod_geobb[tile->level],tile)) {
+            tile->_gp = BuildTileGeometry(tile.get());
+        }
+        else {
+            tile = nullptr;
+        }
+    }
+}
+
 void GenQuadTreeForGeoBounds(std::vector<GeoBounds> const &list_level_geobb,
                              std::unique_ptr<VxTile> &tile)
 {
+
+
     if(GeoBoundsIsValid(list_level_geobb[tile->level+1])) {
         // Else subdivide if this tile overlaps with the
         // next level's GeoBounds
@@ -225,7 +281,73 @@ void AddQuadTreeGeometryToGroup(std::unique_ptr<VxTile> const &tile,
     if(tile->tile_RT) {
         AddQuadTreeGeometryToGroup(tile->tile_RT,gp);
     }
+}
 
+uint32_t GetTileCountForGeoBounds(GeoBounds const &tile_bounds,
+                                  uint8_t const level,
+                                  uint8_t const root_lon_divs,
+                                  uint8_t const root_lat_divs)
+{
+    // todo quicker int-only pow()
+    double const lon_div_degs = 360.0/(pow(2,level)*root_lon_divs);
+    double const lat_div_degs = 180.0/(pow(2,level)*root_lat_divs);
+
+    uint32_t const start_x = floor((tile_bounds.minLon-(-180.0))/lon_div_degs);
+    uint32_t const end_x = ceil((tile_bounds.maxLon-(-180.0))/lon_div_degs);
+
+    uint32_t const start_y = floor((tile_bounds.minLat-(-90.0))/lat_div_degs);
+    uint32_t const end_y = ceil((tile_bounds.maxLat-(-90.0))/lat_div_degs);
+
+    uint32_t const x_tiles = (end_x-start_x);
+    uint32_t const y_tiles = (end_y-start_y);
+    return x_tiles*y_tiles;
+}
+
+bool CheckGeoBoundsTileCountLessThan(std::vector<GeoBounds> const &list_geobb,
+                                     uint8_t const level,
+                                     uint8_t const root_lon_divs,
+                                     uint8_t const root_lat_divs,
+                                     uint8_t const max_tiles)
+{
+    double const lon_div_degs = 360.0/(pow(2,level)*root_lon_divs);
+    double const lat_div_degs = 180.0/(pow(2,level)*root_lat_divs);
+
+    uint32_t num_tiles = 0;
+
+    for(auto const &geobb : list_geobb)
+    {
+        uint32_t const start_x = floor((geobb.minLon-(-180.0))/lon_div_degs);
+        uint32_t const end_x = ceil((geobb.maxLon-(-180.0))/lon_div_degs);
+
+        uint32_t const start_y = floor((geobb.minLat-(-90.0))/lat_div_degs);
+        uint32_t const end_y = ceil((geobb.maxLat-(-90.0))/lat_div_degs);
+
+        uint32_t const x_tiles = (end_x-start_x);
+        uint32_t const y_tiles = (end_y-start_y);
+        num_tiles += (x_tiles*y_tiles);
+    }
+
+    if(num_tiles > max_tiles) {
+//        for(auto const &geobb : list_geobb) {
+//            uint32_t const start_x = floor((geobb.minLon-(-180.0))/lon_div_degs);
+//            uint32_t const end_x = ceil((geobb.maxLon-(-180.0))/lon_div_degs);
+
+//            uint32_t const start_y = floor((geobb.minLat-(-90.0))/lat_div_degs);
+//            uint32_t const end_y = ceil((geobb.maxLat-(-90.0))/lat_div_degs);
+
+//            uint32_t const x_tiles = (end_x-start_x);
+//            uint32_t const y_tiles = (end_y-start_y);
+//        std::cout   << "##: lvl:" << int(level)
+//                    << ", lon: (" << geobb.minLon << "," << geobb.maxLon << ")"
+//                    << ", lat: (" << geobb.minLat << "," << geobb.maxLat << ")"
+//                    << ", xt: " << x_tiles
+//                    << ", yt: " << y_tiles
+//                    << ", num_tiles: " << num_tiles << std::endl;
+//        }
+        std::cout << "###: !: " << num_tiles << std::endl;
+        return false;
+    }
+    return true;
 }
 
 int main()
@@ -382,36 +504,34 @@ int main()
         }
 
         // Create geo bounds for all the xsec polys
-        std::vector<GeoBounds> list_xsec_geobb;
-        for(auto const &xsec_poly : list_polys_xsec) {
+        std::vector<std::vector<GeoBounds>> list_lod_geobb(max_lod+2);
+        for(size_t i=0; i < list_polys_xsec.size(); i++) {
+            std::vector<osg::Vec3d> const &xsec_poly = list_polys_xsec[i];
             if(!xsec_poly.empty()) {
                 std::vector<PointLLA> list_lla;
                 list_lla.reserve(xsec_poly.size());
                 for(auto const &vx : xsec_poly) {
                     list_lla.push_back(ConvECEFToLLA(vx));
                 }
-                std::vector<GeoBounds> tempbb;
-                CalcMinGeoBoundsFromLLAPoly(lla_eye,list_lla,tempbb);
-                if(!tempbb.empty()) {
-                    list_xsec_geobb.push_back(tempbb[0]);
-                    continue;
+                std::vector<GeoBounds> list_geobb;
+                CalcMinGeoBoundsFromLLAPoly(lla_eye,list_lla,list_geobb);
+
+                if(!list_geobb.empty()) {
+                    if(CheckGeoBoundsTileCountLessThan(list_geobb,i,2,1,16)) {
+                        list_lod_geobb[i] = list_geobb;
+                    }
+                    else {
+                        break;
+                    }
                 }
             }
-            GeoBounds b;
-            b.minLon = 0; b.minLat = 0;
-            b.maxLon = 0; b.maxLat = 0;
-            list_xsec_geobb.push_back(b);
         }
 
-//        std::cout << "min_lod: " << min_lod << ", max_lod: " << max_lod << std::endl;
-//        for(size_t i=0; i < list_polys_xsec.size(); i++) {
-//            std::cout << "<" << i << " : " << list_polys_xsec[i].size() << ">, ";
-//        }
-//        std::cout << std::endl;
-
         // Build quadtree from geo bounds
-        std::unique_ptr<VxTile> root_tile(BuildRootTile(0,-180.0,-90.0,180.0,90.0));
-        GenQuadTreeForGeoBounds(list_xsec_geobb,root_tile);
+        std::unique_ptr<VxTile> root_tile0(BuildRootTile(0,-180.0,-90.0,0.0,90.0));
+        std::unique_ptr<VxTile> root_tile1(BuildRootTile(0,0.0,-90.0,180.0,90.0));
+        GenQuadTreeForGeoBounds(list_lod_geobb,root_tile0);
+        GenQuadTreeForGeoBounds(list_lod_geobb,root_tile1);
 
         // ==================================================== //
 
@@ -450,7 +570,12 @@ int main()
 
         // new vx tiles node
         osg::ref_ptr<osg::Group> new_vxtiles = new osg::Group;
-        AddQuadTreeGeometryToGroup(root_tile,new_vxtiles);
+        if(root_tile0) {
+            AddQuadTreeGeometryToGroup(root_tile0,new_vxtiles);
+        }
+        if(root_tile1) {
+            AddQuadTreeGeometryToGroup(root_tile1,new_vxtiles);
+        }
         new_vxtiles->setName("vxtiles");
 
 
