@@ -26,6 +26,7 @@
 #include <cassert>
 
 #include <osg/Vec3d>
+#include <osg/Geometry>
 
 //////////////////////////////////////////////////////
 
@@ -467,8 +468,8 @@ bool BuildEarthSurfaceGeometry(double minLon, double minLat,
             vertexArray.push_back(ConvLLAToECEF(PointLLA((j*lonStep)+minLon,
                                                          (i*latStep)+minLat,0.0)));
             // surface tex coord
-            texCoords.push_back(osg::Vec2d(double(j)/lonSegments,
-                                           double(i)/latSegments));
+            texCoords.push_back(osg::Vec2d((double(j)/lonSegments),
+                                           (double(i)/latSegments)));
         }
     }
 
@@ -485,6 +486,61 @@ bool BuildEarthSurfaceGeometry(double minLon, double minLat,
             triIdx.push_back(vIdx);
             triIdx.push_back(vIdx+1);
             triIdx.push_back(vIdx+lonSegments+2);
+
+            vIdx++;
+        }
+        vIdx++;
+    }
+
+    return true;
+}
+
+bool BuildEarthSurfaceGeometry(double minLon, double minLat,
+                               double maxLon, double maxLat,
+                               uint16_t lonSegments,
+                               uint16_t latSegments,
+                               osg::Vec3dArray * vertexArray,
+                               osg::Vec2dArray * texCoords,
+                               osg::DrawElementsUShort * triIdx)
+{
+    if((!(minLon < maxLon)) || (!(minLat < maxLat)))   {
+        return false;
+    }
+
+    double lonStep = (maxLon-minLon)/lonSegments;
+    double latStep = (maxLat-minLat)/latSegments;
+
+    vertexArray->clear();
+    texCoords->clear();
+    triIdx->clear();
+
+    // build vertex attributes
+//    vertexArray.reserve((latSegments+1)*(lonSegments+1));
+//    texCoords.reserve((latSegments+1)*(lonSegments+1));
+    for(size_t i=0; i <= latSegments; i++)   {
+        for(size_t j=0; j <= lonSegments; j++)   {
+            // surface vertex
+            vertexArray->push_back(ConvLLAToECEF(PointLLA((j*lonStep)+minLon,
+                                                         (i*latStep)+minLat,0.0)));
+            // surface tex coord
+            texCoords->push_back(osg::Vec2d((double(j)/lonSegments),
+                                           (double(i)/latSegments)));
+        }
+    }
+
+    // stitch faces together
+    // TODO: optimize push_back
+//    triIdx.reserve(lonSegments*latSegments*6);
+    uint16_t vIdx=0;
+    for(uint16_t i=0; i < latSegments; i++)   {
+        for(uint16_t j=0; j < lonSegments; j++)   {
+            triIdx->push_back(vIdx);
+            triIdx->push_back(vIdx+lonSegments+2);
+            triIdx->push_back(vIdx+lonSegments+1);
+
+            triIdx->push_back(vIdx);
+            triIdx->push_back(vIdx+1);
+            triIdx->push_back(vIdx+lonSegments+2);
 
             vIdx++;
         }
@@ -514,41 +570,41 @@ bool CalcPlanePlaneIntersection(Plane const &p1,
     return true;
 }
 
+//bool CalcHorizonPlane(osg::Vec3d const &eye,
+//                      Plane & horizon_plane)
+//{
+//    // We need to clamp eye_length such that the
+//    // eye is outside of the celestial body surface
+
+//    osg::Vec3d xsecNear,xsecFar;
+//    if(!CalcRayEarthIntersection(eye,eye,xsecNear,xsecFar)) {
+//        return false;
+//    }
+
+//    horizon_plane.n = eye;
+//    horizon_plane.n.normalize();
+
+//    double const eye_length2 = eye.length2();
+//    (void)eye_length2;
+//    double const xsec_length2 = xsecNear.length2();
+//    (void)xsec_length2;
+
+//    osg::Vec3d eye_clamped = eye;
+//    if((eye.length() - RAD_AV) < 5000.0) {
+//        eye_clamped = (horizon_plane.n*(5000.0+RAD_AV));
+//    }
+
+//    double eye_length = eye_clamped.length();
+//    double const inv_dist = 1.0/eye_length;
+
+//    // by similar triangles
+//    horizon_plane.p = horizon_plane.n * (RAD_AV*RAD_AV*inv_dist);
+//    horizon_plane.d = horizon_plane.n * horizon_plane.p;
+
+//    return true;
+//}
+
 bool CalcHorizonPlane(osg::Vec3d const &eye,
-                      Plane & horizon_plane)
-{
-    // We need to clamp eye_length such that the
-    // eye is outside of the celestial body surface
-
-    osg::Vec3d xsecNear,xsecFar;
-    if(!CalcRayEarthIntersection(eye,eye,xsecNear,xsecFar)) {
-        return false;
-    }
-
-    horizon_plane.n = eye;
-    horizon_plane.n.normalize();
-
-    double const eye_length2 = eye.length2();
-    (void)eye_length2;
-    double const xsec_length2 = xsecNear.length2();
-    (void)xsec_length2;
-
-    osg::Vec3d eye_clamped = eye;
-    if((eye.length() - RAD_AV) < 5000.0) {
-        eye_clamped = (horizon_plane.n*(5000.0+RAD_AV));
-    }
-
-    double eye_length = eye_clamped.length();
-    double const inv_dist = 1.0/eye_length;
-
-    // by similar triangles
-    horizon_plane.p = horizon_plane.n * (RAD_AV*RAD_AV*inv_dist);
-    horizon_plane.d = horizon_plane.n * horizon_plane.p;
-
-    return true;
-}
-
-bool calcHorizonPlane(osg::Vec3d const &eye,
                       Plane & horizon_plane)
 {
     double const clamp_dist_m = 5000;

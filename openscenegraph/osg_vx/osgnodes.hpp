@@ -953,7 +953,7 @@ osg::ref_ptr<osg::Group> BuildHorizonPlaneNode(osg::Camera * camera,
         xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
         gp_horizon_plane->addChild(xf_ring);
 
-        if(calcHorizonPlane(eye,horizon_plane)) {
+        if(CalcHorizonPlane(eye,horizon_plane)) {
             // Draw the plane as a circle centered on horizon_pt
             // with radius == dist
             osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(16);

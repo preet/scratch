@@ -18,7 +18,9 @@ LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -losgDB
 LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -losg
 LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -lOpenThreads
 
-#HEADERS += obb.hpp tri.hpp geostuff.hpp vxtile.hpp
+# clipper
 HEADERS += clipper.hpp
-#SOURCES += vx_frustumproj.cpp clipper.cpp
-SOURCES += vx_tilegen3.cpp clipper.cpp
+SOURCES += clipper.cpp
+
+
+SOURCES += vx_tilegen_mapbox.cpp
