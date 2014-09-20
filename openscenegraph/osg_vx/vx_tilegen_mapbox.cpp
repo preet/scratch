@@ -8,10 +8,16 @@
 
 //
 #include <osg/Switch>
+#include <osgDB/ReadFile>
+#include <osg/Texture2D>
 
+size_t K_MAX_TILE_GEOMETRY_CACHE = 48;
 std::mutex mutex_map_tile_geometry_cache;
 std::map<uint64_t,std::pair<bool,osg::ref_ptr<osg::Switch>>> map_tile_geometry_cache;
 
+size_t K_MAX_TILE_IMAGE_CACHE = 48;
+std::mutex mutex_map_tile_image_cache;
+std::map<uint64_t,std::pair<bool,osg::ref_ptr<osg::Texture2D>>> map_tile_texture_cache;
 
 uint64_t K_LIST_TWO_EXP[32] = {
     1,
@@ -107,7 +113,8 @@ public:
         tile_LB(nullptr),
         tile_RB(nullptr),
         tile_RT(nullptr),
-        gm(nullptr)
+        gm(nullptr),
+        lock_in_cache(false)
     {
         // empty
     }
@@ -130,7 +137,8 @@ public:
         tile_LB(nullptr),
         tile_RB(nullptr),
         tile_RT(nullptr),
-        gm(nullptr)
+        gm(nullptr),
+        lock_in_cache(false)
     {
         // empty
     }
@@ -215,6 +223,7 @@ public:
     osg::ref_ptr<osg::Switch> gm;
     uint8_t clip;
     uint8_t tx_level;
+    bool lock_in_cache;
 };
 
 void CalcGnomonicProjPolys(Plane const &horizon_plane,
@@ -229,6 +238,9 @@ void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod
 
 void GenGmListFromQuadTree(std::unique_ptr<XYTile> &tile,
                            osg::Group * gp);
+
+bool GetOrCreateTileGeometry(XYTile * tile);
+void BuildXYTileGeometry(XYTile * tile);
 
 int main()
 {
@@ -288,8 +300,41 @@ int main()
         view->setCameraManipulator(view_manip);
     }
 
-    // Create root tiles
+    // Create root tile
     std::unique_ptr<XYTile> root_tile(new XYTile(0,0,0,-180.0,180.0,-90.0,90.0));
+
+    // Save root tile geometry to geometry cache
+    GetOrCreateTileGeometry(root_tile.get());
+
+    // Save root tile texture to texture cache
+    {
+        osg::ref_ptr<osg::Image> root_img =
+                osgDB::readImageFile("/home/preet/Dev/misc/tile_test/0.png");
+
+        if(!(root_img.valid() && root_img->valid())) {
+            std::cout << "Error loading root image " << std::endl;
+            return -1;
+        }
+
+        osg::ref_ptr<osg::Texture2D> root_tx = new osg::Texture2D;
+        root_tx->setImage(root_img);
+        root_tx->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
+        root_tx->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
+        root_tx->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
+        root_tx->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+
+        std::pair<uint64_t,std::pair<bool,osg::ref_ptr<osg::Texture2D>>> ins_data;
+        ins_data.first = root_tile->id;
+        ins_data.second.first = true;
+        ins_data.second.second = root_tx;
+        map_tile_texture_cache.insert(ins_data);
+    }
+
+    // prevent root_tile's geometry or texture from
+    // being removed from its corresponding cache
+    root_tile->lock_in_cache = true;
+
+    // geometry
 
     // ==================================================== //
     // ==================================================== //
@@ -342,7 +387,8 @@ int main()
         // Create the quad tree
         mutex_map_tile_geometry_cache.lock();
         GenQuadTreeForGeoBounds(list_lod_geobb,root_tile);
-        std::cout << "###: gm cache sz: " << map_tile_geometry_cache.size() << std::endl;
+//        std::cout << "###: gm cache sz: " << map_tile_geometry_cache.size() << std::endl;
+//        std::cout << "###: tx cache sz: " << map_tile_texture_cache.size() << std::endl;
         mutex_map_tile_geometry_cache.unlock();
 
 
@@ -599,8 +645,6 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
     double tx_width_inv  = 1.0/(tx_tile->max_lon-tx_tile->min_lon);
     double tx_height_inv = 1.0/(tx_tile->max_lat-tx_tile->min_lat);
 
-    osg::Geode * gd = static_cast<osg::Geode*>(tile->gm->getChild(0));
-
     // LT
     {
         double const min_lon = tile->min_lon;
@@ -611,11 +655,13 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
         double s_start = (min_lon-tx_tile->min_lon)*tx_width_inv;
         double s_end = (max_lon-tx_tile->min_lon)*tx_width_inv;
 
-        double t_start = 1.0-((max_lat-tx_tile->min_lat)*tx_height_inv);
-        double t_end = 1.0-((min_lat-tx_tile->min_lat)*tx_height_inv);
+        double t_start = 1.0-((min_lat-tx_tile->min_lat)*tx_height_inv);
+        double t_end = 1.0-((max_lat-tx_tile->min_lat)*tx_height_inv);
 
         double s_delta = s_end-s_start;
         double t_delta = t_end-t_start;
+
+        osg::Geode * gd = static_cast<osg::Geode*>(tile->gm->getChild(0));
 
         osg::Geometry * gm =
                 static_cast<osg::Geometry*>(gd->getDrawable(0));
@@ -632,6 +678,13 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
             tx.x() = (tx_ref.x()*s_delta) + s_start;
             tx.y() = (tx_ref.y()*t_delta) + t_start;
         }
+
+//        std::cout << "LT: " << int(tile->level) << " for " << int(tx_tile->level)
+//                  << ": s_start: " << s_start << ", s_delta: " << s_delta
+//                  << ": t_start: " << t_start << ", t_delta: " << t_delta
+//                  << ", first: " << list_tx_ref->at(0) << ", last: " << list_tx_ref->back()
+//                  << ", first: " << list_tx->at(0) << ", last: " << list_tx->back()
+//                  << std::endl;
     }
 
     // LB
@@ -644,11 +697,13 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
         double s_start = (min_lon-tx_tile->min_lon)*tx_width_inv;
         double s_end = (max_lon-tx_tile->min_lon)*tx_width_inv;
 
-        double t_start = 1.0-((max_lat-tx_tile->min_lat)*tx_height_inv);
-        double t_end = 1.0-((min_lat-tx_tile->min_lat)*tx_height_inv);
+        double t_start = 1.0-((min_lat-tx_tile->min_lat)*tx_height_inv);
+        double t_end = 1.0-((max_lat-tx_tile->min_lat)*tx_height_inv);
 
         double s_delta = s_end-s_start;
         double t_delta = t_end-t_start;
+
+        osg::Geode * gd = static_cast<osg::Geode*>(tile->gm->getChild(1));
 
         osg::Geometry * gm =
                 static_cast<osg::Geometry*>(gd->getDrawable(0));
@@ -665,6 +720,13 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
             tx.x() = (tx_ref.x()*s_delta) + s_start;
             tx.y() = (tx_ref.y()*t_delta) + t_start;
         }
+
+//        std::cout << "LB: " << int(tile->level) << " for " << int(tx_tile->level)
+//                  << ": s_start: " << s_start << ", s_delta: " << s_delta
+//                  << ": t_start: " << t_start << ", t_delta: " << t_delta
+//                  << ", first: " << list_tx_ref->at(0) << ", last: " << list_tx_ref->back()
+//                  << ", first: " << list_tx->at(0) << ", last: " << list_tx->back()
+//                  << std::endl;
     }
 
     // RB
@@ -677,11 +739,13 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
         double s_start = (min_lon-tx_tile->min_lon)*tx_width_inv;
         double s_end = (max_lon-tx_tile->min_lon)*tx_width_inv;
 
-        double t_start = 1.0-((max_lat-tx_tile->min_lat)*tx_height_inv);
-        double t_end = 1.0-((min_lat-tx_tile->min_lat)*tx_height_inv);
+        double t_start = 1.0-((min_lat-tx_tile->min_lat)*tx_height_inv);
+        double t_end = 1.0-((max_lat-tx_tile->min_lat)*tx_height_inv);
 
         double s_delta = s_end-s_start;
         double t_delta = t_end-t_start;
+
+        osg::Geode * gd = static_cast<osg::Geode*>(tile->gm->getChild(2));
 
         osg::Geometry * gm =
                 static_cast<osg::Geometry*>(gd->getDrawable(0));
@@ -698,6 +762,13 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
             tx.x() = (tx_ref.x()*s_delta) + s_start;
             tx.y() = (tx_ref.y()*t_delta) + t_start;
         }
+
+//        std::cout << "RB: " << int(tile->level) << " for " << int(tx_tile->level)
+//                  << ": s_start: " << s_start << ", s_delta: " << s_delta
+//                  << ": t_start: " << t_start << ", t_delta: " << t_delta
+//                  << ", first: " << list_tx_ref->at(0) << ", last: " << list_tx_ref->back()
+//                  << ", first: " << list_tx->at(0) << ", last: " << list_tx->back()
+//                  << std::endl;
     }
 
     // RT
@@ -710,11 +781,13 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
         double s_start = (min_lon-tx_tile->min_lon)*tx_width_inv;
         double s_end = (max_lon-tx_tile->min_lon)*tx_width_inv;
 
-        double t_start = 1.0-((max_lat-tx_tile->min_lat)*tx_height_inv);
-        double t_end = 1.0-((min_lat-tx_tile->min_lat)*tx_height_inv);
+        double t_start = 1.0-((min_lat-tx_tile->min_lat)*tx_height_inv);
+        double t_end = 1.0-((max_lat-tx_tile->min_lat)*tx_height_inv);
 
         double s_delta = s_end-s_start;
         double t_delta = t_end-t_start;
+
+        osg::Geode * gd = static_cast<osg::Geode*>(tile->gm->getChild(3));
 
         osg::Geometry * gm =
                 static_cast<osg::Geometry*>(gd->getDrawable(0));
@@ -731,9 +804,35 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
             tx.x() = (tx_ref.x()*s_delta) + s_start;
             tx.y() = (tx_ref.y()*t_delta) + t_start;
         }
+
+//        std::cout << "RT: " << int(tile->level) << " for " << int(tx_tile->level)
+//                  << ": s_start: " << s_start << ", s_delta: " << s_delta
+//                  << ": t_start: " << t_start << ", t_delta: " << t_delta
+//                  << ", first: " << list_tx_ref->at(0) << ", last: " << list_tx_ref->back()
+//                  << ", first: " << list_tx->at(0) << ", last: " << list_tx->back()
+//                  << std::endl;
     }
 
     tile->tx_level = tx_tile->level;
+}
+
+void SetXYTileTexture(XYTile * tile, XYTile const * tx_tile)
+{
+    auto it = map_tile_texture_cache.find(tx_tile->id);
+    if(it == map_tile_texture_cache.end()) {
+        // should never get here
+        return;
+    }
+
+    // update texture
+    for(size_t i=0; i < tile->gm->getNumChildren(); i++) {
+        osg::Geode * gd = static_cast<osg::Geode*>(tile->gm->getChild(i));
+        gd->getOrCreateStateSet()->setTextureAttributeAndModes(0,it->second.second.get());
+    }
+
+    // update texture coords
+//    tile->tx_level = tx_tile->level;
+    UpdateXYTileTextureCoords(tile,tx_tile);
 }
 
 void BuildXYTileGeometry(XYTile * tile)
@@ -786,6 +885,7 @@ void BuildXYTileGeometry(XYTile * tile)
 
         osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
         osg::ref_ptr<osg::Vec2dArray> list_tx = new osg::Vec2dArray;
+        osg::ref_ptr<osg::Vec2dArray> list_tx_ref = new osg::Vec2dArray;
         osg::ref_ptr<osg::Vec4Array>  list_cx = new osg::Vec4Array;
         osg::ref_ptr<osg::DrawElementsUShort> list_ix =
                 new osg::DrawElementsUShort(GL_TRIANGLES);
@@ -800,16 +900,21 @@ void BuildXYTileGeometry(XYTile * tile)
                                   list_tx.get(),
                                   list_ix.get());
 
+        list_tx_ref->insert(list_tx_ref->end(),
+                            list_tx->begin(),
+                            list_tx->end());
+
         osg::Vec4 cx = K_COLOR_TABLE[tile->level];
         cx.r() *= 0.5;
         cx.g() *= 0.5;
         cx.b() *= 0.5;
         list_cx->push_back(cx);
+//        list_cx->push_back(osg::Vec4(1,1,1,1));
 
         osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
         gm->setVertexArray(list_vx);
         gm->setTexCoordArray(0,list_tx,osg::Array::BIND_PER_VERTEX);
-        gm->setTexCoordArray(1,list_tx,osg::Array::BIND_PER_VERTEX);
+        gm->setTexCoordArray(1,list_tx_ref,osg::Array::BIND_PER_VERTEX);
         gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
         gm->addPrimitiveSet(list_ix);
 
@@ -827,6 +932,7 @@ void BuildXYTileGeometry(XYTile * tile)
 
         osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
         osg::ref_ptr<osg::Vec2dArray> list_tx = new osg::Vec2dArray;
+        osg::ref_ptr<osg::Vec2dArray> list_tx_ref = new osg::Vec2dArray;
         osg::ref_ptr<osg::Vec4Array>  list_cx = new osg::Vec4Array;
         osg::ref_ptr<osg::DrawElementsUShort> list_ix =
                 new osg::DrawElementsUShort(GL_TRIANGLES);
@@ -841,16 +947,21 @@ void BuildXYTileGeometry(XYTile * tile)
                                   list_tx.get(),
                                   list_ix.get());
 
+        list_tx_ref->insert(list_tx_ref->end(),
+                            list_tx->begin(),
+                            list_tx->end());
+
         osg::Vec4 cx = K_COLOR_TABLE[tile->level];
         cx.r() *= 0.625;
         cx.g() *= 0.625;
         cx.b() *= 0.625;
         list_cx->push_back(cx);
+//        list_cx->push_back(osg::Vec4(1,1,1,1));
 
         osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
         gm->setVertexArray(list_vx);
         gm->setTexCoordArray(0,list_tx,osg::Array::BIND_PER_VERTEX);
-        gm->setTexCoordArray(1,list_tx,osg::Array::BIND_PER_VERTEX);
+        gm->setTexCoordArray(1,list_tx_ref,osg::Array::BIND_PER_VERTEX);
         gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
         gm->addPrimitiveSet(list_ix);
 
@@ -868,6 +979,7 @@ void BuildXYTileGeometry(XYTile * tile)
 
         osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
         osg::ref_ptr<osg::Vec2dArray> list_tx = new osg::Vec2dArray;
+        osg::ref_ptr<osg::Vec2dArray> list_tx_ref = new osg::Vec2dArray;
         osg::ref_ptr<osg::Vec4Array>  list_cx = new osg::Vec4Array;
         osg::ref_ptr<osg::DrawElementsUShort> list_ix =
                 new osg::DrawElementsUShort(GL_TRIANGLES);
@@ -882,16 +994,21 @@ void BuildXYTileGeometry(XYTile * tile)
                                   list_tx.get(),
                                   list_ix.get());
 
+        list_tx_ref->insert(list_tx_ref->end(),
+                            list_tx->begin(),
+                            list_tx->end());
+
         osg::Vec4 cx = K_COLOR_TABLE[tile->level];
         cx.r() *= 0.75;
         cx.g() *= 0.75;
         cx.b() *= 0.75;
         list_cx->push_back(cx);
+//        list_cx->push_back(osg::Vec4(1,1,1,1));
 
         osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
         gm->setVertexArray(list_vx);
         gm->setTexCoordArray(0,list_tx,osg::Array::BIND_PER_VERTEX);
-        gm->setTexCoordArray(1,list_tx,osg::Array::BIND_PER_VERTEX);
+        gm->setTexCoordArray(1,list_tx_ref,osg::Array::BIND_PER_VERTEX);
         gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
         gm->addPrimitiveSet(list_ix);
 
@@ -909,6 +1026,7 @@ void BuildXYTileGeometry(XYTile * tile)
 
         osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
         osg::ref_ptr<osg::Vec2dArray> list_tx = new osg::Vec2dArray;
+        osg::ref_ptr<osg::Vec2dArray> list_tx_ref = new osg::Vec2dArray;
         osg::ref_ptr<osg::Vec4Array>  list_cx = new osg::Vec4Array;
         osg::ref_ptr<osg::DrawElementsUShort> list_ix =
                 new osg::DrawElementsUShort(GL_TRIANGLES);
@@ -923,16 +1041,21 @@ void BuildXYTileGeometry(XYTile * tile)
                                   list_tx.get(),
                                   list_ix.get());
 
+        list_tx_ref->insert(list_tx_ref->end(),
+                            list_tx->begin(),
+                            list_tx->end());
+
         osg::Vec4 cx = K_COLOR_TABLE[tile->level];
         cx.r() *= 1.0;
         cx.g() *= 1.0;
         cx.b() *= 1.0;
         list_cx->push_back(cx);
+//        list_cx->push_back(osg::Vec4(1,1,1,1));
 
         osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
         gm->setVertexArray(list_vx);
         gm->setTexCoordArray(0,list_tx,osg::Array::BIND_PER_VERTEX);
-        gm->setTexCoordArray(1,list_tx,osg::Array::BIND_PER_VERTEX);
+        gm->setTexCoordArray(1,list_tx_ref,osg::Array::BIND_PER_VERTEX);
         gm->setColorArray(list_cx,osg::Array::BIND_OVERALL);
         gm->addPrimitiveSet(list_ix);
 
@@ -944,15 +1067,16 @@ void BuildXYTileGeometry(XYTile * tile)
     tile->tx_level = tile->level+1;
 }
 
-void GetOrCreateTileGeometry(XYTile * tile)
+bool GetOrCreateTileGeometry(XYTile * tile)
 {
     auto it = map_tile_geometry_cache.find(tile->id);
     if(it != map_tile_geometry_cache.end()) {
         it->second.first = true;
         tile->gm = it->second.second;
+        return true;
     }
     else {
-        if(map_tile_geometry_cache.size() == 48) {
+        if(map_tile_geometry_cache.size() == K_MAX_TILE_GEOMETRY_CACHE) {
             for(it = map_tile_geometry_cache.begin();
                 it!= map_tile_geometry_cache.end(); ++it)
             {
@@ -963,15 +1087,17 @@ void GetOrCreateTileGeometry(XYTile * tile)
             }
         }
 
-        if(map_tile_geometry_cache.size() < 48) {
+        if(map_tile_geometry_cache.size() < K_MAX_TILE_GEOMETRY_CACHE) {
             BuildXYTileGeometry(tile);
             std::pair<uint64_t,std::pair<bool,osg::ref_ptr<osg::Switch>>> ins_data;
             ins_data.first = tile->id;
             ins_data.second.first = true;
             ins_data.second.second = tile->gm;
             map_tile_geometry_cache.insert(ins_data);
+            return true;
         }
     }
+    return false;
 }
 
 void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod_geobb,
@@ -989,13 +1115,31 @@ void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod
         // Need to try both before and after subdivision to
         // see which works better
         if(tile->gm == nullptr) {
-            GetOrCreateTileGeometry(tile.get());
+            if(!GetOrCreateTileGeometry(tile.get())) {
+                tile = nullptr;
+                return;
+            }
         }
 
-//        // Update the texture level if necessary
-//        if(tile->tx_level != tile->level) {
-//            // Try and find the right image ...
-//        }
+        // Update the texture level if necessary
+        if(tile->tx_level != tile->level) {
+            // Try and find the right image...
+            XYTile * tx_tile = tile.get();
+            while(tx_tile) {
+                auto it = map_tile_texture_cache.find(tx_tile->id);
+                if(it == map_tile_texture_cache.end()) {
+                    tx_tile = tx_tile->parent;
+                    continue;
+                }
+                else {
+                    // Update this tile geometry's texture
+                    if(tile->tx_level != tx_tile->level) {
+                        SetXYTileTexture(tile.get(),tx_tile);
+                    }
+                    break;
+                }
+            }
+        }
 
         uint8_t const lv = tile->level+1;
         uint32_t const x = tile->x*2;
@@ -1020,12 +1164,10 @@ void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod
         GenQuadTreeForGeoBounds(list_lod_geobb,tile->tile_RT);
 
         // Set the clip visibility
-        if(tile->gm) { // its possible gm_cache was full
-            tile->gm->setValue(0,(tile->tile_LT == nullptr));
-            tile->gm->setValue(1,(tile->tile_LB == nullptr));
-            tile->gm->setValue(2,(tile->tile_RB == nullptr));
-            tile->gm->setValue(3,(tile->tile_RT == nullptr));
-        }
+        tile->gm->setValue(0,(tile->tile_LT == nullptr));
+        tile->gm->setValue(1,(tile->tile_LB == nullptr));
+        tile->gm->setValue(2,(tile->tile_RB == nullptr));
+        tile->gm->setValue(3,(tile->tile_RT == nullptr));
     }
     else {
         // Else draw this tile if it intersects with the
@@ -1033,13 +1175,34 @@ void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod
         if(CheckTileOverlapsGeoBounds(list_lod_geobb[tile->level],tile))
         {
             if(tile->gm == nullptr) {
-                GetOrCreateTileGeometry(tile.get());
+                if(!GetOrCreateTileGeometry(tile.get())) {
+                    tile = nullptr;
+                    return;
+                }
+            }
+
+            // Update the texture level if necessary
+            if(tile->tx_level != tile->level) {
+                // Try and find the right image...
+                XYTile * tx_tile = tile.get();
+                while(tx_tile) {
+                    auto it = map_tile_texture_cache.find(tx_tile->id);
+                    if(it == map_tile_texture_cache.end()) {
+                        tx_tile = tx_tile->parent;
+                        continue;
+                    }
+                    else {
+                        // Update this tile geometry's texture
+                        if(tile->tx_level != tx_tile->level) {
+                            SetXYTileTexture(tile.get(),tx_tile);
+                        }
+                        break;
+                    }
+                }
             }
 
             // Set the clip visibility
-            if(tile->gm) {  // its possible gm_cache was full
-                tile->gm->setAllChildrenOn();
-            }
+            tile->gm->setAllChildrenOn();
 
             tile->tile_LT = nullptr;
             tile->tile_LB = nullptr;
