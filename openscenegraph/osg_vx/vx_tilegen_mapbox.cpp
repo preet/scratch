@@ -1,6 +1,8 @@
 //
 #include <map>
 #include <mutex>
+#include <atomic>
+#include <condition_variable>
 
 //
 #include <osgnodes.hpp>
@@ -11,13 +13,9 @@
 #include <osgDB/ReadFile>
 #include <osg/Texture2D>
 
-size_t K_MAX_TILE_GEOMETRY_CACHE = 48;
-std::mutex mutex_map_tile_geometry_cache;
-std::map<uint64_t,std::pair<bool,osg::ref_ptr<osg::Switch>>> map_tile_geometry_cache;
-
-size_t K_MAX_TILE_IMAGE_CACHE = 48;
-std::mutex mutex_map_tile_image_cache;
-std::map<uint64_t,std::pair<bool,osg::ref_ptr<osg::Texture2D>>> map_tile_texture_cache;
+std::mutex mutex_tile_textures;
+std::set<uint64_t> set_tile_texture_reqs;
+std::map<uint64_t,osg::ref_ptr<osg::Texture2D>> map_tile_texture_ready;
 
 uint64_t K_LIST_TWO_EXP[32] = {
     1,
@@ -53,6 +51,24 @@ uint64_t K_LIST_TWO_EXP[32] = {
     1073741824,
     2147483648
 };
+
+struct TileData
+{
+    TileData() :
+        in_use(false),
+        gm(nullptr),
+        tx(nullptr)
+    {}
+
+    bool in_use;
+    osg::ref_ptr<osg::Switch> gm;
+    osg::ref_ptr<osg::Texture2D> tx;
+};
+
+size_t K_MAX_TILE_CACHE = 48;
+std::map<uint64_t,TileData> map_tile_cache;
+
+
 
 class XYTile
 {
@@ -114,6 +130,7 @@ public:
         tile_RB(nullptr),
         tile_RT(nullptr),
         gm(nullptr),
+        tx(nullptr),
         lock_in_cache(false)
     {
         // empty
@@ -138,6 +155,7 @@ public:
         tile_RB(nullptr),
         tile_RT(nullptr),
         gm(nullptr),
+        tx(nullptr),
         lock_in_cache(false)
     {
         // empty
@@ -145,10 +163,12 @@ public:
 
     ~XYTile()
     {
-        // Mark geometry unused
-        auto it = map_tile_geometry_cache.find(id);
-        if(it != map_tile_geometry_cache.end()) {
-            it->second.first = false;
+        if(!lock_in_cache) {
+            // Mark unused
+            auto it = map_tile_cache.find(id);
+            if(it != map_tile_cache.end()) {
+                it->second.in_use = false;
+            }
         }
     }
 
@@ -221,6 +241,7 @@ public:
     std::unique_ptr<XYTile> tile_RT;
 
     osg::ref_ptr<osg::Switch> gm;
+    osg::ref_ptr<osg::Texture2D> tx;
     uint8_t clip;
     uint8_t tx_level;
     bool lock_in_cache;
@@ -239,7 +260,7 @@ void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod
 void GenGmListFromQuadTree(std::unique_ptr<XYTile> &tile,
                            osg::Group * gp);
 
-bool GetOrCreateTileGeometry(XYTile * tile);
+bool GetOrCreateTileGmAndTex(XYTile * tile);
 void BuildXYTileGeometry(XYTile * tile);
 
 int main()
@@ -300,11 +321,14 @@ int main()
         view->setCameraManipulator(view_manip);
     }
 
+    //
+    std::cout << "###: [starting tile texture loader thread...]" << std::endl;
+
     // Create root tile
     std::unique_ptr<XYTile> root_tile(new XYTile(0,0,0,-180.0,180.0,-90.0,90.0));
 
     // Save root tile geometry to geometry cache
-    GetOrCreateTileGeometry(root_tile.get());
+    GetOrCreateTileGmAndTex(root_tile.get());
 
     // Save root tile texture to texture cache
     {
@@ -323,11 +347,10 @@ int main()
         root_tx->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
         root_tx->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
 
-        std::pair<uint64_t,std::pair<bool,osg::ref_ptr<osg::Texture2D>>> ins_data;
-        ins_data.first = root_tile->id;
-        ins_data.second.first = true;
-        ins_data.second.second = root_tx;
-        map_tile_texture_cache.insert(ins_data);
+        auto it = map_tile_cache.find(root_tile->id);
+        it->second.tx = root_tx;
+
+        set_tile_texture_reqs.clear();
     }
 
     // prevent root_tile's geometry or texture from
@@ -338,6 +361,8 @@ int main()
 
     // ==================================================== //
     // ==================================================== //
+
+    std::cout << "###: [starting render loop...]" << std::endl;
 
     while(!viewer.done())
     {
@@ -384,12 +409,53 @@ int main()
                               list_lod_geobb);
 
 
+        // Copy over any textures that were previously
+        // requested and are now ready
+
+        // NOTE
+        // Must add ready tile textures one by one so that
+        // GenQuadTreeForGeoBounds run in between each addition
+
+        // This allows the 'in use' flag to be properly set
+        // so the same tiles aren't overwritten if there isn't
+        // enough space in the cache
+
+
+        mutex_tile_textures.lock();
+
+        // Copy over any textures that were previously
+        // requested and are now ready
+        for(auto tx_it = map_tile_texture_ready.begin();
+            tx_it != map_tile_texture_ready.end(); ++tx_it)
+        {
+            // Save ref to new texture
+            {
+                auto it = map_tile_cache.find(tx_it->first);
+                if(it != map_tile_cache.end()) {
+                    it->second.tx = tx_it->second;
+                }
+            }
+
+            // Remove corrosponding request
+            {
+                auto it = set_tile_texture_reqs.find(tx_it->first);
+                if(it == set_tile_texture_reqs.end()) {
+                    std::cout << "##: fatal!" << std::endl;
+                    return -1;
+                }
+
+                set_tile_texture_reqs.erase(*it);
+            }
+        }
+        map_tile_texture_ready.clear();
+
         // Create the quad tree
-        mutex_map_tile_geometry_cache.lock();
         GenQuadTreeForGeoBounds(list_lod_geobb,root_tile);
+
+        mutex_tile_textures.unlock();
+
 //        std::cout << "###: gm cache sz: " << map_tile_geometry_cache.size() << std::endl;
 //        std::cout << "###: tx cache sz: " << map_tile_texture_cache.size() << std::endl;
-        mutex_map_tile_geometry_cache.unlock();
 
 
         // ==================================================== //
@@ -522,6 +588,16 @@ int main()
     }
 
     return 0;
+}
+
+std::atomic<bool> tile_tex_loader_run;
+
+void TileTextureLoaderThreadLoop()
+{
+    while(tile_tex_loader_run)
+    {
+
+    }
 }
 
 void CalcGnomonicProjPolys(Plane const &horizon_plane,
@@ -818,8 +894,9 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
 
 void SetXYTileTexture(XYTile * tile, XYTile const * tx_tile)
 {
-    auto it = map_tile_texture_cache.find(tx_tile->id);
-    if(it == map_tile_texture_cache.end()) {
+    // redundant, pass the the texture as an arg to this function
+    auto it = map_tile_cache.find(tx_tile->id);
+    if(it == map_tile_cache.end()) {
         // should never get here
         return;
     }
@@ -827,7 +904,7 @@ void SetXYTileTexture(XYTile * tile, XYTile const * tx_tile)
     // update texture
     for(size_t i=0; i < tile->gm->getNumChildren(); i++) {
         osg::Geode * gd = static_cast<osg::Geode*>(tile->gm->getChild(i));
-        gd->getOrCreateStateSet()->setTextureAttributeAndModes(0,it->second.second.get());
+        gd->getOrCreateStateSet()->setTextureAttributeAndModes(0,it->second.tx);
     }
 
     // update texture coords
@@ -1067,33 +1144,41 @@ void BuildXYTileGeometry(XYTile * tile)
     tile->tx_level = tile->level+1;
 }
 
-bool GetOrCreateTileGeometry(XYTile * tile)
+bool GetOrCreateTileGmAndTex(XYTile * tile)
 {
-    auto it = map_tile_geometry_cache.find(tile->id);
-    if(it != map_tile_geometry_cache.end()) {
-        it->second.first = true;
-        tile->gm = it->second.second;
+    auto it = map_tile_cache.find(tile->id);
+    if(!(it == map_tile_cache.end())) {
+        it->second.in_use = true;
+        tile->gm = it->second.gm;
+        tile->tx = it->second.tx;
         return true;
     }
     else {
-        if(map_tile_geometry_cache.size() == K_MAX_TILE_GEOMETRY_CACHE) {
-            for(it = map_tile_geometry_cache.begin();
-                it!= map_tile_geometry_cache.end(); ++it)
+        // If the tile cache is full try to erase a tile
+        // that isn't being used
+        if(map_tile_cache.size() == K_MAX_TILE_CACHE) {
+            for(it =  map_tile_cache.begin();
+                it != map_tile_cache.end(); ++it)
             {
-                if(it->second.first == false) {
-                    map_tile_geometry_cache.erase(it->first);
+                if(!(it->second.in_use)) {
+                    map_tile_cache.erase(it->first);
                     break;
                 }
             }
         }
-
-        if(map_tile_geometry_cache.size() < K_MAX_TILE_GEOMETRY_CACHE) {
+        if(map_tile_cache.size() < K_MAX_TILE_CACHE) {
+            // Build the tile geometry
             BuildXYTileGeometry(tile);
-            std::pair<uint64_t,std::pair<bool,osg::ref_ptr<osg::Switch>>> ins_data;
+
+            // Send a request to load the texture
+            set_tile_texture_reqs.insert(tile->id);
+
+            // Save
+            std::pair<uint64_t,TileData> ins_data;
             ins_data.first = tile->id;
-            ins_data.second.first = true;
-            ins_data.second.second = tile->gm;
-            map_tile_geometry_cache.insert(ins_data);
+            ins_data.second.in_use = true;
+            ins_data.second.gm = tile->gm;
+            map_tile_cache.insert(ins_data);
             return true;
         }
     }
@@ -1115,7 +1200,7 @@ void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod
         // Need to try both before and after subdivision to
         // see which works better
         if(tile->gm == nullptr) {
-            if(!GetOrCreateTileGeometry(tile.get())) {
+            if(!GetOrCreateTileGmAndTex(tile.get())) {
                 tile = nullptr;
                 return;
             }
@@ -1126,8 +1211,8 @@ void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod
             // Try and find the right image...
             XYTile * tx_tile = tile.get();
             while(tx_tile) {
-                auto it = map_tile_texture_cache.find(tx_tile->id);
-                if(it == map_tile_texture_cache.end()) {
+                auto it = map_tile_cache.find(tx_tile->id);
+                if(it->second.tx == nullptr) {
                     tx_tile = tx_tile->parent;
                     continue;
                 }
@@ -1175,7 +1260,7 @@ void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod
         if(CheckTileOverlapsGeoBounds(list_lod_geobb[tile->level],tile))
         {
             if(tile->gm == nullptr) {
-                if(!GetOrCreateTileGeometry(tile.get())) {
+                if(!GetOrCreateTileGmAndTex(tile.get())) {
                     tile = nullptr;
                     return;
                 }
@@ -1186,8 +1271,8 @@ void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod
                 // Try and find the right image...
                 XYTile * tx_tile = tile.get();
                 while(tx_tile) {
-                    auto it = map_tile_texture_cache.find(tx_tile->id);
-                    if(it == map_tile_texture_cache.end()) {
+                    auto it = map_tile_cache.find(tx_tile->id);
+                    if(it->second.tx == nullptr) {
                         tx_tile = tx_tile->parent;
                         continue;
                     }
