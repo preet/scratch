@@ -2,7 +2,9 @@
 #include <map>
 #include <mutex>
 #include <atomic>
+#include <thread>
 #include <condition_variable>
+#include <chrono>
 
 //
 #include <osgnodes.hpp>
@@ -16,6 +18,11 @@
 std::mutex mutex_tile_textures;
 std::set<uint64_t> set_tile_texture_reqs;
 std::map<uint64_t,osg::ref_ptr<osg::Texture2D>> map_tile_texture_ready;
+
+// ttxl = tile texture loader
+std::atomic<bool> ttxl_run;
+std::atomic<bool> ttxl_wake;
+std::condition_variable ttxl_waitcond;
 
 uint64_t K_LIST_TWO_EXP[32] = {
     1,
@@ -68,7 +75,15 @@ struct TileData
 size_t K_MAX_TILE_CACHE = 48;
 std::map<uint64_t,TileData> map_tile_cache;
 
-
+void GetTileLevelXY(uint64_t id,
+                    uint64_t &x,
+                    uint64_t &y,
+                    uint64_t &level)
+{
+    level = (id & 0xFF000000000000) >> 48;
+    x = (id & 0x00FFFFFF000000) >> 24;
+    y = id & 0x00000000FFFFFF;
+}
 
 class XYTile
 {
@@ -262,6 +277,7 @@ void GenGmListFromQuadTree(std::unique_ptr<XYTile> &tile,
 
 bool GetOrCreateTileGmAndTex(XYTile * tile);
 void BuildXYTileGeometry(XYTile * tile);
+void TileTextureLoaderThreadLoop();
 
 int main()
 {
@@ -321,9 +337,6 @@ int main()
         view->setCameraManipulator(view_manip);
     }
 
-    //
-    std::cout << "###: [starting tile texture loader thread...]" << std::endl;
-
     // Create root tile
     std::unique_ptr<XYTile> root_tile(new XYTile(0,0,0,-180.0,180.0,-90.0,90.0));
 
@@ -356,6 +369,10 @@ int main()
     // prevent root_tile's geometry or texture from
     // being removed from its corresponding cache
     root_tile->lock_in_cache = true;
+
+    ttxl_run = true;
+    std::cout << "###: [starting tile texture loader thread...]" << std::endl;
+    std::thread ttxl_thread(TileTextureLoaderThreadLoop);
 
     // geometry
 
@@ -412,15 +429,6 @@ int main()
         // Copy over any textures that were previously
         // requested and are now ready
 
-        // NOTE
-        // Must add ready tile textures one by one so that
-        // GenQuadTreeForGeoBounds run in between each addition
-
-        // This allows the 'in use' flag to be properly set
-        // so the same tiles aren't overwritten if there isn't
-        // enough space in the cache
-
-
         mutex_tile_textures.lock();
 
         // Copy over any textures that were previously
@@ -452,11 +460,17 @@ int main()
         // Create the quad tree
         GenQuadTreeForGeoBounds(list_lod_geobb,root_tile);
 
+//        std::cout << "###: tc: " << map_tile_cache.size() << std::endl;
+
+        // If there are texture requests pending,
+        // wake the loader thread
+        if(set_tile_texture_reqs.size() > 0) {
+//            std::cout << "// sz: " << set_tile_texture_reqs.size() << std::endl;
+            ttxl_wake = true;
+            ttxl_waitcond.notify_all();
+        }
+
         mutex_tile_textures.unlock();
-
-//        std::cout << "###: gm cache sz: " << map_tile_geometry_cache.size() << std::endl;
-//        std::cout << "###: tx cache sz: " << map_tile_texture_cache.size() << std::endl;
-
 
         // ==================================================== //
 
@@ -587,16 +601,117 @@ int main()
         viewer.frame();
     }
 
+    // end loader thread
+    std::cout << "[ending ttxl thread...]" << std::endl;
+    ttxl_run = false;
+    ttxl_wake = true;
+    ttxl_waitcond.notify_all();
+
+    ttxl_thread.join();
+
     return 0;
 }
 
-std::atomic<bool> tile_tex_loader_run;
+osg::ref_ptr<osg::Texture2D> GetTileTextureForId(uint64_t id)
+{
+    // Level from tile id
+    uint64_t level = (id & 0xFF000000000000);
+    level = level >> 48;
+
+    std::ostringstream ss;
+    ss << level;
+    std::string str_level = ss.str();
+
+    std::string str_path = "/home/preet/Dev/misc/tile_test/";
+    str_path += str_level;
+    str_path += std::string(".png");
+
+    osg::ref_ptr<osg::Image> img = osgDB::readImageFile(str_path);
+
+    std::cout << "Reading image: " << str_path << std::endl;
+    if(!(img.valid() && img->valid())) {
+        std::cout << "Error loading image: " << str_path << std::endl;
+    }
+
+    osg::ref_ptr<osg::Texture2D> tx = new osg::Texture2D;
+    tx->setImage(img);
+    tx->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
+    tx->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
+    tx->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
+    tx->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+
+    return tx;
+}
 
 void TileTextureLoaderThreadLoop()
 {
-    while(tile_tex_loader_run)
+    while(ttxl_run)
     {
+        // acquire lock
+        std::unique_lock<std::mutex> locker(mutex_tile_textures);
 
+        // Wait on ttxl_waitcond
+        while(ttxl_run && (!ttxl_wake)) { // avoid spurious wake-ups
+            ttxl_waitcond.wait(locker);
+        }
+        // wake-up automatically reacquires lock
+
+        std::set<uint64_t> set_reqs = set_tile_texture_reqs;
+        locker.unlock(); // release lock
+
+        std::map<uint64_t,osg::ref_ptr<osg::Texture2D>> map_ready;
+        for(auto it = set_reqs.begin();
+            it != set_reqs.end(); ++it)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+
+            // Level from tile id
+            uint64_t level = ((*it) & 0xFF000000000000);
+            level = level >> 48;
+
+            std::ostringstream ss;
+            ss << level;
+            std::string str_level = ss.str();
+
+            std::string str_path = "/home/preet/Dev/misc/tile_test/";
+            str_path += str_level;
+            str_path += std::string(".png");
+
+            osg::ref_ptr<osg::Image> img = osgDB::readImageFile(str_path);
+
+//            std::cout << "Reading image: " << str_path << std::endl;
+            if(!(img.valid() && img->valid())) {
+                std::cout << "Error loading image: " << str_path << std::endl;
+                continue;
+            }
+
+            uint64_t x,y,lvl;
+            GetTileLevelXY(*it,x,y,lvl);
+            std::cout << "load: " << lvl << ", " << x << ", " << y << std::endl;
+
+            osg::ref_ptr<osg::Texture2D> tx = new osg::Texture2D;
+            tx->setImage(img);
+            tx->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
+            tx->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
+            tx->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
+            tx->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+
+            std::pair<uint64_t,osg::ref_ptr<osg::Texture2D>> ins_data;
+            ins_data.first = (*it);
+            ins_data.second = tx;
+            map_ready.insert(ins_data);
+        }
+
+        // Copy loaded textures back to a list of ready images
+        locker.lock(); // reacquire lock
+        for(auto it = map_ready.begin();
+            it != map_ready.end(); ++it)
+        {
+            map_tile_texture_ready.insert(*it);
+        }
+        locker.unlock(); // release lock
+
+        ttxl_wake = false;
     }
 }
 
@@ -754,6 +869,8 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
             tx.x() = (tx_ref.x()*s_delta) + s_start;
             tx.y() = (tx_ref.y()*t_delta) + t_start;
         }
+        // force update
+        gm->setTexCoordArray(0,list_tx,osg::Array::BIND_PER_VERTEX);
 
 //        std::cout << "LT: " << int(tile->level) << " for " << int(tx_tile->level)
 //                  << ": s_start: " << s_start << ", s_delta: " << s_delta
@@ -796,6 +913,8 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
             tx.x() = (tx_ref.x()*s_delta) + s_start;
             tx.y() = (tx_ref.y()*t_delta) + t_start;
         }
+        // force update
+        gm->setTexCoordArray(0,list_tx,osg::Array::BIND_PER_VERTEX);
 
 //        std::cout << "LB: " << int(tile->level) << " for " << int(tx_tile->level)
 //                  << ": s_start: " << s_start << ", s_delta: " << s_delta
@@ -838,6 +957,8 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
             tx.x() = (tx_ref.x()*s_delta) + s_start;
             tx.y() = (tx_ref.y()*t_delta) + t_start;
         }
+        // force update
+        gm->setTexCoordArray(0,list_tx,osg::Array::BIND_PER_VERTEX);
 
 //        std::cout << "RB: " << int(tile->level) << " for " << int(tx_tile->level)
 //                  << ": s_start: " << s_start << ", s_delta: " << s_delta
@@ -880,6 +1001,8 @@ void UpdateXYTileTextureCoords(XYTile * tile, XYTile const * tx_tile)
             tx.x() = (tx_ref.x()*s_delta) + s_start;
             tx.y() = (tx_ref.y()*t_delta) + t_start;
         }
+        // force update
+        gm->setTexCoordArray(0,list_tx,osg::Array::BIND_PER_VERTEX);
 
 //        std::cout << "RT: " << int(tile->level) << " for " << int(tx_tile->level)
 //                  << ": s_start: " << s_start << ", s_delta: " << s_delta
@@ -948,8 +1071,11 @@ void BuildXYTileGeometry(XYTile * tile)
 
     // Draw the tile in four segments so we
     // can apply a specific clip
-    uint32_t half_lon_segments = surf_divs/2;
-    uint32_t half_lat_segments = half_lon_segments/2;
+    uint32_t half_lon_segments = std::max(static_cast<uint32_t>(surf_divs/2),
+                                          static_cast<uint32_t>(1));
+
+    uint32_t half_lat_segments = std::max(static_cast<uint32_t>(half_lon_segments/2),
+                                          static_cast<uint32_t>(1));
 
     // Build geometry for all four child tiles
 
@@ -1169,6 +1295,7 @@ bool GetOrCreateTileGmAndTex(XYTile * tile)
         if(map_tile_cache.size() < K_MAX_TILE_CACHE) {
             // Build the tile geometry
             BuildXYTileGeometry(tile);
+//            tile->tx = GetTileTextureForId(tile->id);
 
             // Send a request to load the texture
             set_tile_texture_reqs.insert(tile->id);
@@ -1178,11 +1305,19 @@ bool GetOrCreateTileGmAndTex(XYTile * tile)
             ins_data.first = tile->id;
             ins_data.second.in_use = true;
             ins_data.second.gm = tile->gm;
+//            ins_data.second.tx = tile->tx;
             map_tile_cache.insert(ins_data);
             return true;
         }
     }
     return false;
+}
+
+uint64_t GetTileLevel(uint64_t id)
+{
+    uint64_t level = (id & 0xFF000000000000);
+    level = level >> 48;
+    return level;
 }
 
 void GenQuadTreeForGeoBounds(std::vector<std::vector<GeoBounds>> const &list_lod_geobb,
