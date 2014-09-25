@@ -27,4 +27,4 @@ HEADERS += clipper.hpp
 SOURCES += clipper.cpp
 
 
-SOURCES += vx_tilegen_mapbox.cpp
+SOURCES += vx_tilearea.cpp
