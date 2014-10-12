@@ -22,9 +22,16 @@ LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -losgDB
 LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -losg
 LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -lOpenThreads
 
-# clipper
-HEADERS += clipper.hpp
-SOURCES += clipper.cpp
+HEADERS += \
+        ViewController.hpp \
+        GeometryUtils.h \
+        OSGUtils.h \
+        TileSetLL.h \
+        TileSetLLByPixelArea.h
+	
+SOURCES += \
+        GeometryUtils.cpp \
+        OSGUtils.cpp \
+        TileSetLLByPixelArea.cpp
 
-
-SOURCES += vx_tilegen_async.cpp
+SOURCES += main.cpp

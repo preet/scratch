@@ -4,7 +4,7 @@ import mapnik
 ### ======================================
 ### Setup Mapnik
 # create the map
-vMap = mapnik.Map(512,256)
+vMap = mapnik.Map(256,256)
 
 # set a background color
 vMap.background = mapnik.Color('transparent')
@@ -36,7 +36,7 @@ vMap.layers.append(vLayer)
 
 ### ======================================
 ### Save tiles based on zoom level
-vMaxZoom = 1;
+vMaxZoom = 3;
 
 for i in range(vMaxZoom+1):
 	print 'level: ' + str(i);

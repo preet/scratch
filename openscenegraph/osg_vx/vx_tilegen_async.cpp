@@ -387,6 +387,15 @@ int main()
         osg::Camera * camera = viewer.getView(0)->getCamera();
 
         osg::Vec3d eye,vpt,up;
+
+//        //
+//        {
+//            eye = ConvLLAToECEF(PointLLA(-46,30,400));
+//            vpt = osg::Vec3d(0,0,0);
+//            up = osg::Vec3d(0,0,1);
+//            camera->setViewMatrixAsLookAt(eye,vpt,up);
+//        }
+
         camera->getViewMatrixAsLookAt(eye,vpt,up);
 
         double far_dist,near_dist;
@@ -469,6 +478,17 @@ int main()
             ttxl_wake = true;
             ttxl_waitcond.notify_all();
         }
+
+        // Check how many tiles are in use
+        size_t in_use=0;
+        for(auto it = map_tile_cache.begin();
+            it != map_tile_cache.end(); ++it)
+        {
+            if(it->second.in_use) {
+                in_use++;
+            }
+        }
+        std::cout << "#: Tiles in use: " << in_use << "/" << map_tile_cache.size() << std::endl;
 
         mutex_tile_textures.unlock();
 
@@ -687,7 +707,7 @@ void TileTextureLoaderThreadLoop()
 
             uint64_t x,y,lvl;
             GetTileLevelXY(*it,x,y,lvl);
-            std::cout << "load: " << lvl << ", " << x << ", " << y << std::endl;
+            //std::cout << "load: " << lvl << ", " << x << ", " << y << std::endl;
 
             osg::ref_ptr<osg::Texture2D> tx = new osg::Texture2D;
             tx->setImage(img);
