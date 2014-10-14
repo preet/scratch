@@ -54,7 +54,8 @@ std::pair<bool,osg::Vec2d> ConvWorldToNDC(osg::Matrixd const &mvp,
 {
     osg::Vec4d world4(world.x(),world.y(),world.z(),1.0);
     osg::Vec4d clip4 = world4 * mvp;
-    if(fabs(clip4.w()) < K_EPS) {
+    if(fabs(clip4.w()) < 1E-5) {
+        std::cout << "bad" << std::endl;
         return std::pair<bool,osg::Vec2d>(false,osg::Vec2d(0,0));
     }
 
@@ -85,10 +86,19 @@ bool CalcPolyIsInFront(osg::Vec2d const &polyA_axis_dirn,
     return true;
 }
 
-osg::Vec2d CalcPerpendicular(osg::Vec2d v)
+// flip 90 degs right (cw)
+osg::Vec2d CalcPerpendicularRight(osg::Vec2d v)
 {
     std::swap(v.x(),v.y());
     v.y() *= -1.0;
+    return v;
+}
+
+// flip 90 degs left (ccw)
+osg::Vec2d CalcPerpendicularLeft(osg::Vec2d v)
+{
+    std::swap(v.x(),v.y());
+    v.x() *= -1.0;
     return v;
 }
 
@@ -115,27 +125,79 @@ bool CalcTriangleAARectIntersection(std::vector<osg::Vec2d> const &tri,
     // Next do SAT
     // (test triangle against rectangle edge normals)
 
-    if(CalcPolyIsInFront(CalcPerpendicular(rect[1]-rect[0]),rect[0],tri)) {
+    if(CalcPolyIsInFront(CalcPerpendicularRight(rect[1]-rect[0]),rect[0],tri)) {
         return false;
     }
-    if(CalcPolyIsInFront(CalcPerpendicular(rect[2]-rect[1]),rect[1],tri)) {
+    if(CalcPolyIsInFront(CalcPerpendicularRight(rect[2]-rect[1]),rect[1],tri)) {
         return false;
     }
-    if(CalcPolyIsInFront(CalcPerpendicular(rect[3]-rect[2]),rect[2],tri)) {
+    if(CalcPolyIsInFront(CalcPerpendicularRight(rect[3]-rect[2]),rect[2],tri)) {
         return false;
     }
-    if(CalcPolyIsInFront(CalcPerpendicular(rect[0]-rect[3]),rect[3],tri)) {
+    if(CalcPolyIsInFront(CalcPerpendicularRight(rect[0]-rect[3]),rect[3],tri)) {
         return false;
     }
 
     // (test rectangle against triangle edge normals)
-    if(CalcPolyIsInFront(CalcPerpendicular(tri[1]-tri[0]),tri[0],rect)) {
+    if(CalcPolyIsInFront(CalcPerpendicularRight(tri[1]-tri[0]),tri[0],rect)) {
         return false;
     }
-    if(CalcPolyIsInFront(CalcPerpendicular(tri[2]-tri[1]),tri[1],rect)) {
+    if(CalcPolyIsInFront(CalcPerpendicularRight(tri[2]-tri[1]),tri[1],rect)) {
         return false;
     }
-    if(CalcPolyIsInFront(CalcPerpendicular(tri[0]-tri[2]),tri[2],rect)) {
+    if(CalcPolyIsInFront(CalcPerpendicularRight(tri[0]-tri[2]),tri[2],rect)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool CalcQuadAARectIntersection(std::vector<osg::Vec2d> const &quad,
+                                std::vector<osg::Vec2d> const &rect)
+{
+    osg::Vec2d const &min = rect[0];
+    osg::Vec2d const &max = rect[2];
+
+    // First check if any vertices from the
+    // triangle lie in the rectangle bounds
+    for(size_t i=0; i < 4; i++) {
+        bool outside =
+                (quad[i].x() < min.x()) ||
+                (quad[i].x() > max.x()) ||
+                (quad[i].y() < min.y()) ||
+                (quad[i].y() > max.y());
+
+        if(!outside) {
+            return true;
+        }
+    }
+
+    // Next do SAT
+    // (test quad against rectangle edge normals)
+    if(CalcPolyIsInFront(CalcPerpendicularRight(rect[1]-rect[0]),rect[0],quad)) {
+        return false;
+    }
+    if(CalcPolyIsInFront(CalcPerpendicularRight(rect[2]-rect[1]),rect[1],quad)) {
+        return false;
+    }
+    if(CalcPolyIsInFront(CalcPerpendicularRight(rect[3]-rect[2]),rect[2],quad)) {
+        return false;
+    }
+    if(CalcPolyIsInFront(CalcPerpendicularRight(rect[0]-rect[3]),rect[3],quad)) {
+        return false;
+    }
+
+    // (test rectangle against quad edge normals)
+    if(CalcPolyIsInFront(CalcPerpendicularRight(quad[1]-quad[0]),quad[0],rect)) {
+        return false;
+    }
+    if(CalcPolyIsInFront(CalcPerpendicularRight(quad[2]-quad[1]),quad[1],rect)) {
+        return false;
+    }
+    if(CalcPolyIsInFront(CalcPerpendicularRight(quad[3]-quad[2]),quad[2],rect)) {
+        return false;
+    }
+    if(CalcPolyIsInFront(CalcPerpendicularRight(quad[0]-quad[3]),quad[3],rect)) {
         return false;
     }
 
@@ -257,102 +319,105 @@ bool CalcRayEarthIntersection(osg::Vec3d const &rayPoint,
     return false;
 }
 
-void BuildEarthSurface(double minLon, double minLat,
-                       double maxLon, double maxLat,
-                       uint16_t lonSegments,
-                       uint16_t latSegments,
-                       std::vector<osg::Vec3d> &vertexArray,
-                       std::vector<osg::Vec2d> &texCoords,
-                       std::vector<uint16_t> &triIdx)
+void BuildEarthSurface(double min_lon,
+                       double max_lon,
+                       double min_lat,
+                       double max_lat,
+                       uint16_t lon_segments,
+                       uint16_t lat_segments,
+                       std::vector<osg::Vec3d> &list_vx,
+                       std::vector<osg::Vec2d> &list_tx,
+                       std::vector<uint16_t> &list_ix)
 {
-    double lonStep = (maxLon-minLon)/lonSegments;
-    double latStep = (maxLat-minLat)/latSegments;
+    double const lon_step = (max_lon-min_lon)/lon_segments;
+    double const lat_step = (max_lat-min_lat)/lat_segments;
 
-    vertexArray.clear();
-    texCoords.clear();
-    triIdx.clear();
+    list_vx.clear();
+    list_tx.clear();
+    list_ix.clear();
 
     // build vertex attributes
-//    vertexArray.reserve((latSegments+1)*(lonSegments+1));
-//    texCoords.reserve((latSegments+1)*(lonSegments+1));
-    for(size_t i=0; i <= latSegments; i++)   {
-        for(size_t j=0; j <= lonSegments; j++)   {
+    list_vx.reserve((lat_segments+1)*(lon_segments+1));
+    list_tx.reserve((lat_segments+1)*(lon_segments+1));
+    for(uint16_t i=0; i <= lat_segments; i++)   {
+        for(uint16_t j=0; j <= lon_segments; j++)   {
             // surface vertex
             LLA lla;
-            lla.lon = (j*lonStep)+minLon;
-            lla.lat = (i*latStep)+minLat;
+            lla.lon = (j*lon_step)+min_lon;
+            lla.lat = (i*lat_step)+min_lat;
             lla.alt = 0.0;
-            vertexArray.push_back(ConvLLAToECEF(lla));
+            list_vx.push_back(ConvLLAToECEF(lla));
+
             // surface tex coord
-            texCoords.push_back(osg::Vec2d((double(j)/lonSegments),
-                                           (double(i)/latSegments)));
+            list_tx.push_back(osg::Vec2d(double(j)/lon_segments,
+                                         double(i)/lat_segments));
         }
     }
 
     // stitch faces together
-    // TODO: optimize push_back
-//    triIdx.reserve(lonSegments*latSegments*6);
-    uint16_t vIdx=0;
-    for(uint16_t i=0; i < latSegments; i++)   {
-        for(uint16_t j=0; j < lonSegments; j++)   {
-            triIdx.push_back(vIdx);
-            triIdx.push_back(vIdx+lonSegments+2);
-            triIdx.push_back(vIdx+lonSegments+1);
+    list_ix.reserve(lon_segments*lat_segments*6);
+    uint16_t v_idx=0;
+    for(uint16_t i=0; i < lat_segments; i++)   {
+        for(uint16_t j=0; j < lon_segments; j++)   {
+            list_ix.push_back(v_idx);
+            list_ix.push_back(v_idx+lon_segments+2);
+            list_ix.push_back(v_idx+lon_segments+1);
 
-            triIdx.push_back(vIdx);
-            triIdx.push_back(vIdx+1);
-            triIdx.push_back(vIdx+lonSegments+2);
+            list_ix.push_back(v_idx);
+            list_ix.push_back(v_idx+1);
+            list_ix.push_back(v_idx+lon_segments+2);
 
-            vIdx++;
+            v_idx++;
         }
-        vIdx++;
+        v_idx++;
     }
 }
 
-void BuildEarthSurface(double minLon, double minLat,
-                       double maxLon, double maxLat,
-                       uint16_t lonSegments,
-                       uint16_t latSegments,
-                       std::vector<osg::Vec3d> &vertexArray,
-                       std::vector<uint16_t> &triIdx)
-{
-    double lonStep = (maxLon-minLon)/lonSegments;
-    double latStep = (maxLat-minLat)/latSegments;
 
-    vertexArray.clear();
-    triIdx.clear();
+void BuildEarthSurface(double min_lon,
+                       double max_lon,
+                       double min_lat,
+                       double max_lat,
+                       uint16_t lon_segments,
+                       uint16_t lat_segments,
+                       std::vector<osg::Vec3d> &list_vx,
+                       std::vector<uint16_t> &list_ix)
+{
+    double const lon_step = (max_lon-min_lon)/lon_segments;
+    double const lat_step = (max_lat-min_lat)/lat_segments;
+
+    list_vx.clear();
+    list_ix.clear();
 
     // build vertex attributes
-//    vertexArray.reserve((latSegments+1)*(lonSegments+1));
-//    texCoords.reserve((latSegments+1)*(lonSegments+1));
-    for(size_t i=0; i <= latSegments; i++)   {
-        for(size_t j=0; j <= lonSegments; j++)   {
+    list_vx.reserve((lat_segments+1)*(lon_segments+1));
+    for(uint16_t i=0; i <= lat_segments; i++)   {
+        for(uint16_t j=0; j <= lon_segments; j++)   {
             // surface vertex
             LLA lla;
-            lla.lon = (j*lonStep)+minLon;
-            lla.lat = (i*latStep)+minLat;
+            lla.lon = (j*lon_step)+min_lon;
+            lla.lat = (i*lat_step)+min_lat;
             lla.alt = 0.0;
-            vertexArray.push_back(ConvLLAToECEF(lla));
+            list_vx.push_back(ConvLLAToECEF(lla));
         }
     }
 
     // stitch faces together
-    // TODO: optimize push_back
-//    triIdx.reserve(lonSegments*latSegments*6);
-    uint16_t vIdx=0;
-    for(uint16_t i=0; i < latSegments; i++)   {
-        for(uint16_t j=0; j < lonSegments; j++)   {
-            triIdx.push_back(vIdx);
-            triIdx.push_back(vIdx+lonSegments+2);
-            triIdx.push_back(vIdx+lonSegments+1);
+    list_ix.reserve(lon_segments*lat_segments*6);
+    uint16_t v_idx=0;
+    for(uint16_t i=0; i < lat_segments; i++)   {
+        for(uint16_t j=0; j < lon_segments; j++)   {
+            list_ix.push_back(v_idx);                   // 0
+            list_ix.push_back(v_idx+1);                 // 1
+            list_ix.push_back(v_idx+lon_segments+2);    // 2
 
-            triIdx.push_back(vIdx);
-            triIdx.push_back(vIdx+1);
-            triIdx.push_back(vIdx+lonSegments+2);
+            list_ix.push_back(v_idx);                   // 0
+            list_ix.push_back(v_idx+lon_segments+2);    // 2
+            list_ix.push_back(v_idx+lon_segments+1);    // 3
 
-            vIdx++;
+            v_idx++;
         }
-        vIdx++;
+        v_idx++;
     }
 }
 

@@ -14,6 +14,8 @@
    limitations under the License.
 */
 
+#include <iostream>
+
 #include <TileSetLLByPixelArea.h>
 #include <GeometryUtils.h>
 
@@ -35,12 +37,26 @@ TileSetLLByPixelArea::Eval::Eval(Tile const * tile,
                       list_ix);
 
     // calculate the normals for each tri
+    list_tri_nx.clear();
     list_tri_nx.reserve(list_ix.size()/3);
     for(size_t i=0; i < list_ix.size(); i+=3) {
         osg::Vec3d const &v0 = list_vx[list_ix[i+0]];
         osg::Vec3d const &v1 = list_vx[list_ix[i+1]];
         osg::Vec3d const &v2 = list_vx[list_ix[i+2]];
         list_tri_nx.push_back((v1-v0)^(v2-v0));
+    }
+
+    // calculate the normals for each quad
+    list_quad_nx.clear();
+    list_quad_nx.reserve(list_ix.size()/6);
+    for(size_t i=0; i < list_ix.size(); i+=6) {
+        // 6 vx per quad (2 tris)
+        // the normal of any tri == the quad normal
+        // since this is a 'flat' quad
+        osg::Vec3d const &v0 = list_vx[list_ix[i+0]];
+        osg::Vec3d const &v1 = list_vx[list_ix[i+1]];
+        osg::Vec3d const &v2 = list_vx[list_ix[i+2]];
+        list_quad_nx.push_back((v1-v0)^(v2-v0));
     }
 }
 
@@ -68,17 +84,56 @@ TileSetLLByPixelArea::~TileSetLLByPixelArea()
 
 }
 
-void TileSetLLByPixelArea::UpdateTileSet(osg::Camera const &cam,
+void TileSetLLByPixelArea::UpdateTileSet(osg::Camera const * cam,
                                          std::vector<uint64_t> &list_tiles_add,
+                                         std::vector<uint64_t> &list_tiles_upd,
                                          std::vector<uint64_t> &list_tiles_rem)
 {
     // update view data
-    m_mvp = cam.getViewMatrix()*
-            cam.getProjectionMatrix();
+    m_mvp = cam->getViewMatrix()*
+            cam->getProjectionMatrix();
 
     osg::Vec3d eye,vpt,up;
-    cam.getViewMatrixAsLookAt(eye,vpt,up);
+    cam->getViewMatrixAsLookAt(eye,vpt,up);
     m_view_dirn = vpt-eye;
+
+    // rebuild the tileset with the new view data
+    m_tile_count = m_list_root_tiles.size();
+    std::map<uint64_t,Tile const *> list_tileset_new;
+    for(auto & root_tile : m_list_root_tiles) {
+        buildTileSet(root_tile,m_tile_count);
+        buildTileSetList(root_tile,list_tileset_new);
+    }
+
+    // get tileset lists as sorted lists of tile ids
+    std::vector<uint64_t> list_tiles_new;
+    list_tiles_new.reserve(list_tileset_new.size());
+    for(auto it = list_tileset_new.begin();
+        it != list_tileset_new.end(); ++it)
+    {
+        list_tiles_new.push_back(it->first);
+    }
+
+    std::vector<uint64_t> list_tiles_old;
+    list_tiles_old.reserve(m_list_tileset.size());
+    for(auto it = m_list_tileset.begin();
+        it != m_list_tileset.end(); ++it)
+    {
+        list_tiles_old.push_back(it->first);
+    }
+
+    // split the new and old tile sets into
+    // tiles added, removed and common
+    SplitSets(list_tiles_new,
+              list_tiles_old,
+              list_tiles_add,  // tiles added
+              list_tiles_rem,  // tiles removed
+              list_tiles_upd); // tiles common
+
+    // TEMP TODO
+    list_tiles_upd.clear();
+
+    m_list_tileset = list_tileset_new;
 }
 
 TileSetLL::Tile const * TileSetLLByPixelArea::GetTile(uint64_t tile_id) const
@@ -144,6 +199,12 @@ void TileSetLLByPixelArea::buildTileSetList(std::unique_ptr<Tile> const &tile,
 
 bool TileSetLLByPixelArea::tilePxlAreaExceedsRes(Tile const * tile)
 {
+    // TODO
+    // fixme/proper metric for clearing this list
+    if(m_list_tile_eval.size() > m_opts.max_tiles*2) {
+        m_list_tile_eval.clear();
+    }
+
     auto it = m_list_tile_eval.find(tile->id);
     if(it == m_list_tile_eval.end()) {
         // Create eval data if required
@@ -154,8 +215,16 @@ bool TileSetLLByPixelArea::tilePxlAreaExceedsRes(Tile const * tile)
     }
 
     // Get area in NDC units and convert to pixels
-    double ndc_area = calcTileNDCArea(it->second);
+//    double ndc_area = calcTileNDCArea(it->second);
+    double ndc_area = calcTileNDCAreaQuad(it->second);
     double px_area = ndc_area * (m_view_width*m_view_height*0.25);
+
+//    if(tile->level < 2) {
+//        for(size_t i=0; i < tile->level; i++) {
+//            std::cout << "_";
+//        }
+//        std::cout << "#: px_area: " << px_area << std::endl;
+//    }
 
     return (px_area > m_tile_px_area);
 }
@@ -196,6 +265,52 @@ double TileSetLLByPixelArea::calcTileNDCArea(Eval const &eval) const
 
             if(CalcTriangleAARectIntersection(tri,ndc_rect)) {
                 area += CalcTriangleArea(tri[0],tri[1],tri[2]);
+            }
+        }
+    }
+
+    return area;
+}
+
+double TileSetLLByPixelArea::calcTileNDCAreaQuad(Eval const &eval) const
+{
+    // Convert tile ecef positions to NDC
+    std::vector<std::pair<bool,osg::Vec2d>> list_ndc;
+    list_ndc.reserve(eval.list_vx.size());
+
+    for(auto const &vx : eval.list_vx) {
+        list_ndc.push_back(ConvWorldToNDC(m_mvp,vx));
+    }
+
+    // NDC bounding rectangle
+    static const std::vector<osg::Vec2d> ndc_rect = {
+        osg::Vec2d(-1,-1),    // bl
+        osg::Vec2d( 1,-1),    // br
+        osg::Vec2d( 1, 1),    // tr
+        osg::Vec2d(-1, 1)     // tl
+    };
+
+    // For each quad
+    double area=0.0;
+    for(size_t i=0; i < eval.list_ix.size(); i+=6) {
+        // If this is a valid, front facing triangle
+        if(((eval.list_quad_nx[i/6]*m_view_dirn) < 0) &&
+           list_ndc[eval.list_ix[i+0]].first &&
+           list_ndc[eval.list_ix[i+1]].first &&
+           list_ndc[eval.list_ix[i+2]].first &&
+           list_ndc[eval.list_ix[i+5]].first)   // 6th vx is the 4th quad vx
+        {                                       // (see BuildEarthSurface)
+            // Check if its within the view frustum
+            std::vector<osg::Vec2d> quad = {
+                list_ndc[eval.list_ix[i+0]].second,
+                list_ndc[eval.list_ix[i+1]].second,
+                list_ndc[eval.list_ix[i+2]].second,
+                list_ndc[eval.list_ix[i+5]].second
+            };
+
+            if(CalcQuadAARectIntersection(quad,ndc_rect)) {
+                area += CalcTriangleArea(quad[0],quad[1],quad[2]);
+                area += CalcTriangleArea(quad[0],quad[2],quad[3]);
             }
         }
     }

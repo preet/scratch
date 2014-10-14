@@ -3,12 +3,27 @@
 #include <ViewController.hpp>
 #include <OSGUtils.h>
 #include <TileSetLLByPixelArea.h>
+#include <DataSetTilesLL.h>
 
 int main()
 {
     // earth surface geometry
     auto gp_earth = BuildEarthSurfaceNode(
                 "earth",osg::Vec4(0.35,0.35,0.35,0.1),true);
+
+    // create root tiles
+    std::vector<TileSetLL::RootTileDesc> list_root_tiles;
+    list_root_tiles.emplace_back(0,-180,180,-90,90);
+
+    // create TileSet
+    TileSetLLByPixelArea::Options opts;
+    std::unique_ptr<TileSetLL> tileset(
+                new TileSetLLByPixelArea(640,480,opts,list_root_tiles));
+
+    // create dataset
+    osg::ref_ptr<osg::Group> gp_tiles = new osg::Group;
+    std::unique_ptr<DataSetTiles> dataset(
+                new DataSetTilesLL(gp_tiles,std::move(tileset)));
 
     // setup view
     osgViewer::CompositeViewer viewer;
@@ -17,10 +32,12 @@ int main()
     // View0 root
     osg::ref_ptr<osg::Group> gp_root0 = new osg::Group;
     gp_root0->addChild(gp_earth);
+    gp_root0->addChild(gp_tiles);
 
     // View1 root
     osg::ref_ptr<osg::Group> gp_root1 = new osg::Group;
     gp_root1->addChild(gp_earth);
+    gp_root1->addChild(gp_tiles);
 
     // disable lighting and enable blending
     gp_root0->getOrCreateStateSet()->setMode( GL_LIGHTING,osg::StateAttribute::OFF);
@@ -74,6 +91,9 @@ int main()
         osg::Vec3d eye,vpt,up;
         osg::Camera * camera = viewer.getView(0)->getCamera();
         camera->getViewMatrixAsLookAt(eye,vpt,up);
+
+        //
+        dataset->Update(camera);
 
         double far_dist,near_dist;
         if(!CalcCameraNearFarDist(eye,vpt-eye,20000.0,near_dist,far_dist)) {

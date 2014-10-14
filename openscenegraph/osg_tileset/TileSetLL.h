@@ -18,8 +18,45 @@
 #define SCRATCH_TILESET_LL_H
 
 #include <memory>
+#include <algorithm>
 
 #include <osg/Camera>
+
+template <typename T>
+void SplitSets(std::vector<T> const &sorted_list_a,
+               std::vector<T> const &sorted_list_b,
+               std::vector<T> &list_diff_a,
+               std::vector<T> &list_diff_b,
+               std::vector<T> &list_xsec)
+{
+    list_diff_a.resize(sorted_list_a.size());
+    list_diff_b.resize(sorted_list_b.size());
+    list_xsec.resize(std::min(sorted_list_a.size(),
+                              sorted_list_b.size()));
+
+    typename std::vector<T>::iterator it;
+
+    it = std::set_difference(sorted_list_a.begin(),
+                             sorted_list_a.end(),
+                             sorted_list_b.begin(),
+                             sorted_list_b.end(),
+                             list_diff_a.begin());
+    list_diff_a.resize(it-list_diff_a.begin());
+
+    it = std::set_difference(sorted_list_b.begin(),
+                             sorted_list_b.end(),
+                             sorted_list_a.begin(),
+                             sorted_list_a.end(),
+                             list_diff_b.begin());
+    list_diff_b.resize(it-list_diff_b.begin());
+
+    it = std::set_intersection(sorted_list_a.begin(),
+                               sorted_list_a.end(),
+                               sorted_list_b.begin(),
+                               sorted_list_b.end(),
+                               list_xsec.begin());
+    list_xsec.resize(it-list_xsec.begin());
+}
 
 class TileSetLL
 {
@@ -160,8 +197,9 @@ public:
 
     virtual ~TileSetLL() {}
 
-    virtual void UpdateTileSet(osg::Camera const &cam,
+    virtual void UpdateTileSet(osg::Camera const * cam,
                                std::vector<uint64_t> &list_tiles_add,
+                               std::vector<uint64_t> &list_tiles_upd,
                                std::vector<uint64_t> &list_tiles_rem) = 0;
 
     virtual Tile const * GetTile(uint64_t tile_id) const = 0;

@@ -26,8 +26,8 @@ osg::ref_ptr<osg::Group> BuildEarthSurfaceNode(std::string const &name,
     std::vector<osg::Vec2d> list_tx;
     std::vector<uint16_t> list_ix;
 
-    BuildEarthSurface(-180,-90,
-                      180,90,
+    BuildEarthSurface(-180,-180,
+                      -90,90,
                       32,16,
                       list_vx,
                       list_tx,

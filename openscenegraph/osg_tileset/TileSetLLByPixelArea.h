@@ -55,8 +55,9 @@ public:
 
     ~TileSetLLByPixelArea();
 
-    void UpdateTileSet(osg::Camera const &cam,
+    void UpdateTileSet(osg::Camera const * cam,
                        std::vector<uint64_t> &list_tiles_add,
+                       std::vector<uint64_t> &list_tiles_upd,
                        std::vector<uint64_t> &list_tiles_rem);
 
     Tile const * GetTile(uint64_t tile_id) const;
@@ -72,6 +73,7 @@ private:
         std::vector<osg::Vec3d> list_vx;
         std::vector<uint16_t>   list_ix;
         std::vector<osg::Vec3d> list_tri_nx;
+        std::vector<osg::Vec3d> list_quad_nx;
     };
 
     void buildTileSet(std::unique_ptr<Tile> &tile,
@@ -82,6 +84,7 @@ private:
 
     bool tilePxlAreaExceedsRes(Tile const * tile);
     double calcTileNDCArea(Eval const &evaldata) const;
+    double calcTileNDCAreaQuad(Eval const &eval) const;
 
     // options
     Options const m_opts;

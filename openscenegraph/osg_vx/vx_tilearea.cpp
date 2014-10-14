@@ -442,9 +442,9 @@ int main()
 {
     // define a tile
     double min_lon = -180;
-    double max_lon = 0;
-    double min_lat = 40.0;
-    double max_lat = 50.0;
+    double max_lon = 180;
+    double min_lat = -90.0;
+    double max_lat = 90.0;
     double mid_lon = (min_lon+max_lon)*0.5;
     double mid_lat = (min_lat+max_lat)*0.5;
 

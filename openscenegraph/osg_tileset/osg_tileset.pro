@@ -24,14 +24,17 @@ LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -lOpenThreads
 
 HEADERS += \
         ViewController.hpp \
+        DataSetTiles.h \
         GeometryUtils.h \
         OSGUtils.h \
         TileSetLL.h \
-        TileSetLLByPixelArea.h
+        TileSetLLByPixelArea.h \
+        DataSetTilesLL.h
 	
 SOURCES += \
         GeometryUtils.cpp \
         OSGUtils.cpp \
-        TileSetLLByPixelArea.cpp
+        TileSetLLByPixelArea.cpp \
+        DataSetTilesLL.cpp \
 
 SOURCES += main.cpp
