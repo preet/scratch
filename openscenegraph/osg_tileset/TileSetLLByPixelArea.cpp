@@ -97,6 +97,9 @@ void TileSetLLByPixelArea::UpdateTileSet(osg::Camera const * cam,
     cam->getViewMatrixAsLookAt(eye,vpt,up);
     m_view_dirn = vpt-eye;
 
+    double ar,fovy,z_near,z_far;
+    cam->getProjectionMatrixAsPerspective(fovy,ar,z_near,z_far);
+
     // rebuild the tileset with the new view data
     m_tile_count = m_list_root_tiles.size();
     std::map<uint64_t,Tile const *> list_tileset_new;
@@ -219,7 +222,7 @@ bool TileSetLLByPixelArea::tilePxlAreaExceedsRes(Tile const * tile)
     double ndc_area = calcTileNDCAreaQuad(it->second);
     double px_area = ndc_area * (m_view_width*m_view_height*0.25);
 
-//    if(tile->level < 2) {
+//    if(tile->level > 2) {
 //        for(size_t i=0; i < tile->level; i++) {
 //            std::cout << "_";
 //        }

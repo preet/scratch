@@ -26,6 +26,7 @@
 #include <osg/Vec3d>
 #include <osg/Vec4>
 #include <osg/Matrixd>
+#include <osg/io_utils>
 
 // ============================================================= //
 // ============================================================= //
@@ -145,6 +146,27 @@ struct Frustum
     }
 };
 
+enum class Intersection : uint8_t
+{
+    FALSE = 0,
+    TRUE,
+    COINCIDENT,
+    PARALLEL,
+    CONTAINED
+};
+
+enum class GeometryResult : uint8_t
+{
+    XSEC_FALSE = 0,
+    XSEC_TRUE,
+    XSEC_COINCIDENT,
+    XSEC_PARALLEL,
+    XSEC_CONTAINED,
+    CLIP_INSIDE,
+    CLIP_OUTSIDE,
+    CLIP_XSEC
+};
+
 // ============================================================= //
 // ============================================================= //
 
@@ -173,6 +195,21 @@ bool CalcQuadAARectIntersection(std::vector<osg::Vec2d> const &quad,
 
 osg::Vec3d CalcPointPlaneProjection(osg::Vec3d const &point,
                                     Plane const &plane);
+
+// CalcLinePlaneIntersection
+// * computes the intersection point between the
+//   line segment specified by @a and @b and @plane
+// * returns false if no xsec point exists or if
+//   the xsec point lies outside the segment
+Intersection CalcLinePlaneIntersection(osg::Vec3d const &a,
+                                       osg::Vec3d const &b,
+                                       Plane const &plane,
+                                       osg::Vec3d &xsec);
+
+GeometryResult CalcTrianglePlaneClip(std::vector<osg::Vec3d> const &tri,
+                                     Plane const &plane,
+                                     std::vector<osg::Vec3d> &inside,
+                                     std::vector<osg::Vec3d> &outside);
 
 bool CalcCameraNearFarDist(osg::Vec3d const &eye,
                            osg::Vec3d const &view_dirn,

@@ -15,7 +15,7 @@
 */
 
 #include <GeometryUtils.h>
-
+#include <cassert>
 
 // ============================================================= //
 // ============================================================= //
@@ -54,6 +54,10 @@ std::pair<bool,osg::Vec2d> ConvWorldToNDC(osg::Matrixd const &mvp,
 {
     osg::Vec4d world4(world.x(),world.y(),world.z(),1.0);
     osg::Vec4d clip4 = world4 * mvp;
+    if(clip4.w() < 1E-5) {
+        std::cout << "bbaaaadddd" << std::endl;
+    }
+
     if(fabs(clip4.w()) < 1E-5) {
         std::cout << "bad" << std::endl;
         return std::pair<bool,osg::Vec2d>(false,osg::Vec2d(0,0));
@@ -209,6 +213,142 @@ osg::Vec3d CalcPointPlaneProjection(osg::Vec3d const &point,
 {
     double t = ((plane.n*point)-plane.d)/(plane.n*plane.n);
     return (point-(plane.n*t));
+}
+
+Intersection CalcLinePlaneIntersection(osg::Vec3d const &a,
+                                       osg::Vec3d const &b,
+                                       Plane const &plane,
+                                       osg::Vec3d &xsec)
+{
+    // real-time collision detection
+
+    osg::Vec3d const ab = b-a;
+    double const u_den = plane.n*ab;
+
+    if(fabs(u_den) < 1E-5) {
+        // Line segment AB is parallel to the plane
+
+        // Check if its coincident
+        if(fabs(plane.n*a - plane.d) < 1E-5) {
+            xsec = a;
+            return Intersection::COINCIDENT;
+        }
+
+        return Intersection::PARALLEL;
+    }
+
+    double const u = plane.d - (plane.n*a)/u_den;
+    if(u >= 0.0 && u <= 1.0) {
+        xsec = a + ab*u;
+        return Intersection::TRUE;
+    }
+
+    return Intersection::FALSE;
+}
+
+GeometryResult CalcTrianglePlaneClip(std::vector<osg::Vec3d> const &tri,
+                                     Plane const &plane,
+                                     std::vector<osg::Vec3d> &inside,
+                                     std::vector<osg::Vec3d> &outside)
+{
+    // tri wrap around indexes
+    static const uint8_t tri_ix[4] {
+        0,1,2,0
+    };
+
+    // tolerance
+    static const double peps = 1E-5;
+    static const double neps = peps*-1.0;
+
+    double u[3];
+    uint8_t out_count=0;
+    uint8_t in_count=0;
+    uint8_t zero_count=0; // vx on the plane
+    for(uint8_t i=0; i < 3; i++) {
+        u[i] = (tri[i]-plane.p)*plane.n;
+        if(u[i] > peps) {
+            out_count++;
+        }
+        else if(u[i] < neps) {
+            in_count++;
+        }
+        else {
+            zero_count++;
+        }
+    }
+
+    // If the plane is touching any of the triangle's
+    // vertices, the triangle must be fully inside or
+    // outside the plane
+    if(zero_count > 0) {
+        if(out_count > 0) {
+            return GeometryResult::CLIP_OUTSIDE;
+        }
+        else {
+            return GeometryResult::CLIP_INSIDE;
+        }
+    }
+
+    if(out_count == 0) {
+        return GeometryResult::CLIP_INSIDE;
+    }
+    if(out_count == 3) {
+        return GeometryResult::CLIP_OUTSIDE;
+    }
+
+    for(uint8_t n=1; n < 4; n++) {
+        uint8_t const i_this = tri_ix[n];
+        uint8_t const i_prev = tri_ix[n-1];
+
+//        std::cout << "#: edge: " << int(n)
+//                  << ", i_prev: " << int(i_prev)
+//                  << ", i_this: " << int(i_this)
+//                  << ", u[i_prev]: " << u[i_prev]
+//                  << ", u[i_this]: " << u[i_this]
+//                  << ", u[i_prev]*u[i_this]: " << (u[i_prev]*u[i_this])
+//                  << std::endl;
+
+        // Test the edges of the triangle to see if they cross
+        // the plane. If the product of u for adjacent vertices
+        // is <= zero it means those vertices lie on different
+        // sides of the plane.
+        if(u[i_prev] * u[i_this] < 0) {
+            // get the intersection point between the edge and plane
+            osg::Vec3d xsec;
+            Intersection result = CalcLinePlaneIntersection(
+                        tri[i_prev],tri[i_this],plane,xsec);
+            assert(result == Intersection::TRUE);
+
+            // build the triangle and quad that results from
+            // clipping a triangle against the plane
+            if(u[i_prev] > 0) { // outside
+                outside.push_back(tri[i_prev]);
+                outside.push_back(xsec);
+
+                inside.push_back(xsec);
+            }
+            else {
+                inside.push_back(tri[i_prev]);
+                inside.push_back(xsec);
+
+                outside.push_back(xsec);
+            }
+        }
+        else {
+            // edge vx are on the same side
+
+            // build the triangle and quad that results from
+            // clipping a triangle against the plane
+            if(u[i_prev] > 0) { // outside
+                outside.push_back(tri[i_prev]);
+            }
+            else {
+                inside.push_back(tri[i_prev]);
+            }
+        }
+    }
+
+    return GeometryResult::CLIP_XSEC;
 }
 
 bool CalcCameraNearFarDist(osg::Vec3d const &eye,

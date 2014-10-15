@@ -17,6 +17,7 @@
 #include <GeometryUtils.h>
 #include <DataSetTilesLL.h>
 #include <OSGUtils.h>
+#include <osgDB/ReadFile>
 
 DataSetTilesLL::DataSetTilesLL(osg::Group * gp_tiles,
                                std::unique_ptr<TileSetLL> tileset) :
@@ -26,6 +27,24 @@ DataSetTilesLL::DataSetTilesLL(osg::Group * gp_tiles,
     m_poly_mode = new osg::PolygonMode;
     m_poly_mode->setMode(osg::PolygonMode::FRONT_AND_BACK,
                          osg::PolygonMode::LINE);
+
+    for(size_t i=0; i < 20; i++) {
+        std::string const path =
+                "/home/preet/Dev/misc/tile_test/" +
+                std::to_string(i)+
+                ".png";
+
+        osg::ref_ptr<osg::Image> image = osgDB::readImageFile(path);
+
+        osg::ref_ptr<osg::Texture2D> texture = new osg::Texture2D;
+        texture->setImage(image);
+        texture->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
+        texture->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
+        texture->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
+        texture->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+
+        m_list_tile_level_tex.push_back(texture);
+    }
 }
 
 DataSetTilesLL::~DataSetTilesLL()
@@ -61,8 +80,8 @@ osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)
 {
     TileSetLL::Tile const * tile = m_tileset->GetTile(tile_id);
 
-    uint32_t surf_divs = 256/K_LIST_TWO_EXP[tile->level];
-    surf_divs = std::min(surf_divs,static_cast<uint32_t>(32));
+//    uint32_t surf_divs = 256/K_LIST_TWO_EXP[tile->level];
+//    surf_divs = std::min(surf_divs,static_cast<uint32_t>(32));
 
 //    uint32_t const lon_segments =
 //            std::max(static_cast<uint32_t>(surf_divs),
@@ -73,11 +92,11 @@ osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)
 //                     static_cast<uint32_t>(1));
 
     double const min_angle_degs = 360.0/16.0;
-
     uint32_t lon_segments = std::max((tile->max_lon-tile->min_lon)/min_angle_degs,1.0);
     uint32_t lat_segments = std::max((tile->max_lat-tile->min_lat)/min_angle_degs,1.0);
 
     std::vector<osg::Vec3d> list_vx;
+    std::vector<osg::Vec2d> list_tx;
     std::vector<uint16_t> list_ix;
     BuildEarthSurface(tile->min_lon,
                       tile->max_lon,
@@ -86,12 +105,19 @@ osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)
                       lon_segments,
                       lat_segments,
                       list_vx,
+                      list_tx,
                       list_ix);
 
     osg::ref_ptr<osg::Vec3dArray> vx_array = new osg::Vec3dArray;
     vx_array->reserve(list_vx.size());
     for(auto const &vx : list_vx) {
         vx_array->push_back(vx);
+    }
+
+    osg::ref_ptr<osg::Vec2dArray> tx_array = new osg::Vec2dArray;
+    tx_array->reserve(list_tx.size());
+    for(auto const &tx : list_tx) {
+        tx_array->push_back(tx);
     }
 
     osg::ref_ptr<osg::Vec4Array>  cx_array = new osg::Vec4Array;
@@ -106,6 +132,7 @@ osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)
 
     osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
     gm->setVertexArray(vx_array);
+    gm->setTexCoordArray(0,tx_array,osg::Array::BIND_PER_VERTEX);
     gm->setColorArray(cx_array,osg::Array::BIND_OVERALL);
     gm->addPrimitiveSet(ix_array);
 
@@ -117,6 +144,12 @@ osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)
                 GL_CULL_FACE,
                 osg::StateAttribute::ON |
                 osg::StateAttribute::OVERRIDE);
+
+    // texture
+//    gd->getOrCreateStateSet()->setTextureAttributeAndModes(
+//                0,m_list_tile_level_tex[tile->level]);
+
+    // polygon mode
     gd->getOrCreateStateSet()->setAttributeAndModes(
                 m_poly_mode,
                 osg::StateAttribute::ON);

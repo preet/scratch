@@ -21,6 +21,7 @@
 #include <TileSetLL.h>
 
 #include <osg/PolygonMode>
+#include <osg/Texture2D>
 
 class DataSetTilesLL : public DataSetTiles
 {
@@ -38,6 +39,8 @@ private:
     osg::Group * m_gp_tiles;
     std::unique_ptr<TileSetLL> m_tileset;
     std::map<uint64_t,osg::Group*> m_list_sg_tiles;
+
+    std::vector<osg::ref_ptr<osg::Texture2D>> m_list_tile_level_tex;
 
     osg::PolygonMode * m_poly_mode;
 };

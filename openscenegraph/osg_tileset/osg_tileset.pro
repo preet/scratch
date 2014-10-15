@@ -37,4 +37,5 @@ SOURCES += \
         TileSetLLByPixelArea.cpp \
         DataSetTilesLL.cpp \
 
-SOURCES += main.cpp
+#SOURCES += main.cpp
+SOURCES += test_tri_clipping.cpp

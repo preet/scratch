@@ -328,7 +328,7 @@ private:
         double x_next_norm,y_next_norm;
         convScreenToNDC(x_next,y_next,x_next_norm,y_next_norm);
 
-        double zoom = (y_next_norm-y_prev_norm)*0.5;
+        double zoom = (y_next_norm-y_prev_norm)*0.25;
 
         osg::Vec3d view_dirn = m_vpt-m_eye;
         view_dirn.normalize();
