@@ -37,9 +37,38 @@ osg::ref_ptr<osg::Group> BuildEarthSurfaceNode(std::string const &name,
                                                osg::Vec4 const &color,
                                                bool auto_colorize=false);
 
+osg::ref_ptr<osg::Group> BuildGeoBoundsSurfaceNode(std::string const &name,
+                                                   GeoBounds const &b,
+                                                   osg::Vec4 const &color,
+                                                   int level_offset,
+                                                   bool poly_mode_line=false,
+                                                   uint32_t lon_segments=0,
+                                                   uint32_t lat_segments=0);
+
 osg::ref_ptr<osg::Group> BuildFrustumNode(std::string const &name,
-                                          osg::Camera * camera,
+                                          osg::Camera const * camera,
                                           Frustum & frustum,
                                           double near_dist=0.0,
                                           double far_dist=0.0);
+
+osg::ref_ptr<osg::Group> BuildSurfacePolyNode(std::string const &name,
+                                              std::vector<osg::Vec3d> const &list_ecef,
+                                              osg::Vec4 const &cx,
+                                              double vx_size=1.0);
+
+osg::ref_ptr<osg::Group> BuildGeoBoundsNode(std::string const &name,
+                                            GeoBounds const &b,
+                                            osg::Vec4 const &color,
+                                            double min_angle=360.0/16.0);
+
+osg::ref_ptr<osg::Group> BuildAxesGeometry(std::string const &name,
+                                           double length=3.0);
+
+osg::ref_ptr<osg::AutoTransform> BuildFacingCircleNode(std::string const &name,
+                                                       osg::Vec3d const &position,
+                                                       double const scale,
+                                                       size_t const num_vx,
+                                                       osg::Vec4 const &color);
+
+
 #endif // SCRATCH_OSG_UTILS_H

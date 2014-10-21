@@ -27,6 +27,7 @@
 #include <osg/Vec4>
 #include <osg/Matrixd>
 #include <osg/io_utils>
+#include <osg/Camera>
 
 // ============================================================= //
 // ============================================================= //
@@ -45,7 +46,7 @@
 double const RAD_AV_INV_EXP2 = (1.0/6371000.0)*(1.0/6371000.0);
 
 std::vector<osg::Vec4> const K_COLOR_TABLE {
-    {252/255., 194/255., 0/255., 1.},
+    {255/255., 255/255., 255/255., 1.},
     {202/255., 245/255., 29/255., 1.},
     {0/255., 191/255., 0/255., 1.},
     {100/255., 245/255., 174/255., 1.},
@@ -146,6 +147,31 @@ struct Frustum
     }
 };
 
+struct GeoBounds
+{
+    GeoBounds() :
+        minLon(0),maxLon(0),
+        minLat(0),maxLat(0)
+    {}
+
+    GeoBounds(double min_lon,
+              double max_lon,
+              double min_lat,
+              double max_lat) :
+        minLon(min_lon),
+        maxLon(max_lon),
+        minLat(min_lat),
+        maxLat(max_lat)
+    {
+
+    }
+
+    double minLon;
+    double maxLon;
+    double minLat;
+    double maxLat;
+};
+
 enum class Intersection : uint8_t
 {
     FALSE = 0,
@@ -167,6 +193,13 @@ enum class GeometryResult : uint8_t
     CLIP_XSEC
 };
 
+enum AngleRange
+{
+    DEG_0_360,
+    DEG_180_180
+};
+
+
 // ============================================================= //
 // ============================================================= //
 
@@ -174,8 +207,17 @@ LLA ConvECEFToLLA(const osg::Vec3d &pointECEF);
 
 osg::Vec3d ConvLLAToECEF(const LLA &pointLLA);
 
+std::vector<LLA> ConvListECEFToLLA(std::vector<osg::Vec3d> const &list_ecef);
+std::vector<osg::Vec3d> ConvListLLAToECEF(std::vector<LLA> const &list_lla);
+
 std::pair<bool,osg::Vec2d> ConvWorldToNDC(osg::Matrixd const &mvp,
                                           osg::Vec3d const &world);
+
+osg::Vec2d ConvWorldToNDC(osg::Matrixd const &mvp,
+                          osg::Vec3d const &world,
+                          bool &ok);
+
+double CalcValidAngleDegs(double angle, AngleRange range);
 
 double CalcTriangleArea(osg::Vec2d const &vxA,
                         osg::Vec2d const &vxB,
@@ -186,6 +228,15 @@ bool CalcPolyIsInFront(osg::Vec2d const &polyA_axis_dirn,
                        std::vector<osg::Vec2d> const &polyB_list_vx);
 
 osg::Vec2d CalcPerpendicular(osg::Vec2d v);
+
+double CalcGeoBoundsArea(GeoBounds const &bounds);
+
+bool CalcGeoBoundsIntersection(GeoBounds const &a,
+                               GeoBounds const &b,
+                               GeoBounds &xsec);
+
+bool CalcWithinGeoBounds(GeoBounds const &bounds,
+                         LLA const &lla);
 
 bool CalcTriangleAARectIntersection(std::vector<osg::Vec2d> const &tri,
                                     std::vector<osg::Vec2d> const &rect);
@@ -224,6 +275,39 @@ bool CalcRayEarthIntersection(osg::Vec3d const &rayPoint,
                               osg::Vec3d const &rayDirn,
                               osg::Vec3d &xsecNear,
                               osg::Vec3d &xsecFar);
+
+Plane CalcHorizonPlane(osg::Vec3d const &eye,
+                       double const clamp_dist_m=500.0);
+
+osg::Vec3d CalcTriangleClosestPoint(osg::Vec3d const &a,
+                                    osg::Vec3d const &b,
+                                    osg::Vec3d const &c,
+                                    osg::Vec3d const &p);
+
+bool CalcTriangleIntersectsSphere(osg::Vec3d const &a,
+                                  osg::Vec3d const &b,
+                                  osg::Vec3d const &c,
+                                  osg::Vec3d const &sphere_center,
+                                  double sphere_radius);
+
+bool CalcSphereOutsideFrustumExact(Frustum const &frustum,
+                                   osg::Vec3d const &sphere_center,
+                                   double const sphere_radius);
+
+bool CalcSphereOutsidePlane(Plane const &plane,
+                            osg::Vec3d const &center,
+                            double const radius);
+
+void CalcProjFrustumPoly(Frustum const &frustum,
+                         Plane const &horizon_plane,
+                         std::vector<osg::Vec3d> &list_ecef);
+
+std::vector<std::pair<double,double>>
+CalcLonRange(std::vector<LLA> const &list_lla);
+
+bool CalcMinGeoBoundsFromLLAPoly(LLA const &camLLA,
+                                 std::vector<LLA> const &listPLLA,
+                                 std::vector<GeoBounds> &listBounds);
 
 void BuildEarthSurface(double min_lon,
                        double max_lon,

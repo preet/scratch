@@ -43,6 +43,8 @@ private:
     std::vector<osg::ref_ptr<osg::Texture2D>> m_list_tile_level_tex;
 
     osg::PolygonMode * m_poly_mode;
+
+    osg::ref_ptr<osg::Group> m_gp_debug;
 };
 
 #endif // SCRATCH_DATASET_TILES_LL_H

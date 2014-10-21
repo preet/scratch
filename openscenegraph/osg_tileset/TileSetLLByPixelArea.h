@@ -18,6 +18,7 @@
 #define SCRATCH_TILESET_LL_BYPIXELAREA_H
 
 #include <TileSetLL.h>
+#include <GeometryUtils.h>
 
 class TileSetLLByPixelArea : public TileSetLL
 {
@@ -62,15 +63,20 @@ public:
 
     Tile const * GetTile(uint64_t tile_id) const;
 
+    GeoBounds const & GetDebug0() const;
+
 private:
 
     struct Eval
     {
-        Eval(Tile const * tile, double min_angle_degs);
+        Eval(GeoBounds const &bounds,
+             osg::Matrixd const &mvp,
+             double min_angle_degs);
 
         // Evaluation geometry
         // * to approximate pixel area taken up by tile
         std::vector<osg::Vec3d> list_vx;
+        std::vector<osg::Vec2d> list_ndc;
         std::vector<uint16_t>   list_ix;
         std::vector<osg::Vec3d> list_tri_nx;
         std::vector<osg::Vec3d> list_quad_nx;
@@ -83,24 +89,34 @@ private:
                           std::map<uint64_t,Tile const *> &list_tiles);
 
     bool tilePxlAreaExceedsRes(Tile const * tile);
-    double calcTileNDCArea(Eval const &evaldata) const;
-    double calcTileNDCAreaQuad(Eval const &eval) const;
+    double calcTileNDCAreaQuad(Eval const &eval,
+                               Plane const &clip_plane) const;
+    double calcTriangleNDCArea(Plane const &clip_plane,
+                               osg::Matrixd const &mvp,
+                               std::vector<osg::Vec3d> const &tri,
+                               std::vector<osg::Vec2d> const &tri_ndc) const;
 
     // options
     Options const m_opts;
     double const m_tile_px_area;
 
     // view data
+    osg::Camera const * m_cam;
     double const m_view_width;
     double const m_view_height;
     osg::Matrixd m_mvp;
     osg::Vec3d m_view_dirn;
+    Plane m_near_plane;
+    Plane m_near_plane_alt;
+    std::vector<GeoBounds> m_list_frustum_bounds;
 
     // tiles
     std::vector<std::unique_ptr<Tile>> m_list_root_tiles;
     std::map<uint64_t,Tile const *> m_list_tileset;
-    std::map<uint64_t,Eval> m_list_tile_eval;
     size_t m_tile_count;
+
+    // debug
+    GeoBounds m_debug0;
 };
 
 #endif // SCRATCH_TILESET_LL_BYPIXELAREA_H

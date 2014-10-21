@@ -33,41 +33,6 @@ osg::ref_ptr<osg::Group> BuildTriangleGeometry(std::vector<osg::Vec3d> const &li
     return gp_tri;
 }
 
-osg::ref_ptr<osg::Group> BuildAxesGeometry(double length=3.0)
-{
-    osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
-    list_vx->push_back(osg::Vec3d(0,0,0));
-    list_vx->push_back(osg::Vec3d(length,0,0));
-
-    list_vx->push_back(osg::Vec3d(0,0,0));
-    list_vx->push_back(osg::Vec3d(0,length,0));
-
-    list_vx->push_back(osg::Vec3d(0,0,0));
-    list_vx->push_back(osg::Vec3d(0,0,length));
-
-    osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
-    list_cx->push_back(osg::Vec4(1,0,0,1));
-    list_cx->push_back(osg::Vec4(1,0,0,1));
-
-    list_cx->push_back(osg::Vec4(0,1,0,1));
-    list_cx->push_back(osg::Vec4(0,1,0,1));
-
-    list_cx->push_back(osg::Vec4(0,0,1,1));
-    list_cx->push_back(osg::Vec4(0,0,1,1));
-
-    osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
-    gm->setVertexArray(list_vx);
-    gm->setColorArray(list_cx,osg::Array::BIND_PER_VERTEX);
-    gm->addPrimitiveSet(new osg::DrawArrays(GL_LINES,0,list_vx->size()));
-
-    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
-    gd->addDrawable(gm);
-
-    osg::ref_ptr<osg::Group> gp = new osg::Group;
-    gp->addChild(gd);
-    return gp;
-}
-
 bool RemoveChildByName(osg::Group * gp_parent,
                        std::string const &name)
 {

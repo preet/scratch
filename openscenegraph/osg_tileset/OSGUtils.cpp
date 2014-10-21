@@ -26,7 +26,7 @@ osg::ref_ptr<osg::Group> BuildEarthSurfaceNode(std::string const &name,
     std::vector<osg::Vec2d> list_tx;
     std::vector<uint16_t> list_ix;
 
-    BuildEarthSurface(-180,-180,
+    BuildEarthSurface(-180,180,
                       -90,90,
                       32,16,
                       list_vx,
@@ -94,8 +94,108 @@ osg::ref_ptr<osg::Group> BuildEarthSurfaceNode(std::string const &name,
 
 // ============================================================= //
 
+osg::ref_ptr<osg::Group> BuildGeoBoundsSurfaceNode(std::string const &name,
+                                                   GeoBounds const &b,
+                                                   osg::Vec4 const &color,
+                                                   int level_offset,
+                                                   bool poly_mode_line,
+                                                   uint32_t lon_segments,
+                                                   uint32_t lat_segments)
+{
+    //    uint32_t surf_divs = 256/K_LIST_TWO_EXP[tile->level];
+    //    surf_divs = std::min(surf_divs,static_cast<uint32_t>(32));
+
+    //    uint32_t const lon_segments =
+    //            std::max(static_cast<uint32_t>(surf_divs),
+    //                     static_cast<uint32_t>(1));
+
+    //    uint32_t const lat_segments =
+    //            std::max(static_cast<uint32_t>(lon_segments/2),
+    //                     static_cast<uint32_t>(1));
+
+    double const min_angle_degs = 360.0/64.0;
+    if(lon_segments == 0) {
+        lon_segments = std::max((b.maxLon-b.minLon)/min_angle_degs,1.0);
+    }
+    if(lat_segments == 0) {
+        lat_segments = std::max((b.maxLat-b.minLat)/min_angle_degs,1.0);
+    }
+
+    std::vector<osg::Vec3d> list_vx;
+    std::vector<osg::Vec2d> list_tx;
+    std::vector<uint16_t> list_ix;
+    BuildEarthSurface(b.minLon,
+                      b.maxLon,
+                      b.minLat,
+                      b.maxLat,
+                      lon_segments,
+                      lat_segments,
+                      list_vx,
+                      list_tx,
+                      list_ix);
+
+    osg::ref_ptr<osg::Vec3dArray> vx_array = new osg::Vec3dArray;
+    vx_array->reserve(list_vx.size());
+    for(auto const &vx : list_vx) {
+        vx_array->push_back(vx);
+    }
+
+    osg::ref_ptr<osg::Vec2dArray> tx_array = new osg::Vec2dArray;
+    tx_array->reserve(list_tx.size());
+    for(auto const &tx : list_tx) {
+        tx_array->push_back(tx);
+    }
+
+    osg::ref_ptr<osg::Vec4Array>  cx_array = new osg::Vec4Array;
+    cx_array->push_back(color);
+
+    osg::ref_ptr<osg::DrawElementsUShort> ix_array =
+            new osg::DrawElementsUShort(GL_TRIANGLES);
+    ix_array->reserve(list_ix.size());
+    for(auto ix : list_ix) {
+        ix_array->push_back(ix);
+    }
+
+    osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+    gm->setVertexArray(vx_array);
+    gm->setTexCoordArray(0,tx_array,osg::Array::BIND_PER_VERTEX);
+    gm->setColorArray(cx_array,osg::Array::BIND_OVERALL);
+    gm->addPrimitiveSet(ix_array);
+
+    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+    gd->addDrawable(gm);
+    gd->getOrCreateStateSet()->setRenderBinDetails(
+                -101+level_offset,"RenderBin");
+//    gd->getOrCreateStateSet()->setMode(
+//                GL_CULL_FACE,
+//                osg::StateAttribute::ON |
+//                osg::StateAttribute::OVERRIDE);
+
+    // texture
+    //    gd->getOrCreateStateSet()->setTextureAttributeAndModes(
+    //                0,m_list_tile_level_tex[tile->level]);
+
+    // polygon mode
+    if(poly_mode_line) {
+        osg::PolygonMode * poly_mode = new osg::PolygonMode;
+        poly_mode->setMode(osg::PolygonMode::FRONT_AND_BACK,
+                           osg::PolygonMode::LINE);
+        gd->getOrCreateStateSet()->setAttributeAndModes(
+                    poly_mode,
+                    osg::StateAttribute::ON);
+    }
+
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->addChild(gd);
+    gp->setName(name);
+
+    return gp;
+}
+
+// ============================================================= //
+
 osg::ref_ptr<osg::Group> BuildFrustumNode(std::string const &name,
-                                          osg::Camera * camera,
+                                          osg::Camera const * camera,
                                           Frustum & frustum,
                                           double near_dist,
                                           double far_dist)
@@ -367,3 +467,195 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(std::string const &name,
 
 
 // ============================================================= //
+
+osg::ref_ptr<osg::Group> BuildSurfacePolyNode(std::string const &name,
+                                              std::vector<osg::Vec3d> const &list_ecef,
+                                              osg::Vec4 const &cx,
+                                              double vx_size)
+{
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    if(list_ecef.empty()) {
+        return gp;
+    }
+
+    // Create a ring node
+    osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
+    {
+        // Create a ring of vertices
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+        double const rotate_by_rads = (2.0*K_PI/list_vx->size());
+
+        for(size_t j=0; j < list_vx->size(); j++){
+            list_vx->at(j) = osg::Vec3d(
+                        cos(rotate_by_rads*j),
+                        sin(rotate_by_rads*j),
+                        0);
+        }
+
+        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+        list_cx->push_back(cx);
+
+        gm_ring->setVertexArray(list_vx);
+        gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+        gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+    }
+
+    for(auto const & ecef : list_ecef) {
+        osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
+        osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
+        gd_ring->addDrawable(gm_ring);
+        xf_ring->addChild(gd_ring);
+        xf_ring->setScale(vx_size);
+        xf_ring->setPosition(ecef);
+        xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+        gp->addChild(xf_ring);
+    }
+
+    // Create poly edges
+    osg::ref_ptr<osg::Geometry> gm_edges = new osg::Geometry;
+    {
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
+        list_vx->reserve(list_ecef.size());
+
+        for(auto const & ecef : list_ecef) {
+            list_vx->push_back(ecef);
+        }
+
+        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+        list_cx->push_back(cx);
+
+        gm_edges->setVertexArray(list_vx);
+        gm_edges->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+        gm_edges->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+
+        osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+        gd->addDrawable(gm_edges);
+        gp->addChild(gd);
+    }
+    gp->setName(name);
+    return gp;
+}
+
+// ============================================================= //
+
+osg::ref_ptr<osg::Group> BuildGeoBoundsNode(std::string const &name,
+                                            GeoBounds const &b,
+                                            osg::Vec4 const &color,
+                                            double min_angle)
+{
+    double const lon_div = (b.maxLon - b.minLon)/min_angle;
+    double const lat_div = (b.maxLat - b.minLat)/min_angle;
+
+    std::vector<osg::Vec3d> list_ecef;
+
+    // left edge
+    for(double lat=b.maxLat; lat >= b.minLat; lat-=lat_div) {
+        LLA lla; lla.lon = b.minLon; lla.lat = lat;
+        list_ecef.push_back(ConvLLAToECEF(lla));
+    }
+
+    // bottom edge
+    for(double lon=b.minLon; lon <= b.maxLon; lon+=lon_div) {
+        LLA lla; lla.lon = lon; lla.lat = b.minLat;
+        list_ecef.push_back(ConvLLAToECEF(lla));
+    }
+
+    // right edge
+    for(double lat=b.minLat; lat <= b.maxLat; lat+=lat_div) {
+        LLA lla; lla.lon = b.maxLon; lla.lat = lat;
+        list_ecef.push_back(ConvLLAToECEF(lla));
+    }
+
+    // top edge
+    for(double lon=b.maxLon; lon >= b.minLon; lon-=lon_div) {
+        LLA lla; lla.lon = lon; lla.lat = b.maxLat;
+        list_ecef.push_back(ConvLLAToECEF(lla));
+    }
+
+    return BuildSurfacePolyNode(name,list_ecef,color);
+}
+
+// ============================================================= //
+
+osg::ref_ptr<osg::Group> BuildAxesGeometry(std::string const &name,
+                                           double length)
+{
+    osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
+    list_vx->push_back(osg::Vec3d(0,0,0));
+    list_vx->push_back(osg::Vec3d(length,0,0));
+
+    list_vx->push_back(osg::Vec3d(0,0,0));
+    list_vx->push_back(osg::Vec3d(0,length,0));
+
+    list_vx->push_back(osg::Vec3d(0,0,0));
+    list_vx->push_back(osg::Vec3d(0,0,length));
+
+    osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+    list_cx->push_back(osg::Vec4(1,0,0,1));
+    list_cx->push_back(osg::Vec4(1,0,0,1));
+
+    list_cx->push_back(osg::Vec4(0,1,0,1));
+    list_cx->push_back(osg::Vec4(0,1,0,1));
+
+    list_cx->push_back(osg::Vec4(0,0,1,1));
+    list_cx->push_back(osg::Vec4(0,0,1,1));
+
+    osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+    gm->setVertexArray(list_vx);
+    gm->setColorArray(list_cx,osg::Array::BIND_PER_VERTEX);
+    gm->addPrimitiveSet(new osg::DrawArrays(GL_LINES,0,list_vx->size()));
+
+    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+    gd->addDrawable(gm);
+
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->addChild(gd);
+    gp->setName(name);
+    return gp;
+}
+
+// ============================================================= //
+
+osg::ref_ptr<osg::AutoTransform> BuildFacingCircleNode(std::string const &name,
+                                                       osg::Vec3d const &position,
+                                                       double const scale,
+                                                       size_t const num_vx,
+                                                       osg::Vec4 const &color)
+{
+    // Create a ring node
+    osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
+    {
+        // Create a ring of vertices
+
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray;
+        double const rotate_by_rads = (2.0*K_PI/num_vx);
+
+        for(size_t j=0; j < num_vx; j++){
+            list_vx->push_back(osg::Vec3d(0,0,0));
+            list_vx->push_back(osg::Vec3d(cos(rotate_by_rads*j),
+                                          sin(rotate_by_rads*j),
+                                          0));
+            list_vx->push_back(osg::Vec3d(cos(rotate_by_rads*(j+1)),
+                                          sin(rotate_by_rads*(j+1)),
+                                          0));
+        }
+
+        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+        list_cx->push_back(color);
+
+        gm_ring->setVertexArray(list_vx);
+        gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+        gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::TRIANGLES,0,list_vx->size()));
+    }
+
+    osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
+    osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
+    gd_ring->addDrawable(gm_ring);
+    xf_ring->addChild(gd_ring);
+    xf_ring->setScale(scale);
+    xf_ring->setPosition(position);
+    xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+    xf_ring->setName(name);
+
+    return xf_ring;
+}

@@ -18,12 +18,16 @@
 #include <DataSetTilesLL.h>
 #include <OSGUtils.h>
 #include <osgDB/ReadFile>
+#include <TileSetLLByPixelArea.h>
 
 DataSetTilesLL::DataSetTilesLL(osg::Group * gp_tiles,
                                std::unique_ptr<TileSetLL> tileset) :
     m_gp_tiles(gp_tiles),
     m_tileset(std::move(tileset))
 {
+    m_gp_debug = new osg::Group;
+    m_gp_tiles->addChild(m_gp_debug);
+
     m_poly_mode = new osg::PolygonMode;
     m_poly_mode->setMode(osg::PolygonMode::FRONT_AND_BACK,
                          osg::PolygonMode::LINE);
@@ -74,6 +78,29 @@ void DataSetTilesLL::Update(osg::Camera const * cam)
         m_list_sg_tiles.emplace(tile_id,gp.get());
         m_gp_tiles->addChild(gp);
     }
+
+    // debug
+    for(size_t i=0; i < m_gp_debug->getNumChildren(); i++) {
+        std::string const name =
+                m_gp_debug->getChild(i)->getName();
+
+        if(name == "debug0") {
+            m_gp_debug->removeChild(i);
+            i--;
+        }
+    }
+
+    TileSetLLByPixelArea * tileset_ptr =
+            static_cast<TileSetLLByPixelArea*>(m_tileset.get());
+
+    GeoBounds const &debug0 = tileset_ptr->GetDebug0();
+    auto gp0 = BuildGeoBoundsSurfaceNode(
+                "debug0",debug0,osg::Vec4(1,1,1,1),20,true,16,4);
+    m_gp_debug->addChild(gp0);
+
+    auto gp1 = BuildGeoBoundsSurfaceNode(
+                "debug0",debug0,osg::Vec4(1,0,0,1),21,true,0,0);
+    m_gp_debug->addChild(gp1);
 }
 
 osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)

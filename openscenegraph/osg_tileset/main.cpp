@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 
 #include <ViewController.hpp>
 #include <OSGUtils.h>
@@ -7,9 +8,16 @@
 
 int main()
 {
+    // debug output
+    std::cout << std::fixed;
+    std::cout << std::setprecision(10);
+
     // earth surface geometry
     auto gp_earth = BuildEarthSurfaceNode(
-                "earth",osg::Vec4(0.35,0.35,0.35,0.1),true);
+                "earth",osg::Vec4(0.35,0.35,0.35,0.1),false);
+
+    // axes
+    auto gp_axes = BuildAxesGeometry("axes",RAD_AV*1.15);
 
     // create root tiles
     std::vector<TileSetLL::RootTileDesc> list_root_tiles;
@@ -33,11 +41,13 @@ int main()
     osg::ref_ptr<osg::Group> gp_root0 = new osg::Group;
     gp_root0->addChild(gp_earth);
     gp_root0->addChild(gp_tiles);
+    gp_root0->addChild(gp_axes);
 
     // View1 root
     osg::ref_ptr<osg::Group> gp_root1 = new osg::Group;
     gp_root1->addChild(gp_earth);
     gp_root1->addChild(gp_tiles);
+    gp_root1->addChild(gp_axes);
 
     // disable lighting and enable blending
     gp_root0->getOrCreateStateSet()->setMode( GL_LIGHTING,osg::StateAttribute::OFF);
@@ -115,13 +125,34 @@ int main()
                                             near_dist,
                                             far_dist);
 
+        std::vector<GeoBounds> list_b;
+        Plane horizon_plane = CalcHorizonPlane(eye);
+        std::vector<osg::Vec3d> list_ecef;
+        CalcProjFrustumPoly(frustum,horizon_plane,list_ecef);
+        CalcMinGeoBoundsFromLLAPoly(ConvECEFToLLA(eye),
+                                    ConvListECEFToLLA(list_ecef),
+                                    list_b);
+
+        osg::ref_ptr<osg::Group> gp_poly = new osg::Group;
+        gp_poly->setName("poly");
+        for(size_t i=0; i < list_b.size(); i++) {
+            GeoBounds const &b=list_b[i];
+            gp_poly->addChild(BuildGeoBoundsNode("-",b,osg::Vec4(1,1,1,1)));
+        }
+
+
         // Update gp_root0
         for(size_t i=0; i < gp_root0->getNumChildren(); i++)
         {
-//            std::string const name =
-//                    gp_root1->getChild(i)->getName();
+            std::string const name =
+                    gp_root0->getChild(i)->getName();
+
+            if(name == "poly") {
+                gp_root0->removeChild(i);
+                i--;
+            }
         }
-        // add new nodes
+        gp_root0->addChild(gp_poly);
 
         // Update gp_root1
         for(size_t i=0; i < gp_root1->getNumChildren(); i++)
@@ -133,9 +164,14 @@ int main()
                  gp_root1->removeChild(i);
                  i--;
              }
+             else if(name == "poly") {
+                 gp_root1->removeChild(i);
+                 i--;
+             }
         }
         // add new nodes
         gp_root1->addChild(new_frustum);
+        gp_root1->addChild(gp_poly);
 
         //
         viewer.frame();
