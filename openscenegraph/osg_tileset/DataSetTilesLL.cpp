@@ -79,28 +79,37 @@ void DataSetTilesLL::Update(osg::Camera const * cam)
         m_gp_tiles->addChild(gp);
     }
 
-    // debug
-    for(size_t i=0; i < m_gp_debug->getNumChildren(); i++) {
-        std::string const name =
-                m_gp_debug->getChild(i)->getName();
+//    // debug
+//    for(size_t i=0; i < m_gp_debug->getNumChildren(); i++) {
+//        std::string const name =
+//                m_gp_debug->getChild(i)->getName();
 
-        if(name == "debug0") {
-            m_gp_debug->removeChild(i);
-            i--;
-        }
-    }
+//        if(name == "debug0") {
+//            m_gp_debug->removeChild(i);
+//            i--;
+//        }
+//    }
 
-    TileSetLLByPixelArea * tileset_ptr =
-            static_cast<TileSetLLByPixelArea*>(m_tileset.get());
+//    TileSetLLByPixelArea * tileset_ptr =
+//            static_cast<TileSetLLByPixelArea*>(m_tileset.get());
 
-    GeoBounds const &debug0 = tileset_ptr->GetDebug0();
-    auto gp0 = BuildGeoBoundsSurfaceNode(
-                "debug0",debug0,osg::Vec4(1,1,1,1),20,true,16,4);
-    m_gp_debug->addChild(gp0);
+//    GeoBounds const &debug0 = tileset_ptr->m_debug0;
 
-    auto gp1 = BuildGeoBoundsSurfaceNode(
-                "debug0",debug0,osg::Vec4(1,0,0,1),21,true,0,0);
-    m_gp_debug->addChild(gp1);
+//    if(debug0.minLon == 0.0 &&
+//       debug0.maxLon == 0.0 &&
+//       debug0.minLat == 0.0 &&
+//       debug0.maxLat == 0.0)
+//    {
+//        return;
+//    }
+
+//    auto gp0 = BuildGeoBoundsSurfaceNode(
+//                "debug0",tileset_ptr->m_debug0,osg::Vec4(1,1,1,1),20,true,0,0);
+//    m_gp_debug->addChild(gp0);
+
+//    auto gp1 = BuildGeoBoundsSurfaceNode(
+//                "debug0",tileset_ptr->m_debug1,osg::Vec4(1,0,0,1),21,true,0,0);
+//    m_gp_debug->addChild(gp1);
 }
 
 osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)
@@ -118,7 +127,7 @@ osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)
 //            std::max(static_cast<uint32_t>(lon_segments/2),
 //                     static_cast<uint32_t>(1));
 
-    double const min_angle_degs = 360.0/16.0;
+    double const min_angle_degs = 360.0/32.0;
     uint32_t lon_segments = std::max((tile->max_lon-tile->min_lon)/min_angle_degs,1.0);
     uint32_t lat_segments = std::max((tile->max_lat-tile->min_lat)/min_angle_degs,1.0);
 

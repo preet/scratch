@@ -113,6 +113,23 @@ osg::Vec2d ConvWorldToNDC(osg::Matrixd const &mvp,
     return ndc2;
 }
 
+bool ConvWorldToNDC(osg::Matrixd const &mvp,
+                    osg::Vec3d const &world,
+                    osg::Vec2d &ndc2)
+{
+    osg::Vec4d world4(world.x(),world.y(),world.z(),1.0);
+    osg::Vec4d clip4 = world4 * mvp;
+
+    if(fabs(clip4.w()) < 1E-5) {
+        return false;
+    }
+
+    osg::Vec4d ndc4 = clip4/clip4.w();
+    ndc2.x() = ndc4.x();
+    ndc2.y() = ndc4.y();
+    return true;
+}
+
 double CalcValidAngleDegs(double angle, AngleRange range)
 {
     if(range == DEG_0_360)   {
@@ -221,6 +238,18 @@ bool CalcTriangleAARectIntersection(std::vector<osg::Vec2d> const &tri,
 }
 
 bool CalcGeoBoundsIntersection(GeoBounds const &a,
+                               GeoBounds const &b)
+{
+    bool outside =
+            (a.minLon > b.maxLon) ||
+            (a.maxLon < b.minLon) ||
+            (a.minLat > b.maxLat) ||
+            (a.maxLat < b.minLat);
+
+    return (!outside);
+}
+
+bool CalcGeoBoundsIntersection(GeoBounds const &a,
                                GeoBounds const &b,
                                GeoBounds &xsec)
 {
@@ -284,7 +313,7 @@ bool CalcWithinGeoBounds(GeoBounds const &bounds,
     return (!outside);
 }
 
-double CalcGeoBoundsArea(GeoBounds const &b)
+double CalcGeoBoundsArea(GeoBounds const &b) // meters squared? TODO verify
 {
 //    std::cout << ": min_lon: " << b.minLon
 //              << ", max_lon: " << b.maxLon
@@ -440,6 +469,98 @@ Intersection CalcLinePlaneIntersection(osg::Vec3d const &a,
 //    return XSEC_TRUE;
 //}
 
+Plane CalcLonPlane(double lon,bool normal_left,bool normalize)
+{
+    LLA lla_lon;
+    lla_lon.lon = lon;
+    lla_lon.lat = 0.0;
+    lla_lon.alt = 0.0;
+
+    osg::Vec3d ecef_lon = ConvLLAToECEF(lla_lon);
+
+    Plane plane_lon;
+    if(normal_left) {
+        plane_lon.n = ecef_lon^(osg::Vec3d(0.0,0.0,1.0));
+    }
+    else {
+        plane_lon.n = ecef_lon^(osg::Vec3d(0.0,0.0,-1.0));
+    }
+    if(normalize) {
+        plane_lon.n.normalize();
+    }
+    plane_lon.p = ecef_lon;
+    plane_lon.d = plane_lon.n*plane_lon.p;
+
+    return plane_lon;
+}
+
+Plane CalcLatPlane(double lat,bool normal_up)
+{
+    LLA lla_lat;
+    lla_lat.lon = 0.0;
+    lla_lat.lat = lat;
+    lla_lat.alt = 0.0;
+
+    osg::Vec3d ecef_lat = ConvLLAToECEF(lla_lat);
+
+    Plane plane_lat;
+    if(normal_up) {
+        plane_lat.n = osg::Vec3d(0.0,0.0,1.0);
+    }
+    else {
+        plane_lat.n = osg::Vec3d(0.0,0.0,-1.0);
+    }
+    plane_lat.p = ecef_lat;
+    plane_lat.d = plane_lat.n*plane_lat.p;
+
+    return plane_lat;
+}
+
+size_t CalcPlanePolyIntersection(Plane const &plane,
+                                 std::vector<osg::Vec3d> const &list_poly_vx,
+                                 std::vector<osg::Vec3d> &list_xsec)
+{
+    size_t xsec_count=0;
+
+    for(size_t i=1; i < list_poly_vx.size(); i++) {
+        osg::Vec3d xsec;
+        Intersection xsec_result =
+                CalcLinePlaneIntersection(list_poly_vx[i],
+                                          list_poly_vx[i-1],
+                                          plane,
+                                          xsec);
+
+        if(xsec_result == Intersection::TRUE) {
+            list_xsec.push_back(xsec);
+            xsec_count++;
+        }
+        else if(xsec_result == Intersection::COINCIDENT) {
+            list_xsec.push_back(list_poly_vx[i]);
+            list_xsec.push_back(list_poly_vx[i-1]);
+            xsec_count+=2;
+        }
+    }
+    // last edge
+    size_t i = list_poly_vx.size()-1; // last vx
+    osg::Vec3d xsec;
+    Intersection xsec_result =
+            CalcLinePlaneIntersection(list_poly_vx[0],
+                                      list_poly_vx[i],
+                                      plane,
+                                      xsec);
+
+    if(xsec_result == Intersection::TRUE) {
+        list_xsec.push_back(xsec);
+        xsec_count++;
+    }
+    else if(xsec_result == Intersection::COINCIDENT) {
+        list_xsec.push_back(list_poly_vx[0]);
+        list_xsec.push_back(list_poly_vx[i]);
+        xsec_count+=2;
+    }
+
+    return xsec_count;
+}
 
 GeometryResult CalcTrianglePlaneClip(std::vector<osg::Vec3d> const &tri,
                                      Plane const &plane,
@@ -1225,6 +1346,9 @@ void BuildEarthSurface(double min_lon,
     }
 
     // stitch faces together
+    // TODO FIX ME TO MATCH other BuildEarthSurface?
+    // why is the one without list_tx in a different
+    // order?
     list_ix.reserve(lon_segments*lat_segments*6);
     uint16_t v_idx=0;
     for(uint16_t i=0; i < lat_segments; i++)   {
@@ -1268,6 +1392,57 @@ void BuildEarthSurface(double min_lon,
             lla.lon = (j*lon_step)+min_lon;
             lla.lat = (i*lat_step)+min_lat;
             lla.alt = 0.0;
+            list_vx.push_back(ConvLLAToECEF(lla));
+        }
+    }
+
+    // stitch faces together
+    list_ix.reserve(lon_segments*lat_segments*6);
+    uint16_t v_idx=0;
+    for(uint16_t i=0; i < lat_segments; i++)   {
+        for(uint16_t j=0; j < lon_segments; j++)   {
+            list_ix.push_back(v_idx);                   // 0
+            list_ix.push_back(v_idx+1);                 // 1
+            list_ix.push_back(v_idx+lon_segments+2);    // 2
+
+            list_ix.push_back(v_idx);                   // 0
+            list_ix.push_back(v_idx+lon_segments+2);    // 2
+            list_ix.push_back(v_idx+lon_segments+1);    // 3
+
+            v_idx++;
+        }
+        v_idx++;
+    }
+}
+
+void BuildEarthSurface(double min_lon,
+                       double max_lon,
+                       double min_lat,
+                       double max_lat,
+                       uint16_t lon_segments,
+                       uint16_t lat_segments,
+                       std::vector<LLA> &list_lla,
+                       std::vector<osg::Vec3d> &list_vx,
+                       std::vector<uint16_t> &list_ix)
+{
+    double const lon_step = (max_lon-min_lon)/lon_segments;
+    double const lat_step = (max_lat-min_lat)/lat_segments;
+
+    list_lla.clear();
+    list_vx.clear();
+    list_ix.clear();
+
+    // build vertex attributes
+    list_lla.reserve((lat_segments+1)*(lon_segments+1));
+    list_vx.reserve((lat_segments+1)*(lon_segments+1));
+    for(uint16_t i=0; i <= lat_segments; i++)   {
+        for(uint16_t j=0; j <= lon_segments; j++)   {
+            // surface vertex
+            LLA lla;
+            lla.lon = (j*lon_step)+min_lon;
+            lla.lat = (i*lat_step)+min_lat;
+            lla.alt = 0.0;
+            list_lla.push_back(lla);
             list_vx.push_back(ConvLLAToECEF(lla));
         }
     }

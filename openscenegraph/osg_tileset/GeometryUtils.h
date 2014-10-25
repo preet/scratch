@@ -107,6 +107,8 @@ static const uint64_t K_LIST_TWO_EXP[32] = {
     2147483648
 };
 
+osg::Vec3d const K_ZERO_VEC = osg::Vec3d(0.0,0.0,0.0);
+
 // ============================================================= //
 // ============================================================= //
 
@@ -166,6 +168,14 @@ struct GeoBounds
 
     }
 
+    bool operator==(GeoBounds const &b) const
+    {
+        return ((minLon == b.minLon) &&
+                (maxLon == b.maxLon) &&
+                (minLat == b.minLat) &&
+                (maxLat == b.maxLat));
+    }
+
     double minLon;
     double maxLon;
     double minLat;
@@ -213,6 +223,10 @@ std::vector<osg::Vec3d> ConvListLLAToECEF(std::vector<LLA> const &list_lla);
 std::pair<bool,osg::Vec2d> ConvWorldToNDC(osg::Matrixd const &mvp,
                                           osg::Vec3d const &world);
 
+bool ConvWorldToNDC(osg::Matrixd const &mvp,
+                    osg::Vec3d const &world,
+                    osg::Vec2d &ndc);
+
 osg::Vec2d ConvWorldToNDC(osg::Matrixd const &mvp,
                           osg::Vec3d const &world,
                           bool &ok);
@@ -232,6 +246,9 @@ osg::Vec2d CalcPerpendicular(osg::Vec2d v);
 double CalcGeoBoundsArea(GeoBounds const &bounds);
 
 bool CalcGeoBoundsIntersection(GeoBounds const &a,
+                               GeoBounds const &b);
+
+bool CalcGeoBoundsIntersection(GeoBounds const &a,
                                GeoBounds const &b,
                                GeoBounds &xsec);
 
@@ -247,15 +264,20 @@ bool CalcQuadAARectIntersection(std::vector<osg::Vec2d> const &quad,
 osg::Vec3d CalcPointPlaneProjection(osg::Vec3d const &point,
                                     Plane const &plane);
 
-// CalcLinePlaneIntersection
-// * computes the intersection point between the
-//   line segment specified by @a and @b and @plane
-// * returns false if no xsec point exists or if
-//   the xsec point lies outside the segment
 Intersection CalcLinePlaneIntersection(osg::Vec3d const &a,
                                        osg::Vec3d const &b,
                                        Plane const &plane,
                                        osg::Vec3d &xsec);
+
+Plane CalcLonPlane(double lon,bool normal_left=true,bool normalize=false);
+
+Plane CalcLatPlane(double lat,bool normal_up=true);
+
+
+size_t CalcPlanePolyIntersection(Plane const &plane,
+                                 std::vector<osg::Vec3d> const &list_poly_vx,
+                                 std::vector<osg::Vec3d> &list_xsec);
+
 
 GeometryResult CalcTrianglePlaneClip(std::vector<osg::Vec3d> const &tri,
                                      Plane const &plane,
@@ -325,6 +347,16 @@ void BuildEarthSurface(double min_lon,
                        double max_lat,
                        uint16_t lon_segments,
                        uint16_t lat_segments,
+                       std::vector<osg::Vec3d> &list_vx,
+                       std::vector<uint16_t> &list_ix);
+
+void BuildEarthSurface(double min_lon,
+                       double max_lon,
+                       double min_lat,
+                       double max_lat,
+                       uint16_t lon_segments,
+                       uint16_t lat_segments,
+                       std::vector<LLA> &list_lla,
                        std::vector<osg::Vec3d> &list_vx,
                        std::vector<uint16_t> &list_ix);
 

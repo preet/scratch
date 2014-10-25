@@ -38,6 +38,7 @@ SOURCES += \
         DataSetTilesLL.cpp \
 
 SOURCES += main.cpp
+#SOURCES += test_surftilevxorder.cpp
 #SOURCES += test_tri_clipping.cpp
 #SOURCES += debug.cpp
 #SOURCES += test_proj_clip_speed.cpp

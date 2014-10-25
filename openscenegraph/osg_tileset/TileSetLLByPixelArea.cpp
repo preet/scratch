@@ -36,6 +36,7 @@ TileSetLLByPixelArea::Eval::Eval(GeoBounds const &bounds,
                       bounds.maxLat,
                       lon_segments,
                       lat_segments,
+                      list_lla,
                       list_vx,
                       list_ix);
 
@@ -44,16 +45,6 @@ TileSetLLByPixelArea::Eval::Eval(GeoBounds const &bounds,
     list_ndc.reserve(list_vx.size());
     for(auto const &vx : list_vx) {
         list_ndc.push_back(ConvWorldToNDC(mvp,vx,ok));
-    }
-
-    // calculate the normals for each tri
-    list_tri_nx.clear();
-    list_tri_nx.reserve(list_ix.size()/3);
-    for(size_t i=0; i < list_ix.size(); i+=3) {
-        osg::Vec3d const &v0 = list_vx[list_ix[i+0]];
-        osg::Vec3d const &v1 = list_vx[list_ix[i+1]];
-        osg::Vec3d const &v2 = list_vx[list_ix[i+2]];
-        list_tri_nx.push_back((v1-v0)^(v2-v0));
     }
 
     // calculate the normals for each quad
@@ -67,6 +58,7 @@ TileSetLLByPixelArea::Eval::Eval(GeoBounds const &bounds,
         osg::Vec3d const &v1 = list_vx[list_ix[i+1]];
         osg::Vec3d const &v2 = list_vx[list_ix[i+2]];
         list_quad_nx.push_back((v1-v0)^(v2-v0));
+        list_quad_nx.back().normalize();
     }
 }
 
@@ -107,18 +99,13 @@ void TileSetLLByPixelArea::UpdateTileSet(osg::Camera const * cam,
     osg::Vec3d eye,vpt,up;
     cam->getViewMatrixAsLookAt(eye,vpt,up);
     m_view_dirn = vpt-eye;
+    m_view_dirn.normalize();
 
     m_near_plane.n = m_view_dirn;
     m_near_plane.n.normalize();
 
     m_near_plane.p = eye + m_near_plane.n*100.0;
     m_near_plane.d = m_near_plane.n*m_near_plane.p;
-
-    // temp
-    m_near_plane_alt.n = m_view_dirn;
-    m_near_plane_alt.n.normalize();
-    m_near_plane_alt.p = eye + m_near_plane_alt.n*1000.0;
-    m_near_plane_alt.d = m_near_plane_alt.n * m_near_plane_alt.p;
 
     double ar,fovy,z_near,z_far;
     cam->getProjectionMatrixAsPerspective(fovy,ar,z_near,z_far);
@@ -130,11 +117,32 @@ void TileSetLLByPixelArea::UpdateTileSet(osg::Camera const * cam,
     }
 
     Plane horizon_plane = CalcHorizonPlane(eye);
-    std::vector<osg::Vec3d> list_ecef;
-    CalcProjFrustumPoly(frustum,horizon_plane,list_ecef);
+
+    // TODO check calcprojfrustumpoly is successful
+    CalcProjFrustumPoly(frustum,horizon_plane,m_list_frustum_ecef);
+
+    m_list_frustum_bounds.clear();
+    m_list_frustum_lla = ConvListECEFToLLA(m_list_frustum_ecef);
     CalcMinGeoBoundsFromLLAPoly(ConvECEFToLLA(eye),
-                                ConvListECEFToLLA(list_ecef),
+                                m_list_frustum_lla,
                                 m_list_frustum_bounds);
+
+    if(m_list_frustum_bounds.empty()) {
+        return;
+    }
+
+    m_frustum_pole = 0;
+    for(auto const &bounds : m_list_frustum_bounds) {
+        if(bounds.maxLat == 90.0) {
+            m_frustum_pole = 1;
+            break;
+        }
+
+        if(bounds.minLat == -90.0) {
+            m_frustum_pole = 2;
+            break;
+        }
+    }
 
 
     // rebuild the tileset with the new view data
@@ -185,11 +193,6 @@ TileSetLL::Tile const * TileSetLLByPixelArea::GetTile(uint64_t tile_id) const
     else {
         return it->second;
     }
-}
-
-GeoBounds const & TileSetLLByPixelArea::GetDebug0() const
-{
-    return m_debug0;
 }
 
 void TileSetLLByPixelArea::buildTileSet(std::unique_ptr<Tile> &tile,
@@ -244,126 +247,197 @@ void TileSetLLByPixelArea::buildTileSetList(std::unique_ptr<Tile> const &tile,
 
 bool TileSetLLByPixelArea::tilePxlAreaExceedsRes(Tile const * tile)
 {
-    static const double k_ndc_to_px =
+//    if(tile->level > 1) {
+//        return false;
+//    }
+
+    double const k_ndc_to_px =
             (m_view_width*m_view_height*0.25);
 
-    // Find the intersection of the tile bounds
-    // and the frustum proj bounds
-    GeoBounds tile_bounds(tile->min_lon,
-                          tile->max_lon,
-                          tile->min_lat,
-                          tile->max_lat);
+    // Use a rough geobounds test to see if the tile
+    // is visible within the view frustum
+    GeoBounds const tile_bounds(tile->min_lon,
+                                tile->max_lon,
+                                tile->min_lat,
+                                tile->max_lat);
 
     uint8_t xsec_count=0;
-    GeoBounds view_b;
-    GeoBounds xsec_bounds;
-    for(auto const &view_bounds : m_list_frustum_bounds) {
+    for(auto const &frustum_bounds : m_list_frustum_bounds) {
         if(CalcGeoBoundsIntersection(tile_bounds,
-                                     view_bounds,
-                                     xsec_bounds)) {
-            view_b = view_bounds;
+                                     frustum_bounds)) {
             xsec_count++;
         }
     }
 
-    assert(xsec_count < 2);
-
     if(xsec_count == 0) {
-        // Tile is not visible in the current view extents
-//        if(tile->level == 1) {
-//            std::cout << (tile->id) << ": (not visible)" << std::endl;
-//        }
+        // The tile isn't visible with the current frustum
         return false;
     }
 
-    // Tile may be visible in the current view extents.
-    // Create eval geometry to calculate pixel area
-    Eval const eval(xsec_bounds,m_mvp,m_opts.min_eval_angle_degs);
-    double ndc_area = calcTileNDCAreaQuad(eval,m_near_plane);
-    double ndc_area_alt = calcTileNDCAreaQuad(eval,m_near_plane_alt);
+    // Transform part of the tile into screen space and
+    // calculate its pixel area.
 
-    if(tile->id == 281474976710656) {
-        m_debug0 = xsec_bounds;
+    // Create the evalution geometry if required
+    if(m_list_tile_eval.size() > m_opts.max_level*2) {
+        // TODO proper metric for clearing this list
+        m_list_tile_eval.clear();
     }
 
-    if(tile->level == 1) {
-//        double area_ratio =
-//                CalcGeoBoundsArea(xsec_bounds)/
-//                CalcGeoBoundsArea(tile_bounds);
+    auto it = m_list_tile_eval.find(tile->id);
+    if(it == m_list_tile_eval.end()) {
+        it = m_list_tile_eval.emplace(
+                    std::pair<uint64_t,Eval>(
+                        tile->id,
+                        Eval(tile_bounds,
+                             m_mvp,
+                             m_opts.min_eval_angle_degs))).first;
+    }
 
-        double px_area = ndc_area * k_ndc_to_px;
-//        double px_area_alt = ndc_area_alt * k_ndc_to_px;
+    // TODO eval can be calculated when the tile is created
+    double ndc_area_quad;
+    double surf_area_quad_m2;
 
-//        std::cout << "#: " << (tile->id)
-//                  << ": px_area: " << px_area
-//                  << ": px_area_alt: " << px_area_alt
+    calcTileNDCArea(it->second,ndc_area_quad,surf_area_quad_m2);
+
+    // Determine the ratio of the full tile area to the
+    // evaluated quads area
+    double area_ratio = CalcGeoBoundsArea(tile_bounds)/surf_area_quad_m2;
+
+    // Return true if the estimated full pixel area of the
+    // tile exceeds m_tile_px_area
+    double px_area_full = ndc_area_quad * k_ndc_to_px * area_ratio;
+
+//        std::cout << "#: level: " << int(tile->level) << ", x: " << tile->x << ", y: " << tile->y
 //                  << ", area_ratio: " << area_ratio
-//                  << std::endl;
+//                  << ", px_area_quad: " << ndc_area_quad*k_ndc_to_px
+//                  << ", px_area_full: " << px_area_full << std::endl;
 
-        if(px_area == 0) {
-//            osg::Vec3d eye,vpt,up;
-//            m_cam->getViewMatrixAsLookAt(eye,vpt,up);
-
-//            double fovy,ar,zn,zf;
-//            m_cam->getProjectionMatrixAsPerspective(fovy,ar,zn,zf);
-
-//            std::cout << "#:\n";
-//            std::cout << "  tile.lon [" << tile_bounds.minLon << "," << tile_bounds.maxLon << "]"
-//                      << ", tile.lat [" << tile_bounds.minLat << "," << tile_bounds.maxLat << "]\n"
-//                      << "  xsec.lon [" << xsec_bounds.minLon << "," << xsec_bounds.maxLon << "]"
-//                      << ", xsec.lat [" << xsec_bounds.minLat << "," << xsec_bounds.maxLat << "]\n"
-//                      << "  view.lon [" << view_b.minLon << "," << view_b.maxLon << "]"
-//                      << ", view.lat [" << view_b.minLat << "," << view_b.maxLat << "]\n";
-
-//            std::cout << "# cam: " << std::endl;
-//            std::cout << "# eye: " << eye << std::endl;
-//            std::cout << "# vpt: " << vpt << std::endl;
-//            std::cout << "# up: " << up << std::endl;
-//            std::cout << "# fovy: " << fovy << std::endl;
-//            std::cout << "# ar: " << ar << std::endl;
-//            std::cout << "# zn: " << zn << std::endl;
-//            std::cout << "# zf: " << zf << std::endl;
-
-//            if(tile->id == 281474976710656) {
-//                m_debug0 = xsec_bounds;
-
-//                m_debug0.minLon = tile->min_lon;
-//                m_debug0.maxLon = tile->max_lon;
-//                m_debug0.minLat = tile->min_lat;
-//                m_debug0.maxLat = tile->max_lat;
-//            }
-        }
-    }
-
-    if(ndc_area > 0) {
-        //
-        double px_area = ndc_area * k_ndc_to_px;
-
-        // determine (tile_bounds_area : xsec_bounds_area)
-        double area_ratio =
-                CalcGeoBoundsArea(xsec_bounds)/
-                CalcGeoBoundsArea(tile_bounds);
-
-        if(px_area > m_tile_px_area*area_ratio) {
-//        if(px_area > m_tile_px_area) {
-            return true;
-        }
-    }
+    return (px_area_full > m_tile_px_area);
 
     return false;
 }
 
+void TileSetLLByPixelArea::calcTileNDCArea(Eval const &eval,
+                                           double &ndc_area,
+                                           double &surf_area_m2) const
+{
+    // Find a quads that are completely visible
+    // (not clipped) and calculate both its pixel
+    // and surface areas
+
+    ndc_area = 0.0;
+    surf_area_m2 = 0.0;
+
+    // For each quad
+    for(size_t i=0; i < eval.list_ix.size(); i+=6) {
+        // Ignore quads that face away from the camera
+        if((eval.list_quad_nx[i/6]*m_view_dirn) >= -0.01) { // TODO experiment adjusting threshold
+            continue;
+        }
+
+        bool bad_tri=false;
+
+        // Try converting first tri to NDC
+        std::vector<osg::Vec3d> const tri0 = {
+            eval.list_vx[eval.list_ix[i+0]],
+            eval.list_vx[eval.list_ix[i+1]],
+            eval.list_vx[eval.list_ix[i+2]]
+        };
+        std::vector<osg::Vec2d> tri0_ndc(3);
+        for(size_t j=0; j < 3; j++) {
+            if(!ConvWorldToNDC(m_mvp,tri0[j],tri0_ndc[j])) {
+                bad_tri=true;
+                break;
+            }
+        }
+        if(bad_tri) {
+            continue;
+        }
+
+        // Try converting second tri to NDC
+        std::vector<osg::Vec3d> const tri1 = {
+            eval.list_vx[eval.list_ix[i+3]],
+            eval.list_vx[eval.list_ix[i+4]],
+            eval.list_vx[eval.list_ix[i+5]]
+        };
+        std::vector<osg::Vec2d> tri1_ndc(3);
+        for(size_t j=0; j < 3; j++) {
+            if(!ConvWorldToNDC(m_mvp,tri1[j],tri1_ndc[j])) {
+                bad_tri=true;
+                break;
+            }
+        }
+        if(bad_tri) {
+            continue;
+        }
+
+        // Add NDC area
+        double tri0_area = CalcTriangleArea(tri0_ndc[0],tri0_ndc[1],tri0_ndc[2]);
+        double tri1_area = CalcTriangleArea(tri1_ndc[0],tri1_ndc[1],tri1_ndc[2]);
+
+        ndc_area += tri0_area;
+        ndc_area += tri1_area;
+
+        // Add surface area
+        std::vector<LLA> const tri0_lla = {
+            eval.list_lla[eval.list_ix[i+0]],
+            eval.list_lla[eval.list_ix[i+1]],
+            eval.list_lla[eval.list_ix[i+2]]
+        };
+
+        // lon range for surface area
+        auto list_lon_ranges = CalcLonRange(tri0_lla);
+        if(list_lon_ranges.size() > 1) {
+            // We might get two ranges due to numerical
+            // precision issues near the antemeridian;
+            // discard the smaller range
+            double range0 =
+                    list_lon_ranges[0].second-
+                    list_lon_ranges[0].first;
+
+            double range1 =
+                    list_lon_ranges[1].second-
+                    list_lon_ranges[1].first;
+
+            if(range0 > range1) {
+                list_lon_ranges.pop_back();
+            }
+            else {
+                list_lon_ranges.erase(list_lon_ranges.begin());
+            }
+        }
+        // lat range for surface area
+        std::pair<double,double> lat_range(90.0,-90.0);
+        for(auto const &lla : tri0_lla) {
+            lat_range.first  = std::min(lat_range.first,lla.lat);
+            lat_range.second = std::max(lat_range.second,lla.lat);
+        }
+
+        GeoBounds const bounds(list_lon_ranges[0].first,
+                               list_lon_ranges[0].second,
+                               lat_range.first,
+                               lat_range.second);
+
+//        std::cout << "####: ndirn: " << (eval.list_quad_nx[i/6]*m_view_dirn) << std::endl;
+//        std::cout << "####: tri0_area: " << tri0_area << ", tri1_area: " << tri1_area << std::endl;
+//        std::cout << "####: bounds.lon [" << bounds.minLon << "," << bounds.maxLon << "]" << std::endl;
+//        std::cout << "####: bounds.lat [" << bounds.minLat << "," << bounds.maxLat << "]" << std::endl;
+//        std::cout << "####: bounds.area: " << CalcGeoBoundsArea(bounds) << std::endl;
+
+        surf_area_m2 += CalcGeoBoundsArea(bounds);
+    }
+}
+
 double TileSetLLByPixelArea::calcTileNDCAreaQuad(Eval const &eval,
-                                                 Plane const &clip_plane) const
+                                                 Plane const &clip_plane,
+                                                 bool cull_hidden_tris) const
 {
     // For each quad
     double area=0.0;
     for(size_t i=0; i < eval.list_ix.size(); i+=6) {
         // If this is a front facing quad
         if((eval.list_quad_nx[i/6]*m_view_dirn) < 0) {
-            //
-
-            //
+            // get the tris that make up this quad
             std::vector<osg::Vec3d> const tri0 = {
                 eval.list_vx[eval.list_ix[i+0]],
                 eval.list_vx[eval.list_ix[i+1]],
@@ -385,31 +459,34 @@ double TileSetLLByPixelArea::calcTileNDCAreaQuad(Eval const &eval,
                 eval.list_ndc[eval.list_ix[i+4]],
                 eval.list_ndc[eval.list_ix[i+5]]
             };
-            //
-
-
-            area += calcTriangleNDCArea(clip_plane,m_mvp,tri0,tri_ndc0);
-            area += calcTriangleNDCArea(clip_plane,m_mvp,tri1,tri_ndc1);
+            if(cull_hidden_tris) {
+                area += calcTriangleNDCAreaVisible(clip_plane,m_mvp,tri0,tri_ndc0);
+                area += calcTriangleNDCAreaVisible(clip_plane,m_mvp,tri1,tri_ndc1);
+            }
+            else {
+                area += calcTriangleNDCAreaFull(clip_plane,m_mvp,tri0,tri_ndc0);
+                area += calcTriangleNDCAreaFull(clip_plane,m_mvp,tri1,tri_ndc1);
+            }
         }
     }
 
     return area;
 }
 
-double TileSetLLByPixelArea::calcTriangleNDCArea(Plane const &clip_plane,
-                                                 osg::Matrixd const &mvp,
-                                                 std::vector<osg::Vec3d> const &tri,
-                                                 std::vector<osg::Vec2d> const &tri_ndc) const
+double TileSetLLByPixelArea::calcTriangleNDCAreaVisible(Plane const &clip_plane,
+                                                        osg::Matrixd const &mvp,
+                                                        std::vector<osg::Vec3d> const &tri,
+                                                        std::vector<osg::Vec2d> const &tri_ndc) const
 {
     bool ok;
     double area=0.0;
 
     // NDC bounding rectangle
     static const std::vector<osg::Vec2d> ndc_rect = {
-        osg::Vec2d(-1,-1),    // bl
-        osg::Vec2d( 1,-1),    // br
-        osg::Vec2d( 1, 1),    // tr
-        osg::Vec2d(-1, 1)     // tl
+        osg::Vec2d(-1.0,-1.0),    // bl
+        osg::Vec2d( 1.0,-1.0),    // br
+        osg::Vec2d( 1.0, 1.0),    // tr
+        osg::Vec2d(-1.0, 1.0)     // tl
     };
 
     std::vector<osg::Vec3d> inside;
@@ -422,15 +499,12 @@ double TileSetLLByPixelArea::calcTriangleNDCArea(Plane const &clip_plane,
                                   outside);
 
     if(result == GeometryResult::CLIP_OUTSIDE) {
-//        std::cout << "clip_out" << std::endl;
         // Completely outside the near plane
         if(CalcTriangleAARectIntersection(tri_ndc,ndc_rect)) {
             area += CalcTriangleArea(tri_ndc[0],tri_ndc[1],tri_ndc[2]);
         }
     }
     else if(result == GeometryResult::CLIP_XSEC) {
-//        std::cout << "clip_xsec" << std::endl;
-
         // Triangle was clipped against the clip plane.
         // Use the outside tri or quad to calculate area
         std::vector<osg::Vec2d> list_ndc;
@@ -453,3 +527,52 @@ double TileSetLLByPixelArea::calcTriangleNDCArea(Plane const &clip_plane,
     return area;
 }
 
+double TileSetLLByPixelArea::calcTriangleNDCAreaFull(Plane const &clip_plane,
+                                                     osg::Matrixd const &mvp,
+                                                     std::vector<osg::Vec3d> const &tri,
+                                                     std::vector<osg::Vec2d> const &tri_ndc) const
+{
+    bool ok;
+    double area=0.0;
+
+    std::vector<osg::Vec3d> inside;
+    std::vector<osg::Vec3d> outside;
+
+    GeometryResult const result =
+            CalcTrianglePlaneClip(tri,
+                                  clip_plane,
+                                  inside,
+                                  outside);
+
+    if(result == GeometryResult::CLIP_OUTSIDE) {
+        // Completely outside the near plane
+        area += CalcTriangleArea(tri_ndc[0],tri_ndc[1],tri_ndc[2]);
+    }
+    else if(result == GeometryResult::CLIP_XSEC) {
+        // Triangle was clipped against the clip plane.
+        // Use the outside tri or quad to calculate area
+        std::vector<osg::Vec2d> list_ndc;
+        for(auto const & vx : outside) {
+            list_ndc.push_back(ConvWorldToNDC(mvp,vx,ok));
+        }
+
+        if(list_ndc.size() > 3) { // outside is a quad
+            area += CalcTriangleArea(list_ndc[0],list_ndc[1],list_ndc[2]);
+            area += CalcTriangleArea(list_ndc[0],list_ndc[2],list_ndc[3]);
+        }
+        else { // outside is a tri
+            area += CalcTriangleArea(list_ndc[0],list_ndc[1],list_ndc[2]);
+        }
+    }
+
+    return area;
+}
+
+
+////            std::cout << "#:\n";
+////            std::cout << "  tile.lon [" << tile_bounds.minLon << "," << tile_bounds.maxLon << "]"
+////                      << ", tile.lat [" << tile_bounds.minLat << "," << tile_bounds.maxLat << "]\n"
+////                      << "  xsec.lon [" << xsec_bounds.minLon << "," << xsec_bounds.maxLon << "]"
+////                      << ", xsec.lat [" << xsec_bounds.minLat << "," << xsec_bounds.maxLat << "]\n"
+////                      << "  view.lon [" << view_b.minLon << "," << view_b.maxLon << "]"
+////                      << ", view.lat [" << view_b.minLat << "," << view_b.maxLat << "]\n";

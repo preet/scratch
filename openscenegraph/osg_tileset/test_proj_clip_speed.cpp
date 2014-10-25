@@ -18,85 +18,51 @@ osg::Vec4 const K_DARK_GRAY = osg::Vec4(0.1,0.1,0.1,1.0);
 osg::Vec4 const K_GRAY = osg::Vec4(0.2,0.2,0.2,1.0);
 osg::Vec4 const K_LIGHT_GRAY = osg::Vec4(0.5,0.5,0.5,1.0);
 
-Plane CalcLonPlane(double lon)
+void CalcTilePlanes(GeoBounds const &tile_bounds,
+                    Plane &plane_min_lon,
+                    Plane &plane_max_lon,
+                    Plane &plane_min_lat,
+                    Plane &plane_max_lat,
+                    Plane &plane_hemisphere)
 {
-    LLA lla_lon;
-    lla_lon.lon = lon;
-    lla_lon.lat = 0.0;
-    lla_lon.alt = 0.0;
+    plane_min_lon = CalcLonPlane(tile_bounds.minLon,true,true);
+    plane_max_lon = CalcLonPlane(tile_bounds.maxLon,false,true);
+    plane_min_lat = CalcLatPlane(tile_bounds.minLat,false);
+    plane_max_lat = CalcLatPlane(tile_bounds.maxLat,true);
 
-    osg::Vec3d ecef_lon = ConvLLAToECEF(lla_lon);
+    // plane_hemisphere is the plane with a normal vector
+    // that points away from mid_lon, with a point at (0,0,0)
 
-    Plane plane_lon;
-    plane_lon.n = ecef_lon^(osg::Vec3d(0.0,0.0,1.0));
-    plane_lon.p = ecef_lon;
-    plane_lon.d = plane_lon.n*plane_lon.p;
+    double mid_lon = (tile_bounds.minLon+tile_bounds.maxLon)*0.5;
+    LLA lla_hs;
+    lla_hs.lon = mid_lon;
+    lla_hs.lat = 0.0;
+    lla_hs.alt = 0.0;
 
-    return plane_lon;
+    plane_hemisphere.p = K_ZERO_VEC;
+    plane_hemisphere.n = K_ZERO_VEC-ConvLLAToECEF(lla_hs);
+    plane_hemisphere.n.normalize();
+    plane_hemisphere.d = plane_hemisphere.n*plane_hemisphere.p;
 }
 
-Plane CalcLatPlane(double lat)
+bool CalcPointWithinTilePlanes(osg::Vec3d const &point,
+                               Plane const &plane_min_lon,
+                               Plane const &plane_max_lon,
+                               Plane const &plane_min_lat,
+                               Plane const &plane_max_lat,
+                               Plane const &plane_hemisphere)
 {
-    LLA lla_lat;
-    lla_lat.lon = 0.0;
-    lla_lat.lat = lat;
-    lla_lat.alt = 0.0;
+    static const double k_eps = 1E-5; // meters
 
-    osg::Vec3d ecef_lat = ConvLLAToECEF(lla_lat);
+    bool outside =
+            (((point-plane_min_lon.p)*plane_min_lon.n) > k_eps) ||
+            (((point-plane_max_lon.p)*plane_max_lon.n) > k_eps) ||
+            (((point-plane_min_lat.p)*plane_min_lat.n) > k_eps) ||
+            (((point-plane_max_lat.p)*plane_max_lat.n) > k_eps);
 
-    Plane plane_lat;
-    plane_lat.n = osg::Vec3d(0.0,0.0,1.0);
-    plane_lat.p = ecef_lat;
-    plane_lat.d = plane_lat.n*plane_lat.p;
-
-    return plane_lat;
+    return (!outside);
 }
 
-size_t CalcPlanePolyIntersection(Plane const &plane,
-                                 std::vector<osg::Vec3d> const &list_poly_vx,
-                                 std::vector<osg::Vec3d> &list_xsec)
-{
-    size_t xsec_count=0;
-
-    for(size_t i=1; i < list_poly_vx.size(); i++) {
-        osg::Vec3d xsec;
-        Intersection xsec_result =
-                CalcLinePlaneIntersection(list_poly_vx[i],
-                                          list_poly_vx[i-1],
-                                          plane,
-                                          xsec);
-
-        if(xsec_result == Intersection::TRUE) {
-            list_xsec.push_back(xsec);
-            xsec_count++;
-        }
-        else if(xsec_result == Intersection::COINCIDENT) {
-            list_xsec.push_back(list_poly_vx[i]);
-            list_xsec.push_back(list_poly_vx[i-1]);
-            xsec_count+=2;
-        }
-    }
-    // last edge
-    size_t i = list_poly_vx.size()-1; // last vx
-    osg::Vec3d xsec;
-    Intersection xsec_result =
-            CalcLinePlaneIntersection(list_poly_vx[0],
-                                      list_poly_vx[i],
-                                      plane,
-                                      xsec);
-
-    if(xsec_result == Intersection::TRUE) {
-        list_xsec.push_back(xsec);
-        xsec_count++;
-    }
-    else if(xsec_result == Intersection::COINCIDENT) {
-        list_xsec.push_back(list_poly_vx[0]);
-        list_xsec.push_back(list_poly_vx[i]);
-        xsec_count+=2;
-    }
-
-    return xsec_count;
-}
 
 bool CalcFrustumTileIntersection(std::vector<LLA> const &list_frustum_lla,
                                  std::vector<osg::Vec3d> const &list_frustum_vx,
@@ -105,190 +71,84 @@ bool CalcFrustumTileIntersection(std::vector<LLA> const &list_frustum_lla,
                                  GeoBounds &xsec_bounds,
                                  std::vector<LLA> &list_xsec_lla)
 {
-//    std::chrono::time_point<std::chrono::system_clock> start, end;
-//    start = std::chrono::system_clock::now();
+    Plane plane_min_lon;
+    Plane plane_max_lon;
+    Plane plane_min_lat;
+    Plane plane_max_lat;
+    Plane plane_hemisphere;
+
+    CalcTilePlanes(tile_bounds,
+                   plane_min_lon,
+                   plane_max_lon,
+                   plane_min_lat,
+                   plane_max_lat,
+                   plane_hemisphere);
+
+//    std::cout << "plane_min_lat 0: " << std::endl
+//              << "min_lat: " << tile_bounds.minLat << std::endl
+//              << "N: " << plane_min_lat.n << std::endl
+//              << "P: " << plane_min_lat.p << std::endl
+//              << "D: " << plane_min_lat.d << std::endl
+//              << std::endl << std::endl;
 
     std::vector<osg::Vec3d> list_xsec;
     list_xsec.reserve(list_frustum_vx.size());
 
-    std::vector<LLA> list_lla;
-    list_lla.reserve(list_frustum_vx.size());
+//    std::cout << "plane_min_lat: 1" << std::endl
+//              << "min_lat: " << tile_bounds.minLat << std::endl
+//              << "N: " << plane_min_lat.n << std::endl
+//              << "P: " << plane_min_lat.p << std::endl
+//              << "D: " << plane_min_lat.d << std::endl
+//              << std::endl << std::endl;
 
-    // Clip the edges of the projected frustum poly against
-    // the planes formed by the edges of the tile
 
-    // tile_bounds.min_lon
-    {
-        Plane plane_lon = CalcLonPlane(tile_bounds.minLon);
-        size_t const xsec_count =
-                CalcPlanePolyIntersection(plane_lon,
-                                          list_frustum_vx,
-                                          list_xsec);
 
-//        // add lla points that are within the tile bounds
-//        for(size_t i=list_xsec.size()-xsec_count;
-//            i < list_xsec.size(); i++)
+//    for(auto const &xsec : list_xsec) {
+//        LLA lla = ConvECEFToLLA(xsec);
+
+//        if(CalcPointWithinTilePlanes(xsec,
+//                                     plane_min_lon,
+//                                     plane_max_lon,
+//                                     plane_min_lat,
+//                                     plane_max_lat,
+//                                     plane_hemisphere))
 //        {
-//            LLA lla = ConvECEFToLLA(list_xsec[i]);
-//            std::cout << "min: was: " << lla.lon << ", set: " << tile_bounds.minLon << std::endl;
-//            lla.lon = tile_bounds.minLon;
-
-
-//            if(CalcWithinGeoBounds(tile_bounds,lla)) {
-//                list_lla.push_back(lla);
-//            }
 //        }
-    }
+//        list_xsec_lla.push_back(lla);
+//    }
 
-    // tile_bounds.max_lon
-    {
-        Plane plane_lon = CalcLonPlane(tile_bounds.maxLon);
-        size_t const xsec_count =
-                CalcPlanePolyIntersection(plane_lon,
-                                          list_frustum_vx,
-                                          list_xsec);
+    CalcPlanePolyIntersection(plane_min_lon,
+                              list_frustum_vx,
+                              list_xsec);
 
-//        std::cout << "#: xsec_count; " << xsec_count << std::endl;
-//        for(size_t i=0; i < list_xsec.size(); i++) {
-//            LLA lla = ConvECEFToLLA(list_xsec[i]);
-//            std::cout << "max: was: " << lla.lon << std::endl;
-//        }
+    CalcPlanePolyIntersection(plane_max_lon,
+                              list_frustum_vx,
+                              list_xsec);
 
-//        // add lla points that are within the tile bounds
-//        for(size_t i=list_xsec.size()-xsec_count;
-//            i < list_xsec.size(); i++)
-//        {
-//            LLA lla = ConvECEFToLLA(list_xsec[i]);
-////            std::cout << "max: was: " << lla.lon << ", set: " << tile_bounds.maxLon << std::endl;
-//            lla.lon = tile_bounds.maxLon;
+    CalcPlanePolyIntersection(plane_max_lat,
+                              list_frustum_vx,
+                              list_xsec);
 
-//            if(CalcWithinGeoBounds(tile_bounds,lla)) {
-//                list_lla.push_back(lla);
-//            }
-//        }
-    }
+    CalcPlanePolyIntersection(plane_min_lat,
+                              list_frustum_vx,
+                              list_xsec);
 
-    // tile_bounds.min_lat
-    {
-        Plane plane_lat = CalcLatPlane(tile_bounds.minLat);
-        size_t const xsec_count =
-                CalcPlanePolyIntersection(plane_lat,
-                                          list_frustum_vx,
-                                          list_xsec);
-
-//        // add lla points that are within the tile bounds
-//        for(size_t i=list_xsec.size()-xsec_count;
-//            i < list_xsec.size(); i++)
-//        {
-//            LLA lla = ConvECEFToLLA(list_xsec[i]);
-//            lla.lat = tile_bounds.minLat;
-
-//            if(CalcWithinGeoBounds(tile_bounds,lla)) {
-//                list_lla.push_back(lla);
-//            }
-//        }
-    }
-
-    // tile_bounds.max_lat
-    {
-        Plane plane_lat = CalcLatPlane(tile_bounds.maxLat);
-        size_t const xsec_count =
-                CalcPlanePolyIntersection(plane_lat,
-                                          list_frustum_vx,
-                                          list_xsec);
-
-//        // add lla points that are within the tile bounds
-//        for(size_t i=list_xsec.size()-xsec_count;
-//            i < list_xsec.size(); i++)
-//        {
-//            LLA lla = ConvECEFToLLA(list_xsec[i]);
-//            lla.lat = tile_bounds.maxLat;
-
-//            if(CalcWithinGeoBounds(tile_bounds,lla)) {
-//                list_lla.push_back(lla);
-//            }
-//        }
-    }
 
     // Add xsec points that fall within tile_bounds
     for(auto const &xsec : list_xsec) {
         LLA lla = ConvECEFToLLA(xsec);
-        if(CalcWithinGeoBounds(tile_bounds,lla)) {
-            list_lla.push_back(lla);
+
+        if(CalcPointWithinTilePlanes(xsec,
+                                     plane_min_lon,
+                                     plane_max_lon,
+                                     plane_min_lat,
+                                     plane_max_lat,
+                                     plane_hemisphere))
+        {
+            list_xsec_lla.push_back(lla);
         }
     }
 
-    // Add frustum points that fall within tile_bounds
-    for(auto const &lla : list_frustum_lla) {
-        if(CalcWithinGeoBounds(tile_bounds,lla)) {
-            list_lla.push_back(lla);
-        }
-    }
-
-    // Calculate min bounds for xsec and frustum lla
-    if(list_lla.size() < 2) {
-        return false;
-    }
-
-    auto list_lon_ranges = CalcLonRange(list_lla);
-    if(list_lon_ranges.size() > 1) {
-        // We might get two ranges due to numerical
-        // precision issues near the antemeridian;
-        // discard the smaller range
-
-        double range0 =
-                list_lon_ranges[0].second-
-                list_lon_ranges[0].first;
-
-        double range1 =
-                list_lon_ranges[1].second-
-                list_lon_ranges[1].first;
-
-        if(range0 > range1) {
-            list_lon_ranges.pop_back();
-        }
-        else {
-            list_lon_ranges.erase(list_lon_ranges.begin());
-        }
-    }
-
-    // Frustum pole:
-    // 0 - frustum doesn't contain a pole
-    // 1 - frustum contains the north pole
-    // 2 - frustum contains the south pole
-    std::pair<double,double> lat_range;
-    lat_range.first = 90.0;
-    lat_range.second = -90.0;
-
-    for(auto const &lla : list_lla) {
-        lat_range.first = std::min(lat_range.first,lla.lat);
-        lat_range.second = std::max(lat_range.second,lla.lat);
-    }
-
-    if(frustum_pole == 1) {
-        lat_range.second = 90.0;
-    }
-    else if(frustum_pole == 2) {
-        lat_range.first = -90.0;
-    }
-
-    xsec_bounds.minLon = list_lon_ranges[0].first;
-    xsec_bounds.maxLon = list_lon_ranges[0].second;
-    xsec_bounds.minLat = lat_range.first;
-    xsec_bounds.maxLat = lat_range.second;
-
-//    end = std::chrono::system_clock::now();
-//    std::chrono::duration<double> elapsed_seconds = end-start;
-//    std::cout << "// took: " << elapsed_seconds.count()*1000.0 << " ms" << std::endl;
-
-//    std::cout << "xsec_bounds: ["
-//              << xsec_bounds.minLon << ","
-//              << xsec_bounds.maxLon << ","
-//              << xsec_bounds.minLat << "],["
-//              << xsec_bounds.maxLat << "]"
-//              << std::endl;
-
-    list_xsec_lla = list_lla;
 
     return true;
 }
@@ -423,7 +283,7 @@ int main()
     gp_root1->addChild(gp_axes);
 
     // tile
-    GeoBounds tile_bounds(-180,0,-90,0);
+    GeoBounds tile_bounds(-40,0,40,60);
     auto gp_tile = BuildGeoBoundsNode(
                 "tile",tile_bounds,K_RBLUE);
     gp_root0->addChild(gp_tile);
@@ -480,28 +340,28 @@ int main()
 
     std::cout << "[starting render loop...]" << std::endl;
 
-    LLA lla0; lla0.lon = -170.0; lla0.lat = 20; lla0.alt = 0;
-    LLA lla1; lla1.lon = -170.0; lla1.lat = 30; lla1.alt = 0;
-    LLA lla2; lla2.lon = 180.0; lla2.lat = 30; lla2.alt = 0;
-    LLA lla3; lla3.lon = 180.0; lla3.lat = 20; lla3.alt = 0;
-    LLA lla4; lla4.lon = 180.0; lla4.lat = 90; lla4.alt = 0;
+//    LLA lla0; lla0.lon = -170.0; lla0.lat = 20; lla0.alt = 0;
+//    LLA lla1; lla1.lon = -170.0; lla1.lat = 30; lla1.alt = 0;
+//    LLA lla2; lla2.lon = 180.0; lla2.lat = 30; lla2.alt = 0;
+//    LLA lla3; lla3.lon = 180.0; lla3.lat = 20; lla3.alt = 0;
+//    LLA lla4; lla4.lon = 180.0; lla4.lat = 90; lla4.alt = 0;
 
-    std::vector<LLA> list_test_lla;
-    list_test_lla.push_back(lla0);
-    list_test_lla.push_back(lla1);
-    list_test_lla.push_back(lla2);
-    list_test_lla.push_back(lla3);
-    list_test_lla.push_back(lla4);
+//    std::vector<LLA> list_test_lla;
+//    list_test_lla.push_back(lla0);
+//    list_test_lla.push_back(lla1);
+//    list_test_lla.push_back(lla2);
+//    list_test_lla.push_back(lla3);
+//    list_test_lla.push_back(lla4);
 
-    std::vector<GeoBounds> list_test_bounds;
-    CalcMinGeoBoundsFromLLAPoly(ConvECEFToLLA(osg::Vec3d(RAD_AV*1.5,0,0)),
-                                list_test_lla,
-                                list_test_bounds);
+//    std::vector<GeoBounds> list_test_bounds;
+//    CalcMinGeoBoundsFromLLAPoly(ConvECEFToLLA(osg::Vec3d(RAD_AV*1.5,0,0)),
+//                                list_test_lla,
+//                                list_test_bounds);
 
-    for(auto const &test_bounds : list_test_bounds) {
-        std::cout << "lon: [" << test_bounds.minLon << ", " << test_bounds.maxLon << "] "
-                  << "lat: [" << test_bounds.minLat << ", " << test_bounds.maxLat << std::endl;
-    }
+//    for(auto const &test_bounds : list_test_bounds) {
+//        std::cout << "lon: [" << test_bounds.minLon << ", " << test_bounds.maxLon << "] "
+//                  << "lat: [" << test_bounds.minLat << ", " << test_bounds.maxLat << std::endl;
+//    }
 
     while(!viewer.done())
     {
@@ -621,11 +481,20 @@ int main()
                                        poly_xsec_bounds,
                                        list_xsec_lla))
         {
-            auto gp_polyxsecbounds =
-                    BuildGeoBoundsNode("0",
-                                       poly_xsec_bounds,
-                                       K_YELLOW);
-            new_polyxsecbounds->addChild(gp_polyxsecbounds);
+//            std::cout << "#: 3.1: " << std::endl;
+//            std::cout << "  tile.lon [" << poly_xsec_bounds.minLon
+//                      << "," << poly_xsec_bounds.maxLon << "]"
+//                      << ", tile.lat [" << poly_xsec_bounds.minLat
+//                      << "," << poly_xsec_bounds.maxLat << "]" << std::endl;
+
+
+
+//            auto gp_polyxsecbounds =
+//                    BuildGeoBoundsNode("0",
+//                                       poly_xsec_bounds,
+//                                       K_YELLOW);
+
+//            new_polyxsecbounds->addChild(gp_polyxsecbounds);
         }
 
         for(auto const &xsec_lla : list_xsec_lla) {
@@ -645,7 +514,6 @@ int main()
 //        for(auto const &bb : list_frustum_bounds) {
 //            std::cout << "range bb: " << bb.minLon << "," << bb.maxLon << std::endl;
 //        }
-
 
         // Update gp_root0
         for(size_t i=0; i < gp_root0->getNumChildren(); i++)

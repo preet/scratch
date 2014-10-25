@@ -63,7 +63,7 @@ int main()
         osgViewer::View* view = new osgViewer::View;
         viewer.addView( view );
 
-        view->setUpViewInWindow( 10, 10, 640, 480 );
+        view->setUpViewInWindow( 1920-640-20, 10, 640, 480 );
         view->setSceneData( gp_root0.get() );
 
         // setup initial camera
@@ -82,7 +82,7 @@ int main()
         osgViewer::View* view = new osgViewer::View;
         viewer.addView( view );
 
-        view->setUpViewInWindow( 650, 10, 640, 480 );
+        view->setUpViewInWindow( 1920-640-20, 10+600, 640, 480 );
         view->setSceneData( gp_root1.get() );
         view->getCamera()->setClearColor(osg::Vec4(0.1,0.1,0.1,1.0));
 
@@ -139,6 +139,7 @@ int main()
             GeoBounds const &b=list_b[i];
             gp_poly->addChild(BuildGeoBoundsNode("-",b,osg::Vec4(1,1,1,1)));
         }
+        gp_poly->addChild(BuildSurfacePolyNode("fsp",list_ecef,osg::Vec4(1,1,1,1)));
 
 
         // Update gp_root0

@@ -35,7 +35,7 @@ public:
             fix_level(1),
             preload_eval_level(2),
             max_adj_offset_dist2_m(1000000.0*1000000.0),
-            min_eval_angle_degs(360.0/16.0)
+            min_eval_angle_degs(360.0/32.0)
 
         {}
 
@@ -63,7 +63,9 @@ public:
 
     Tile const * GetTile(uint64_t tile_id) const;
 
-    GeoBounds const & GetDebug0() const;
+    // debug
+    GeoBounds m_debug0;
+    GeoBounds m_debug1;
 
 private:
 
@@ -76,9 +78,9 @@ private:
         // Evaluation geometry
         // * to approximate pixel area taken up by tile
         std::vector<osg::Vec3d> list_vx;
+        std::vector<LLA>        list_lla;
         std::vector<osg::Vec2d> list_ndc;
         std::vector<uint16_t>   list_ix;
-        std::vector<osg::Vec3d> list_tri_nx;
         std::vector<osg::Vec3d> list_quad_nx;
     };
 
@@ -89,12 +91,38 @@ private:
                           std::map<uint64_t,Tile const *> &list_tiles);
 
     bool tilePxlAreaExceedsRes(Tile const * tile);
+
+    // * calculates the NDC area of a tile for quads
+    //   that are visible and in front of the near plane
+    // * uses quads (ie, two triangles at once) to avoid
+    //   asymmetry issues
+    void calcTileNDCArea(Eval const &eval,
+                         double &ndc_area,
+                         double &surf_area_m2) const;
+
+    // UNUSED
+    // * calculate the NDC area of every quad in the tile
     double calcTileNDCAreaQuad(Eval const &eval,
-                               Plane const &clip_plane) const;
-    double calcTriangleNDCArea(Plane const &clip_plane,
-                               osg::Matrixd const &mvp,
-                               std::vector<osg::Vec3d> const &tri,
-                               std::vector<osg::Vec2d> const &tri_ndc) const;
+                               Plane const &clip_plane,
+                               bool cull_hidden_tris=true) const;
+
+    // UNUSED
+    // * calculate the NDC area of a single triangle
+    // * tiles outside the NDC rectangle will be ignored
+    // * tris will be clipped against clip_plane
+    double calcTriangleNDCAreaVisible(Plane const &clip_plane,
+                                      osg::Matrixd const &mvp,
+                                      std::vector<osg::Vec3d> const &tri,
+                                      std::vector<osg::Vec2d> const &tri_ndc) const;
+
+    // UNUSED
+    // * calculate the NDC area of a single triangle
+    // * tiles outside the NDC rectangle will be included
+    // * will be clipped against clip_plane
+    double calcTriangleNDCAreaFull(Plane const &clip_plane,
+                                   osg::Matrixd const &mvp,
+                                   std::vector<osg::Vec3d> const &tri,
+                                   std::vector<osg::Vec2d> const &tri_ndc) const;
 
     // options
     Options const m_opts;
@@ -107,16 +135,20 @@ private:
     osg::Matrixd m_mvp;
     osg::Vec3d m_view_dirn;
     Plane m_near_plane;
-    Plane m_near_plane_alt;
+
+    std::vector<osg::Vec3d> m_list_frustum_ecef;
+    std::vector<LLA> m_list_frustum_lla;
     std::vector<GeoBounds> m_list_frustum_bounds;
+    uint8_t m_frustum_pole;
 
     // tiles
     std::vector<std::unique_ptr<Tile>> m_list_root_tiles;
     std::map<uint64_t,Tile const *> m_list_tileset;
     size_t m_tile_count;
 
-    // debug
-    GeoBounds m_debug0;
+    // clear list when full
+    std::map<uint64_t,Eval> m_list_tile_eval;
+
 };
 
 #endif // SCRATCH_TILESET_LL_BYPIXELAREA_H

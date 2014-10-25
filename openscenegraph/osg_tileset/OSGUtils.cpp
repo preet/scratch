@@ -543,6 +543,17 @@ osg::ref_ptr<osg::Group> BuildGeoBoundsNode(std::string const &name,
                                             osg::Vec4 const &color,
                                             double min_angle)
 {
+    static const double k_eps = 1E-8;
+
+    double const lon_delta = b.maxLon-b.minLon;
+    double const lat_delta = b.maxLat-b.minLat;
+    if((lon_delta < k_eps) ||
+       (lat_delta < k_eps)) {
+        osg::ref_ptr<osg::Group> gp = new osg::Group;
+        gp->setName(name);
+        return gp;
+    }
+
     double const lon_div = (b.maxLon - b.minLon)/min_angle;
     double const lat_div = (b.maxLat - b.minLat)/min_angle;
 
