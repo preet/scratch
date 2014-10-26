@@ -1,29 +1,85 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <cassert>
 
 #include <OSGUtils.h>
 #include <TileSetLLByPixelArea.h>
 #include <DataSetTilesLL.h>
 #include <osg/MatrixTransform>
 
+osg::Vec4 const K_CYAN = osg::Vec4(0,1,1,1);
+osg::Vec4 const K_MAGENTA = osg::Vec4(1,0,1,1);
+osg::Vec4 const K_YELLOW = osg::Vec4(1,1,0,1);
 osg::Vec4 const K_BLUE = osg::Vec4(0,0,1,1);
 osg::Vec4 const K_GREEN = osg::Vec4(0,1,0,1);
 osg::Vec4 const K_RED = osg::Vec4(1,0,0,1);
 osg::Vec4 const K_RBLUE = osg::Vec4(0,0.35,0.75,1.0);
 osg::Vec4 const K_RGREEN = osg::Vec4(0.18,0.71,0.227,1.0);
-osg::Vec4 const K_YELLOW = osg::Vec4(1,1,0,1);
-osg::Vec4 const K_WHITE = osg::Vec4(1,1,1,1);
 osg::Vec4 const K_DARK_GRAY = osg::Vec4(0.1,0.1,0.1,1.0);
 osg::Vec4 const K_GRAY = osg::Vec4(0.2,0.2,0.2,1.0);
 osg::Vec4 const K_LIGHT_GRAY = osg::Vec4(0.5,0.5,0.5,1.0);
+osg::Vec4 const K_WHITE = osg::Vec4(1.0,1.0,1.0,1.0);
 
-void CalcTilePlanes(GeoBounds const &tile_bounds,
-                    Plane &plane_min_lon,
-                    Plane &plane_max_lon,
-                    Plane &plane_min_lat,
-                    Plane &plane_max_lat,
-                    Plane &plane_hemisphere)
+osg::ref_ptr<osg::Group> BuildFrustumProjAsTrisNode(std::string const &name,
+                                                    std::vector<osg::Vec3d> const &list_frustum_vx)
+{
+    if(list_frustum_vx.size() != 8) {
+        osg::ref_ptr<osg::Group> gp = new osg::Group;
+        return gp;
+    }
+
+    // 0,1,7
+    static const std::vector<uint16_t> list_ix = {
+        0,1,7,
+        1,2,3,
+        3,4,5,
+        5,6,7,
+        5,7,1,
+        5,1,3
+    };
+
+    static const std::vector<osg::Vec4> list_cx = {
+        K_RED,K_RED,K_RED,
+        K_GREEN,K_GREEN,K_GREEN,
+        K_BLUE,K_BLUE,K_BLUE,
+        K_CYAN,K_CYAN,K_CYAN,
+        K_MAGENTA,K_MAGENTA,K_MAGENTA,
+        K_YELLOW,K_YELLOW,K_YELLOW,
+    };
+
+    osg::ref_ptr<osg::Vec3dArray> vx_array =
+            new osg::Vec3dArray;
+    for(auto const &ix : list_ix) {
+        vx_array->push_back(list_frustum_vx[ix]);
+    }
+
+    osg::ref_ptr<osg::Vec4Array> cx_array =
+            new osg::Vec4Array;
+    for(auto const &cx : list_cx) {
+        cx_array->push_back(cx);
+    }
+
+    osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+    gm->setVertexArray(vx_array);
+    gm->setColorArray(cx_array,osg::Array::BIND_PER_VERTEX);
+    gm->addPrimitiveSet(new osg::DrawArrays(GL_TRIANGLES,0,vx_array->size()));
+
+    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+    gd->addDrawable(gm);
+
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->addChild(gd);
+    gp->setName(name);
+
+    return gp;
+}
+
+inline void CalcTilePlanes(GeoBounds const &tile_bounds,
+                           Plane &plane_min_lon,
+                           Plane &plane_max_lon,
+                           Plane &plane_min_lat,
+                           Plane &plane_max_lat)
 {
     plane_min_lon = CalcLonPlane(tile_bounds.minLon,true,true);
     plane_max_lon = CalcLonPlane(tile_bounds.maxLon,false,true);
@@ -38,19 +94,13 @@ void CalcTilePlanes(GeoBounds const &tile_bounds,
     lla_hs.lon = mid_lon;
     lla_hs.lat = 0.0;
     lla_hs.alt = 0.0;
-
-    plane_hemisphere.p = K_ZERO_VEC;
-    plane_hemisphere.n = K_ZERO_VEC-ConvLLAToECEF(lla_hs);
-    plane_hemisphere.n.normalize();
-    plane_hemisphere.d = plane_hemisphere.n*plane_hemisphere.p;
 }
 
-bool CalcPointWithinTilePlanes(osg::Vec3d const &point,
-                               Plane const &plane_min_lon,
-                               Plane const &plane_max_lon,
-                               Plane const &plane_min_lat,
-                               Plane const &plane_max_lat,
-                               Plane const &plane_hemisphere)
+inline bool CalcPointWithinTilePlanes(osg::Vec3d const &point,
+                                      Plane const &plane_min_lon,
+                                      Plane const &plane_max_lon,
+                                      Plane const &plane_min_lat,
+                                      Plane const &plane_max_lat)
 {
     static const double k_eps = 1E-5; // meters
 
@@ -63,206 +113,343 @@ bool CalcPointWithinTilePlanes(osg::Vec3d const &point,
     return (!outside);
 }
 
-
-bool CalcFrustumTileIntersection(std::vector<LLA> const &list_frustum_lla,
-                                 std::vector<osg::Vec3d> const &list_frustum_vx,
-                                 uint8_t const frustum_pole,
-                                 GeoBounds const &tile_bounds,
-                                 GeoBounds &xsec_bounds,
-                                 std::vector<LLA> &list_xsec_lla)
+// expect tris in CCW order -- normals are facing outward
+std::vector<Plane>
+CalcFrustumPolyTriPlanes(std::vector<osg::Vec3d> const &list_frustum_vx,
+                         bool normalize)
 {
+
+    static const std::vector<uint16_t> list_ix = {
+        0,1,7,
+        1,2,3,
+        3,4,5,
+        5,6,7,
+        5,7,1,
+        5,1,3
+    };
+
+    std::vector<Plane> list_tri_planes;
+    list_tri_planes.reserve(18);
+
+    for(size_t i=0; i < list_ix.size(); i+=3) {
+        // Each plane is the plane that goes through
+        // the points of a triangle edge, and (0,0,0)
+        // since each edge represents a great arc
+
+        osg::Vec3d const &v0 = list_frustum_vx[list_ix[i+0]];
+        osg::Vec3d const &v1 = list_frustum_vx[list_ix[i+1]];
+        osg::Vec3d const &v2 = list_frustum_vx[list_ix[i+2]];
+
+        Plane plane0;
+        plane0.n = (v1-v0)^v0;
+        if(normalize) {
+            plane0.n.normalize();
+        }
+        plane0.p = v0;
+        plane0.d = plane0.n*plane0.p;
+
+        Plane plane1;
+        plane1.n = (v2-v1)^v1;
+        if(normalize) {
+            plane1.n.normalize();
+        }
+        plane1.p = v1;
+        plane1.d = plane1.n*plane1.p;
+
+        Plane plane2;
+        plane2.n = (v0-v2)^v2;
+        if(normalize) {
+            plane2.n.normalize();
+        }
+        plane2.p = v2;
+        plane2.d = plane2.n*plane2.p;
+
+        list_tri_planes.push_back(plane0);
+        list_tri_planes.push_back(plane1);
+        list_tri_planes.push_back(plane2);
+    }
+
+    return list_tri_planes;
+}
+
+std::vector<Plane>
+CalcFrustumEdgePlanes(std::vector<osg::Vec3d> const &list_frustum_vx,
+                      bool normalize)
+{
+    std::vector<Plane> list_edge_planes;
+    list_edge_planes.reserve(list_frustum_vx.size());
+
+    for(size_t i=1; i < list_frustum_vx.size(); i++) {
+        // Each plane is the plane that goes through
+        // the points of a single edge, and (0,0,0)
+        // since each edge represents a great arc
+        osg::Vec3d const &v0 = list_frustum_vx[i-1];
+        osg::Vec3d const &v1 = list_frustum_vx[i-0];
+
+        // Normal faces outward
+        Plane plane0;
+        plane0.n = (v1-v0)^v0;
+        if(normalize) {
+            plane0.n.normalize();
+        }
+        plane0.p = v0;
+        plane0.d = plane0.n*plane0.p;
+
+        list_edge_planes.push_back(plane0);
+    }
+
+    return list_edge_planes;
+}
+
+bool CalcFrustumTileIntersection(std::vector<osg::Vec3d> const &list_frustum_vx,
+                                 std::vector<GeoBounds> const &list_frustum_bounds,
+                                 std::vector<Plane> const &list_frustum_tri_planes,
+                                 GeoBounds const &tile_bounds)
+{
+    // TODO determine a good tolerance (this is in meters)
+    static const double k_eps = 0.0;
+
+    if(list_frustum_vx.size() != 8) {
+        return false;
+    }
+
+    // Three tests:
+    // 0. GeoBounds intersection
+    //  * if the geobounds of the frustum poly and tile
+    //    do not intersect, there is no intersection
+
+    bool xsec = false;
+    GeoBounds xsec_bounds;
+    for(auto const &frustum_bounds : list_frustum_bounds) {
+        if(CalcGeoBoundsIntersection(frustum_bounds,
+                                     tile_bounds,
+                                     xsec_bounds))
+        {
+            if(xsec_bounds == frustum_bounds) {
+                // Frustum poly is within the tile
+                std::cout << "#: XSEC TYPE 1" << std::endl;
+                return true;
+            }
+
+            xsec = true;
+            break;
+        }
+    }
+
+    if(!xsec) {
+        return false;
+    }
+
+    // Check to see if the frustum poly edges intersect
+    // with any tile planes
+
+    // TODO tile planes should be part of a cached
+    //      Eval structure
     Plane plane_min_lon;
     Plane plane_max_lon;
     Plane plane_min_lat;
     Plane plane_max_lat;
-    Plane plane_hemisphere;
-
     CalcTilePlanes(tile_bounds,
                    plane_min_lon,
                    plane_max_lon,
                    plane_min_lat,
-                   plane_max_lat,
-                   plane_hemisphere);
+                   plane_max_lat);
 
-//    std::cout << "plane_min_lat 0: " << std::endl
-//              << "min_lat: " << tile_bounds.minLat << std::endl
-//              << "N: " << plane_min_lat.n << std::endl
-//              << "P: " << plane_min_lat.p << std::endl
-//              << "D: " << plane_min_lat.d << std::endl
-//              << std::endl << std::endl;
-
-    std::vector<osg::Vec3d> list_xsec;
+    size_t xsec_count;
+    std::vector<osg::Vec3d> list_xsec,list_xsec_min_lon;
     list_xsec.reserve(list_frustum_vx.size());
 
-//    std::cout << "plane_min_lat: 1" << std::endl
-//              << "min_lat: " << tile_bounds.minLat << std::endl
-//              << "N: " << plane_min_lat.n << std::endl
-//              << "P: " << plane_min_lat.p << std::endl
-//              << "D: " << plane_min_lat.d << std::endl
-//              << std::endl << std::endl;
+    // TODO:
+    // Would it be faster to compute intersections
+    // against all the tile edge planes everytime?
 
+    // min_lon
+    {
+        xsec_count = CalcPlanePolyIntersection(plane_min_lon,
+                                               list_frustum_vx,
+                                               list_xsec);
+        for(size_t i=0; i < xsec_count; i++) {
+            if(CalcPointWithinTilePlanes(list_xsec[list_xsec.size()-1-i],
+                                         plane_min_lon,
+                                         plane_max_lon,
+                                         plane_min_lat,
+                                         plane_max_lat)) {
+                std::cout << "#: XSEC TYPE 2" << std::endl;
+                return true;
+            }
+        }
 
+        // Save the xsec points for the next test if required
+        list_xsec_min_lon = list_xsec;
+    }
 
-//    for(auto const &xsec : list_xsec) {
-//        LLA lla = ConvECEFToLLA(xsec);
+    // max_lon
+    {
+        xsec_count = CalcPlanePolyIntersection(plane_max_lon,
+                                               list_frustum_vx,
+                                               list_xsec);
 
-//        if(CalcPointWithinTilePlanes(xsec,
-//                                     plane_min_lon,
-//                                     plane_max_lon,
-//                                     plane_min_lat,
-//                                     plane_max_lat,
-//                                     plane_hemisphere))
-//        {
+        for(size_t i=0; i < xsec_count; i++) {
+            if(CalcPointWithinTilePlanes(list_xsec[list_xsec.size()-1-i],
+                                         plane_min_lon,
+                                         plane_max_lon,
+                                         plane_min_lat,
+                                         plane_max_lat)) {
+                std::cout << "#: XSEC TYPE 2" << std::endl;
+                return true;
+            }
+        }
+    }
+
+    // max_lat
+    {
+        xsec_count = CalcPlanePolyIntersection(plane_min_lat,
+                                               list_frustum_vx,
+                                               list_xsec);
+
+        for(size_t i=0; i < xsec_count; i++) {
+            if(CalcPointWithinTilePlanes(list_xsec[list_xsec.size()-1-i],
+                                         plane_min_lon,
+                                         plane_max_lon,
+                                         plane_min_lat,
+                                         plane_max_lat)) {
+                std::cout << "#: XSEC TYPE 2" << std::endl;
+                return true;
+            }
+        }
+    }
+
+    // min_lat
+    {
+        xsec_count = CalcPlanePolyIntersection(plane_max_lat,
+                                               list_frustum_vx,
+                                               list_xsec);
+
+        for(size_t i=0; i < xsec_count; i++) {
+            if(CalcPointWithinTilePlanes(list_xsec[list_xsec.size()-1-i],
+                                         plane_min_lon,
+                                         plane_max_lon,
+                                         plane_min_lat,
+                                         plane_max_lat)) {
+                std::cout << "#: XSEC TYPE 2" << std::endl;
+                return true;
+            }
+        }
+    }
+
+    // Check to see if the frustum poly completely
+    // contains the tile (the previous test verified
+    // the the tile isn't partially contained)
+
+    // We have two ways to do this:
+
+    // 1. Test a single point using point-in-poly with
+    //    a longitude line instead of a ray
+
+    // 2. Test the triangulated frustum poly's triangle
+    //    edge planes to see if they contain a point
+
+    // 1 seems more error prone. 2 is easier to implement.
+    // Both seem to be working ok, keeping 1 for reference
+    // even though 2 is being used
+
+    // == 1 == //
+
+//    if((list_frustum_bounds[0].minLat == -90.0) &&
+//       (list_frustum_bounds[0].maxLat == 90.0))
+//    {
+//        // If the lat range is -90 to 90, we cant do the
+//        // test; assume tile is within the frustum poly
+//        std::cout << "#: XSEC TYPE 3_FULL_LAT_RANGE";
+//        return true;
+//    }
+
+//    // min_lon's hemisphere plane
+//    Plane plane_hs;
+//    plane_hs.n = ConvLLAToECEF(LLA(tile_bounds.minLon,0.0,0.0));
+//    plane_hs.n.normalize();
+//    plane_hs.p = K_ZERO_VEC;
+//    plane_hs.d = plane_hs.n*plane_hs.p;
+
+//    if(list_frustum_bounds[0].minLat > -90.0) {
+//        // Get the number of intersections from
+//        // -90 to tile.min_lat
+//        size_t xsec_crossings=0;
+//        for(auto const &xsec : list_xsec_min_lon) {
+//            // The xsec is a crossing if it is in front of
+//            // min_lon's hemisphere and below the min_lat plane
+//            bool valid_crossing =
+//                    (((xsec-plane_hs.p)*plane_hs.n) >= 0) &&
+//                    (((xsec-plane_min_lat.p)*plane_min_lat.n) > 0);
+
+//            if(valid_crossing) {
+//                xsec_crossings++;
+//            }
 //        }
-//        list_xsec_lla.push_back(lla);
+//        // An odd num of crossings means the point
+//        // is inside the poly
+//        if(!(xsec_crossings%2 == 0)) {
+//            std::cout << "#: XSEC TYPE 3_1" << std::endl;
+//            return true;
+//        }
+//    }
+//    else {
+//        // Get the number of intersections from
+//        // +90 to tile.max_lat
+//        size_t xsec_crossings=0;
+//        for(auto const &xsec : list_xsec_min_lon) {
+//            // The xsec is a crossing if it is in front of
+//            // min_lon's hemisphere and above the max_lat plane
+//            bool valid_crossing =
+//                    (((xsec-plane_hs.p)*plane_hs.n) >= 0) &&
+//                    (((xsec-plane_max_lat.p)*plane_max_lat.n) > 0);
+
+//            if(valid_crossing) {
+//                xsec_crossings++;
+//            }
+//        }
+//        // An odd num of crossings means the point
+//        // is inside the poly
+//        if(!(xsec_crossings%2 == 0)) {
+//            std::cout << "#: XSEC TYPE 3_2" << std::endl;
+//            return true;
+//        }
 //    }
 
-    CalcPlanePolyIntersection(plane_min_lon,
-                              list_frustum_vx,
-                              list_xsec);
+    // == 2 == //
 
-    CalcPlanePolyIntersection(plane_max_lon,
-                              list_frustum_vx,
-                              list_xsec);
+    // Check to see if any of the triangle regions of
+    // the frustum poly contains a point from the tile
+    {
+        // Test point from tile
+        osg::Vec3d const ecef = ConvLLAToECEF(
+                    LLA((tile_bounds.minLon+tile_bounds.maxLon)*0.5,
+                        (tile_bounds.minLat+tile_bounds.maxLat)*0.5));
 
-    CalcPlanePolyIntersection(plane_max_lat,
-                              list_frustum_vx,
-                              list_xsec);
+        for(size_t i=0; i < list_frustum_tri_planes.size(); i+=3) {
+            Plane const &plane0 = list_frustum_tri_planes[i+0];
+            Plane const &plane1 = list_frustum_tri_planes[i+1];
+            Plane const &plane2 = list_frustum_tri_planes[i+2];
 
-    CalcPlanePolyIntersection(plane_min_lat,
-                              list_frustum_vx,
-                              list_xsec);
+            bool outside =
+                    ((ecef-plane0.p)*plane0.n > k_eps) ||
+                    ((ecef-plane1.p)*plane1.n > k_eps) ||
+                    ((ecef-plane2.p)*plane2.n > k_eps);
 
-
-    // Add xsec points that fall within tile_bounds
-    for(auto const &xsec : list_xsec) {
-        LLA lla = ConvECEFToLLA(xsec);
-
-        if(CalcPointWithinTilePlanes(xsec,
-                                     plane_min_lon,
-                                     plane_max_lon,
-                                     plane_min_lat,
-                                     plane_max_lat,
-                                     plane_hemisphere))
-        {
-            list_xsec_lla.push_back(lla);
+            if(!outside) {
+                std::cout << "#: XSEC_TYPE 3_" << i/3 << std::endl;
+                return true;
+            }
         }
     }
 
-
-    return true;
-}
-
-bool CalcFrustumXsecBounds(std::vector<LLA> const &list_frustum_lla,
-                           std::vector<osg::Vec3d> const &list_frustum_vx,
-                           GeoBounds const &tile_bounds,
-                           std::vector<osg::Vec3d> &list_xsec,
-                           GeoBounds &xsec_bounds)
-{
-    list_xsec.clear();
-    list_xsec.reserve(list_frustum_vx.size());
-
-    std::vector<LLA> list_xsec_lla;
-
-    // Calculate xsec points with each plane
-    // of tile_bounds
-
-    // tile_bounds.min_lon
-    {
-        Plane plane_lon = CalcLonPlane(tile_bounds.minLon);
-        CalcPlanePolyIntersection(plane_lon,
-                                  list_frustum_vx,
-                                  list_xsec);
-    }
-
-    // tile_bounds.max_lon
-    {
-        Plane plane_lon = CalcLonPlane(tile_bounds.maxLon);
-        CalcPlanePolyIntersection(plane_lon,
-                                  list_frustum_vx,
-                                  list_xsec);
-    }
-
-    // tile_bounds.min_lon
-    {
-        Plane plane_lat = CalcLatPlane(tile_bounds.minLat);
-        CalcPlanePolyIntersection(plane_lat,
-                                  list_frustum_vx,
-                                  list_xsec);
-    }
-
-    // tile_bounds.min_lon
-    {
-        Plane plane_lat = CalcLatPlane(tile_bounds.maxLat);
-        CalcPlanePolyIntersection(plane_lat,
-                                  list_frustum_vx,
-                                  list_xsec);
-    }
-
-    //
-    LLA lla_front;
-    lla_front.lon = (tile_bounds.minLon+tile_bounds.maxLon)*0.5;
-    lla_front.lat = 0;
-    lla_front.alt = 0;
-
-    Plane plane_front;
-    plane_front.n = ConvLLAToECEF(lla_front);
-    plane_front.p = osg::Vec3d(0,0,0);
-    plane_front.d = plane_front.n*plane_front.p;
-
-    // Calculate xsec_bounds
-    // We don't have to use CalcMinGeoBounds because
-    // the points are guaranteed to be within tile_bounds
-    // and a max,min bounds should suffice
-    uint8_t lla_in_bounds=0;
-    xsec_bounds.minLon = 180;
-    xsec_bounds.maxLon = -180;
-    xsec_bounds.minLat = 90;
-    xsec_bounds.maxLat = -90;
-
-    // consider xsec points within tile_bounds
-    for(auto const &xsec : list_xsec) {
-        LLA lla = ConvECEFToLLA(xsec);
-        if(CalcWithinGeoBounds(tile_bounds,lla)) {
-            // todo clamp lla
-
-
-            lla_in_bounds++;
-            xsec_bounds.minLon = std::min(xsec_bounds.minLon,lla.lon);
-            xsec_bounds.maxLon = std::max(xsec_bounds.maxLon,lla.lon);
-            xsec_bounds.minLat = std::min(xsec_bounds.minLat,lla.lat);
-            xsec_bounds.maxLat = std::max(xsec_bounds.maxLat,lla.lat);
-        }
-    }
-
-    // consider list_frustum_lla within tile_bounds
-    for(auto const &lla : list_frustum_lla) {
-        if(CalcWithinGeoBounds(tile_bounds,lla)) {
-            // todo clamp lla
-
-            list_xsec.push_back(ConvLLAToECEF(lla));
-            lla_in_bounds++;
-
-            xsec_bounds.minLon = std::min(xsec_bounds.minLon,lla.lon);
-            xsec_bounds.maxLon = std::max(xsec_bounds.maxLon,lla.lon);
-            xsec_bounds.minLat = std::min(xsec_bounds.minLat,lla.lat);
-            xsec_bounds.maxLat = std::max(xsec_bounds.maxLat,lla.lat);
-        }
-    }
-
-//    for(auto const &x : list_xsec) {
-//        std::cout << "lon: " << ConvECEFToLLA(x).lon
-//                  << "lat: " << ConvECEFToLLA(x).lat
-//                  << ", min_lon: " << xsec_bounds.minLon << std::endl;
-//    }
-
-    return (lla_in_bounds > 0);
+    return false;
 }
 
 int main()
 {
     std::cout << std::fixed;
-    std::cout << std::setprecision(18);
+    std::cout << std::setprecision(8);
 
     // View0 root
     osg::ref_ptr<osg::Group> gp_root0 = new osg::Group;
@@ -283,7 +470,8 @@ int main()
     gp_root1->addChild(gp_axes);
 
     // tile
-    GeoBounds tile_bounds(-40,0,40,60);
+//    GeoBounds tile_bounds(-40,0,40,60);
+    GeoBounds tile_bounds(-180,0,-90,-45);
     auto gp_tile = BuildGeoBoundsNode(
                 "tile",tile_bounds,K_RBLUE);
     gp_root0->addChild(gp_tile);
@@ -392,17 +580,21 @@ int main()
                                             near_dist,
                                             far_dist);
 
-        // new frustum surface poly node
+        // calc frustum proj poly
         std::vector<osg::Vec3d> list_frustum_ecef;
         CalcProjFrustumPoly(frustum,horizon_plane,list_frustum_ecef);
-        auto new_frustumpoly = BuildSurfacePolyNode(
-                    "frustumpoly",list_frustum_ecef,K_WHITE);
 
         std::vector<LLA> list_frustum_lla =
                 ConvListECEFToLLA(list_frustum_ecef);
 
+        // calc frustum tri planes
+        std::vector<Plane> list_tri_planes =
+                CalcFrustumPolyTriPlanes(list_frustum_ecef,true);
 
-        // new frustum geobounds node
+        std::vector<Plane> list_edge_planes =
+                CalcFrustumEdgePlanes(list_frustum_ecef,true);
+
+        // calc frustum poly geo bounds
         std::vector<GeoBounds> list_frustum_bounds;
         CalcMinGeoBoundsFromLLAPoly(ConvECEFToLLA(eye),
                                     list_frustum_lla,
@@ -421,99 +613,27 @@ int main()
             }
         }
 
-        osg::ref_ptr<osg::Group> new_frustumbounds = new osg::Group;
-        new_frustumbounds->setName("frustumbounds");
-        for(size_t i=0; i < list_frustum_bounds.size(); i++) {
-            auto gp_frustumbounds =
-                    BuildGeoBoundsNode(std::to_string(i),
-                                       list_frustum_bounds[i],
-                                       K_WHITE);
-            new_frustumbounds->addChild(gp_frustumbounds);
-        }
+        // ============================================================ //
 
-        // new xsec bounds node
-        GeoBounds xsec_bounds;
-        osg::ref_ptr<osg::Group> new_xsecbounds = new osg::Group;
-        new_xsecbounds->setName("xsecbounds");
-        for(size_t i=0; i < list_frustum_bounds.size(); i++) {
-            if(CalcGeoBoundsIntersection(tile_bounds,
-                                         list_frustum_bounds[i],
-                                         xsec_bounds))
-            {
-                auto gp_xsecbounds = BuildGeoBoundsNode(std::to_string(i),
-                                                        xsec_bounds,
-                                                        K_RGREEN);
-                new_xsecbounds->addChild(gp_xsecbounds);
-                break;
-            }
-        }
+        osg::ref_ptr<osg::Group> new_frustumtris = new osg::Group;
+        new_frustumtris->setName("frustumtris");
+        bool ftxsec = CalcFrustumTileIntersection(list_frustum_ecef,
+                                                  list_frustum_bounds,
+                                                  list_edge_planes,
+                                                  tile_bounds);
 
-        // new poly xsec bounds node
-        osg::ref_ptr<osg::Group> new_polyxsecbounds = new osg::Group;
-        new_polyxsecbounds->setName("polyxsecbounds");
-
-        GeoBounds poly_xsec_bounds;
-
-//        std::vector<osg::Vec3d> list_xsec;
-//        if(CalcFrustumXsecBounds(list_frustum_lla,
-//                                 list_frustum_ecef,
-//                                 tile_bounds,
-//                                 list_xsec,
-//                                 poly_xsec_bounds))
-//        {
-//            auto gp_polyxsecbounds =
-//                    BuildGeoBoundsNode("0",
-//                                       poly_xsec_bounds,
-//                                       K_YELLOW);
-//            new_polyxsecbounds->addChild(gp_polyxsecbounds);
-//        }
-
-//        for(auto const &xsec : list_xsec) {
-//            auto gp_xsec = BuildFacingCircleNode("0",xsec,100000,8,K_RED);
-//            new_polyxsecbounds->addChild(gp_xsec);
-//        }
-
-        std::vector<LLA> list_xsec_lla;
-        if(CalcFrustumTileIntersection(list_frustum_lla,
-                                       list_frustum_ecef,
-                                       frustum_pole,
-                                       tile_bounds,
-                                       poly_xsec_bounds,
-                                       list_xsec_lla))
         {
-//            std::cout << "#: 3.1: " << std::endl;
-//            std::cout << "  tile.lon [" << poly_xsec_bounds.minLon
-//                      << "," << poly_xsec_bounds.maxLon << "]"
-//                      << ", tile.lat [" << poly_xsec_bounds.minLat
-//                      << "," << poly_xsec_bounds.maxLat << "]" << std::endl;
-
-
-
-//            auto gp_polyxsecbounds =
-//                    BuildGeoBoundsNode("0",
-//                                       poly_xsec_bounds,
-//                                       K_YELLOW);
-
-//            new_polyxsecbounds->addChild(gp_polyxsecbounds);
+            osg::Vec4 const color = (ftxsec) ? K_RED : K_WHITE;
+            auto gp_tri = BuildSurfacePolyNode(std::to_string(0),
+                                               list_frustum_ecef,
+                                               color);
+            new_frustumtris->addChild(gp_tri);
         }
 
-        for(auto const &xsec_lla : list_xsec_lla) {
-            auto gp_xsec = BuildFacingCircleNode(
-                        "0",ConvLLAToECEF(xsec_lla),100000,8,K_RED);
-            new_polyxsecbounds->addChild(gp_xsec);
-        }
+//        auto new_frustumtris = BuildFrustumProjAsTrisNode(
+//                    "frustumtris",list_frustum_ecef);
 
-
-//        // ============== test
-//        auto list_ranges = CalcLonRange(list_frustum_lla);
-//        std::cout << "-" << std::endl;
-//        for(auto const &range : list_ranges) {
-//            std::cout << "range //: " << range.first << "," << range.second << std::endl;
-//        }
-
-//        for(auto const &bb : list_frustum_bounds) {
-//            std::cout << "range bb: " << bb.minLon << "," << bb.maxLon << std::endl;
-//        }
+        // ============================================================ //
 
         // Update gp_root0
         for(size_t i=0; i < gp_root0->getNumChildren(); i++)
@@ -521,25 +641,17 @@ int main()
             std::string const name =
                     gp_root0->getChild(i)->getName();
 
-            if(name == "frustumpoly") {
+            if(name == "frustum") {
                 gp_root0->removeChild(i);
                 i--;
             }
-            else if(name == "frustumbounds") {
+            else if(name == "frustumtris") {
                 gp_root0->removeChild(i);
                 i--;
-            }
-            else if(name == "xsecbounds") {
-                gp_root0->removeChild(i);
-            }
-            else if(name == "polyxsecbounds") {
-                gp_root0->removeChild(i);
             }
         }
-        gp_root0->addChild(new_frustumpoly);
-        gp_root0->addChild(new_frustumbounds);
-        gp_root0->addChild(new_xsecbounds);
-        gp_root0->addChild(new_polyxsecbounds);
+        gp_root0->addChild(new_frustum);
+        gp_root0->addChild(new_frustumtris);
 
         // Update gp_root1
         for(size_t i=0; i < gp_root1->getNumChildren(); i++)
@@ -551,27 +663,14 @@ int main()
                  gp_root1->removeChild(i);
                  i--;
              }
-             else if(name == "frustumpoly") {
+             else if(name == "frustumtris") {
                  gp_root1->removeChild(i);
                  i--;
-             }
-             else if(name == "frustumbounds") {
-                 gp_root1->removeChild(i);
-                 i--;
-             }
-             else if(name == "xsecbounds") {
-                 gp_root1->removeChild(i);
-                 i--;
-             }
-             else if(name == "polyxsecbounds") {
-                 gp_root1->removeChild(i);
              }
         }
         gp_root1->addChild(new_frustum);
-        gp_root1->addChild(new_frustumpoly);
-        gp_root1->addChild(new_frustumbounds);
-        gp_root1->addChild(new_xsecbounds);
-        gp_root1->addChild(new_polyxsecbounds);
+        gp_root1->addChild(new_frustumtris);
+
 
         viewer.frame();
     }

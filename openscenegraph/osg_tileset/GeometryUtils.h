@@ -114,6 +114,20 @@ osg::Vec3d const K_ZERO_VEC = osg::Vec3d(0.0,0.0,0.0);
 
 struct LLA
 {
+    LLA() {}
+
+    LLA(double lon,double lat) :
+        lon(lon),
+        lat(lat),
+        alt(0.0)
+    {}
+
+    LLA(double lon,double lat, double alt) :
+        lon(lon),
+        lat(lat),
+        alt(alt)
+    {}
+
     double lon;
     double lat;
     double alt;
