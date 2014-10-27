@@ -75,6 +75,44 @@ osg::ref_ptr<osg::Group> BuildFrustumProjAsTrisNode(std::string const &name,
     return gp;
 }
 
+osg::ref_ptr<osg::Group> BuildFrustumTrisXsecNode(std::string const &name,
+                                                  osg::Vec3d const &test_ecef,
+                                                  std::vector<Plane> const &list_frustum_tri_planes)
+{
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->setName(name);
+
+    // Test point from tile
+    for(size_t i=0; i < list_frustum_tri_planes.size(); i+=3) {
+        Plane const &plane0 = list_frustum_tri_planes[i+0];
+        Plane const &plane1 = list_frustum_tri_planes[i+1];
+        Plane const &plane2 = list_frustum_tri_planes[i+2];
+
+        bool outside =
+                ((test_ecef-plane0.p)*plane0.n > 0) ||
+                ((test_ecef-plane1.p)*plane1.n > 0) ||
+                ((test_ecef-plane2.p)*plane2.n > 0);
+
+        std::vector<osg::Vec3d> const list_tri_vx {
+            plane0.p,
+            plane1.p,
+            plane2.p
+        };
+
+        osg::Vec4 const color = (outside) ? K_GREEN : K_RED;
+
+        auto gp_poly = BuildSurfacePolyNode(std::to_string(i),
+                                            list_tri_vx,
+                                            color);
+        gp->addChild(gp_poly);
+    }
+
+    auto gp_point = BuildFacingCircleNode("test_ecef",test_ecef,25000,8,K_BLUE);
+    gp->addChild(gp_point);
+
+    return gp;
+}
+
 inline void CalcTilePlanes(GeoBounds const &tile_bounds,
                            Plane &plane_min_lon,
                            Plane &plane_max_lon,
@@ -471,7 +509,7 @@ int main()
 
     // tile
 //    GeoBounds tile_bounds(-40,0,40,60);
-    GeoBounds tile_bounds(-180,0,-90,-45);
+    GeoBounds tile_bounds(-8,0,0,8);
     auto gp_tile = BuildGeoBoundsNode(
                 "tile",tile_bounds,K_RBLUE);
     gp_root0->addChild(gp_tile);
@@ -591,8 +629,9 @@ int main()
         std::vector<Plane> list_tri_planes =
                 CalcFrustumPolyTriPlanes(list_frustum_ecef,true);
 
-        std::vector<Plane> list_edge_planes =
-                CalcFrustumEdgePlanes(list_frustum_ecef,true);
+        // not currently used
+//        std::vector<Plane> list_edge_planes =
+//                CalcFrustumEdgePlanes(list_frustum_ecef,true);
 
         // calc frustum poly geo bounds
         std::vector<GeoBounds> list_frustum_bounds;
@@ -617,10 +656,17 @@ int main()
 
         osg::ref_ptr<osg::Group> new_frustumtris = new osg::Group;
         new_frustumtris->setName("frustumtris");
+
+        double time_taken = 0.0;
+        std::chrono::time_point<std::chrono::system_clock> start, end;
+        start = std::chrono::system_clock::now();
         bool ftxsec = CalcFrustumTileIntersection(list_frustum_ecef,
                                                   list_frustum_bounds,
-                                                  list_edge_planes,
+                                                  list_tri_planes,
                                                   tile_bounds);
+        end = std::chrono::system_clock::now();
+        std::chrono::duration<double> elapsed_seconds = end-start;
+//        std::cout << "took: " << elapsed_seconds.count()*1000.0 << " ms" << std::endl;
 
         {
             osg::Vec4 const color = (ftxsec) ? K_RED : K_WHITE;
@@ -630,8 +676,12 @@ int main()
             new_frustumtris->addChild(gp_tri);
         }
 
-//        auto new_frustumtris = BuildFrustumProjAsTrisNode(
-//                    "frustumtris",list_frustum_ecef);
+//        osg::Vec3d const test_ecef = ConvLLAToECEF(
+//                    LLA((tile_bounds.minLon+tile_bounds.maxLon)*0.5,
+//                        (tile_bounds.minLat+tile_bounds.maxLat)*0.5));
+
+//        auto new_frustumxsec = BuildFrustumTrisXsecNode(
+//                    "frustumxsec",test_ecef,list_tri_planes);
 
         // ============================================================ //
 
@@ -649,9 +699,14 @@ int main()
                 gp_root0->removeChild(i);
                 i--;
             }
+            else if(name == "frustumxsec") {
+                gp_root0->removeChild(i);
+                i--;
+            }
         }
         gp_root0->addChild(new_frustum);
         gp_root0->addChild(new_frustumtris);
+//        gp_root0->addChild(new_frustumxsec);
 
         // Update gp_root1
         for(size_t i=0; i < gp_root1->getNumChildren(); i++)
@@ -667,9 +722,13 @@ int main()
                  gp_root1->removeChild(i);
                  i--;
              }
+             else if(name == "frustumxsec") {
+                 gp_root1->removeChild(i);
+             }
         }
         gp_root1->addChild(new_frustum);
         gp_root1->addChild(new_frustumtris);
+//        gp_root1->addChild(new_frustumxsec);
 
 
         viewer.frame();
