@@ -670,3 +670,81 @@ osg::ref_ptr<osg::AutoTransform> BuildFacingCircleNode(std::string const &name,
 
     return xf_ring;
 }
+
+
+osg::ref_ptr<osg::Group> BuildRingNode(std::string const &name,
+                                       osg::Vec3d const &center,
+                                       osg::Vec4 const &color,
+                                       double const radius,
+                                       bool auto_xf)
+{
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->setName(name);
+
+    // Create a ring node
+    osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
+    {
+        // Create a ring of vertices
+        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(16);
+        double const rotate_by_rads = (2.0*K_PI/list_vx->size());
+
+        for(size_t j=0; j < list_vx->size(); j++){
+            list_vx->at(j) = osg::Vec3d(
+                        cos(rotate_by_rads*j),
+                        sin(rotate_by_rads*j),
+                        0);
+        }
+
+        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+        list_cx->push_back(color);
+
+        gm_ring->setVertexArray(list_vx);
+        gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+        gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
+    }
+
+    osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
+    gd_ring->addDrawable(gm_ring);
+
+    if(auto_xf) {
+        osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
+        xf_ring->addChild(gd_ring);
+        xf_ring->setScale(radius);
+        xf_ring->setPosition(center);
+        xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+        gp->addChild(xf_ring);
+    }
+    else {
+        gp->addChild(gd_ring);
+    }
+
+    return gp;
+}
+
+osg::ref_ptr<osg::Group> BuildPlaneNode(std::string const &name,
+                                        Plane const &plane,
+                                        double plane_radius,
+                                        osg::Vec4 const &color)
+{
+    auto gp_ring = BuildRingNode("ring",
+                                 plane.p,
+                                 color,
+                                 plane_radius,
+                                 false);
+
+    osg::Vec3d plane_n = plane.n;
+    plane_n.normalize();
+
+    osg::ref_ptr<osg::MatrixTransform> xf =
+            new osg::MatrixTransform;
+    xf->setMatrix(osg::Matrixd::rotate(osg::Vec3d(0,0,1),plane_n) *
+                  osg::Matrixd::translate(plane.p));
+    xf->addChild(gp_ring->getChild(0));
+
+    osg::ref_ptr<osg::Group> gp_plane = new osg::Group;
+    gp_plane->setName(name);
+    gp_plane->addChild(xf);
+
+    return gp_plane;
+}
+

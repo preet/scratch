@@ -133,6 +133,15 @@ struct LLA
     double alt;
 };
 
+struct Circle
+{
+    osg::Vec3d center;
+    osg::Vec3d normal;
+    osg::Vec3d u;
+    osg::Vec3d v;
+    double radius;
+};
+
 struct Plane
 {
     osg::Vec3d n;   // plane normal; no guarantee n is normalized!

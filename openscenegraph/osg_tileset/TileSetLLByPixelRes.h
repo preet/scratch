@@ -14,13 +14,13 @@
    limitations under the License.
 */
 
-#ifndef SCRATCH_TILESET_LL_BYPIXELAREA_H
-#define SCRATCH_TILESET_LL_BYPIXELAREA_H
+#ifndef SCRATCH_TILESET_LL_BYPIXELLRES_H
+#define SCRATCH_TILESET_LL_BYPIXELLRES_H
 
 #include <TileSetLL.h>
 #include <GeometryUtils.h>
 
-class TileSetLLByPixelArea : public TileSetLL
+class TileSetLLByPixelRes : public TileSetLL
 {
 public:
 
@@ -33,10 +33,7 @@ public:
             min_level(0),
             max_level(18),
             fix_level(1),
-            preload_eval_level(2),
-            max_adj_offset_dist2_m(1000000.0*1000000.0),
-            min_eval_angle_degs(360.0/32.0)
-
+            max_adj_offset_dist2_m(1000000.0*1000000.0)
         {}
 
         size_t max_tiles;
@@ -44,17 +41,15 @@ public:
         size_t min_level;
         size_t max_level;
         size_t fix_level;
-        size_t preload_eval_level;
         double max_adj_offset_dist2_m;
-        double min_eval_angle_degs;
     };
 
-    TileSetLLByPixelArea(double view_width,
-                         double view_height,
-                         Options const &opts,
-                         std::vector<RootTileDesc> const &list_root_tiles);
+    TileSetLLByPixelRes(double view_width,
+                        double view_height,
+                        Options const &opts,
+                        std::vector<RootTileDesc> const &list_root_tiles);
 
-    ~TileSetLLByPixelArea();
+    ~TileSetLLByPixelRes();
 
     void UpdateTileSet(osg::Camera const * cam,
                        std::vector<uint64_t> &list_tiles_add,
@@ -68,29 +63,28 @@ public:
     GeoBounds m_debug1;
 
 private:
-
     struct Eval
     {
-        Eval(GeoBounds const &bounds,
-             osg::Matrixd const &mvp,
-             double min_angle_degs);
+        Eval(GeoBounds const &bounds);
 
-        // Evaluation geometry
-        // * to approximate pixel area taken up by tile
-        std::vector<osg::Vec3d> list_vx;
-        std::vector<LLA>        list_lla;
-        std::vector<osg::Vec2d> list_ndc; // for UNUSED function
-        std::vector<uint16_t>   list_ix;
-        std::vector<osg::Vec3d> list_quad_nx;
+        // corner points
+        // (min/max)lon_(min,max)lat
+        osg::Vec3d c_min_min;
+        osg::Vec3d c_max_min;
+        osg::Vec3d c_max_max;
+        osg::Vec3d c_min_max;
 
-        //
+        // planes
         Plane plane_min_lon;
         Plane plane_max_lon;
         Plane plane_min_lat;
         Plane plane_max_lat;
 
-        //
-        osg::Vec3d ecef_mid;
+        // circle arc edges
+        Circle circle_min_lon;
+        Circle circle_max_lon;
+        Circle circle_min_lat;
+        Circle circle_max_lat;
     };
 
     void buildTileSet(std::unique_ptr<Tile> &tile,
@@ -99,15 +93,7 @@ private:
     void buildTileSetList(std::unique_ptr<Tile> const &tile,
                           std::map<uint64_t,Tile const *> &list_tiles);
 
-    bool tilePxlAreaExceedsRes(Tile const * tile);
-
-    // * calculates the NDC area of a tile for quads
-    //   that are visible and in front of the near plane
-    // * uses quads (ie, two triangles at once) to avoid
-    //   asymmetry issues
-    void calcTileNDCArea(Eval const &eval,
-                         double &ndc_area,
-                         double &surf_area_m2) const;
+    bool tilePxResExceedsLevel(Tile const * tile);
 
     // * checks whether or not the projected frustum poly
     //   as specified by @list_frustum_vx,)_bounds,_tri_planes
@@ -144,47 +130,29 @@ private:
     calcFrustumPolyTriPlanes(std::vector<osg::Vec3d> const &list_frustum_vx,
                              bool normalize) const;
 
-    // UNUSED
-    // * calculate the NDC area of every quad in the tile
-    double calcTileNDCAreaQuad(Eval const &eval,
-                               Plane const &clip_plane,
-                               bool cull_hidden_tris=true) const;
+    //
+    osg::Vec3d calcTileClosestPoint(LLA const &lla_distal,
+                                    osg::Vec3d const &ecef_distal,
+                                    GeoBounds const &bounds,
+                                    Eval const &eval) const;
 
-    // UNUSED
-    // * calculate the NDC area of a single triangle
-    // * tiles outside the NDC rectangle will be ignored
-    // * tris will be clipped against clip_plane
-    double calcTriangleNDCAreaVisible(Plane const &clip_plane,
-                                      osg::Matrixd const &mvp,
-                                      std::vector<osg::Vec3d> const &tri,
-                                      std::vector<osg::Vec2d> const &tri_ndc) const;
-
-    // UNUSED
-    // * calculate the NDC area of a single triangle
-    // * tiles outside the NDC rectangle will be included
-    // * will be clipped against clip_plane
-    double calcTriangleNDCAreaFull(Plane const &clip_plane,
-                                   osg::Matrixd const &mvp,
-                                   std::vector<osg::Vec3d> const &tri,
-                                   std::vector<osg::Vec2d> const &tri_ndc) const;
+    //
+    double calcPixelsPerMeter(double dist,
+                              double screen_height_px,
+                              osg::Camera const * cam) const;
 
     // options
     Options const m_opts;
-    double const m_tile_px_area;
 
     // view data
     osg::Camera const * m_cam;
     double const m_view_width;
     double const m_view_height;
-    osg::Matrixd m_mvp;
-    osg::Vec3d m_view_dirn;
-    Plane m_near_plane;
 
     std::vector<osg::Vec3d> m_list_frustum_ecef;
-    std::vector<LLA> m_list_frustum_lla;
-    std::vector<GeoBounds> m_list_frustum_bounds;
-    std::vector<Plane> m_list_frustum_tri_planes;
-    uint8_t m_frustum_pole;
+    std::vector<LLA>        m_list_frustum_lla;
+    std::vector<GeoBounds>  m_list_frustum_bounds;
+    std::vector<Plane>      m_list_frustum_tri_planes;
 
     // tiles
     std::vector<std::unique_ptr<Tile>> m_list_root_tiles;
@@ -196,4 +164,4 @@ private:
 
 };
 
-#endif // SCRATCH_TILESET_LL_BYPIXELAREA_H
+#endif // SCRATCH_TILESET_LL_BYPIXELLRES_H

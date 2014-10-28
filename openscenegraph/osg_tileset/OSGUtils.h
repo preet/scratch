@@ -70,5 +70,16 @@ osg::ref_ptr<osg::AutoTransform> BuildFacingCircleNode(std::string const &name,
                                                        size_t const num_vx,
                                                        osg::Vec4 const &color);
 
+osg::ref_ptr<osg::Group> BuildRingNode(std::string const &name,
+                                       osg::Vec3d const &center,
+                                       osg::Vec4 const &color,
+                                       double const radius,
+                                       bool auto_xf=true);
+
+osg::ref_ptr<osg::Group> BuildPlaneNode(std::string const &name,
+                                        Plane const &plane,
+                                        double plane_radius,
+                                        osg::Vec4 const &color);
+
 
 #endif // SCRATCH_OSG_UTILS_H

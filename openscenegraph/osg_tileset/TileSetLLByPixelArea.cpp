@@ -60,6 +60,19 @@ TileSetLLByPixelArea::Eval::Eval(GeoBounds const &bounds,
         list_quad_nx.push_back((v1-v0)^(v2-v0));
         list_quad_nx.back().normalize();
     }
+
+    // lon and lat planes
+    plane_min_lon = CalcLonPlane(bounds.minLon,true,true);
+    plane_max_lon = CalcLonPlane(bounds.maxLon,false,true);
+    plane_min_lat = CalcLatPlane(bounds.minLat,false);
+    plane_max_lat = CalcLatPlane(bounds.maxLat,true);
+
+    // (mid lon,mid lat) ecef
+    LLA lla_mid;
+    lla_mid.lon = (bounds.minLon+bounds.maxLon)*0.5;
+    lla_mid.lat = (bounds.minLat+bounds.maxLat)*0.5;
+    lla_mid.alt = 0.0;
+    ecef_mid = ConvLLAToECEF(lla_mid);
 }
 
 // ============================================================= //
@@ -143,6 +156,9 @@ void TileSetLLByPixelArea::UpdateTileSet(osg::Camera const * cam,
             break;
         }
     }
+
+    m_list_frustum_tri_planes =
+            calcFrustumPolyTriPlanes(m_list_frustum_ecef,true);
 
 
     // rebuild the tileset with the new view data
@@ -254,25 +270,32 @@ bool TileSetLLByPixelArea::tilePxlAreaExceedsRes(Tile const * tile)
     double const k_ndc_to_px =
             (m_view_width*m_view_height*0.25);
 
-    // Use a rough geobounds test to see if the tile
-    // is visible within the view frustum
+//    // Use a rough geobounds test to see if the tile
+//    // is visible within the view frustum
+//    // (old test)
+//    GeoBounds const tile_bounds(tile->min_lon,
+//                                tile->max_lon,
+//                                tile->min_lat,
+//                                tile->max_lat);
+
+//    uint8_t xsec_count=0;
+//    for(auto const &frustum_bounds : m_list_frustum_bounds) {
+//        if(CalcGeoBoundsIntersection(tile_bounds,
+//                                     frustum_bounds)) {
+//            xsec_count++;
+//        }
+//    }
+
+//    if(xsec_count == 0) {
+//        // The tile isn't visible with the current frustum
+//        return false;
+//    }
+
     GeoBounds const tile_bounds(tile->min_lon,
                                 tile->max_lon,
                                 tile->min_lat,
                                 tile->max_lat);
 
-    uint8_t xsec_count=0;
-    for(auto const &frustum_bounds : m_list_frustum_bounds) {
-        if(CalcGeoBoundsIntersection(tile_bounds,
-                                     frustum_bounds)) {
-            xsec_count++;
-        }
-    }
-
-    if(xsec_count == 0) {
-        // The tile isn't visible with the current frustum
-        return false;
-    }
 
     // Transform part of the tile into screen space and
     // calculate its pixel area.
@@ -293,7 +316,19 @@ bool TileSetLLByPixelArea::tilePxlAreaExceedsRes(Tile const * tile)
                              m_opts.min_eval_angle_degs))).first;
     }
 
-    // TODO eval can be calculated when the tile is created
+    // (new test)
+    if(!calcFrustumTileIntersection(it->second,
+                                    m_list_frustum_ecef,
+                                    m_list_frustum_bounds,
+                                    m_list_frustum_tri_planes,
+                                    tile_bounds))
+    {
+        // The tile isn't visible with the current frustum
+        return false;
+    }
+
+
+
     double ndc_area_quad;
     double surf_area_quad_m2;
 
@@ -426,6 +461,212 @@ void TileSetLLByPixelArea::calcTileNDCArea(Eval const &eval,
 
         surf_area_m2 += CalcGeoBoundsArea(bounds);
     }
+}
+
+bool TileSetLLByPixelArea::calcFrustumTileIntersection(Eval const &eval,
+                                                       std::vector<osg::Vec3d> const &list_frustum_vx,
+                                                       std::vector<GeoBounds> const &list_frustum_bounds,
+                                                       std::vector<Plane> const &list_frustum_tri_planes,
+                                                       GeoBounds const &tile_bounds) const
+{
+    // TODO determine a good tolerance (this is in meters)
+    static const double k_eps = 0.0;
+
+    if(list_frustum_vx.size() != 8) {
+        return false;
+    }
+
+    // Three tests:
+    // 0. GeoBounds intersection
+    //  * if the geobounds of the frustum poly and tile
+    //    do not intersect, there is no intersection
+
+    bool xsec = false;
+    GeoBounds xsec_bounds;
+    for(auto const &frustum_bounds : list_frustum_bounds) {
+        if(CalcGeoBoundsIntersection(frustum_bounds,
+                                     tile_bounds,
+                                     xsec_bounds))
+        {
+            if(xsec_bounds == frustum_bounds) {
+                // Frustum poly is within the tile
+//                std::cout << "#: XSEC TYPE 1" << std::endl;
+                return true;
+            }
+
+            xsec = true;
+            break;
+        }
+    }
+
+    if(!xsec) {
+        return false;
+    }
+
+    // Check to see if the frustum poly edges intersect
+    // with any tile planes
+
+    size_t xsec_count;
+    std::vector<osg::Vec3d> list_xsec;
+    list_xsec.reserve(list_frustum_vx.size());
+
+    // TODO:
+    // Would it be faster to compute intersections
+    // against all the tile edge planes everytime?
+
+    // min_lon
+    {
+        xsec_count = CalcPlanePolyIntersection(eval.plane_min_lon,
+                                               list_frustum_vx,
+                                               list_xsec);
+        for(size_t i=0; i < xsec_count; i++) {
+            if(calcPointWithinTilePlanes(list_xsec[list_xsec.size()-1-i],
+                                         eval.plane_min_lon,
+                                         eval.plane_max_lon,
+                                         eval.plane_min_lat,
+                                         eval.plane_max_lat)) {
+//                std::cout << "#: XSEC TYPE 2" << std::endl;
+                return true;
+            }
+        }
+    }
+
+    // max_lon
+    {
+        xsec_count = CalcPlanePolyIntersection(eval.plane_max_lon,
+                                               list_frustum_vx,
+                                               list_xsec);
+
+        for(size_t i=0; i < xsec_count; i++) {
+            if(calcPointWithinTilePlanes(list_xsec[list_xsec.size()-1-i],
+                                         eval.plane_min_lon,
+                                         eval.plane_max_lon,
+                                         eval.plane_min_lat,
+                                         eval.plane_max_lat)) {
+//                std::cout << "#: XSEC TYPE 2" << std::endl;
+                return true;
+            }
+        }
+    }
+
+    // max_lat
+    {
+        xsec_count = CalcPlanePolyIntersection(eval.plane_min_lat,
+                                               list_frustum_vx,
+                                               list_xsec);
+
+        for(size_t i=0; i < xsec_count; i++) {
+            if(calcPointWithinTilePlanes(list_xsec[list_xsec.size()-1-i],
+                                         eval.plane_min_lon,
+                                         eval.plane_max_lon,
+                                         eval.plane_min_lat,
+                                         eval.plane_max_lat)) {
+//                std::cout << "#: XSEC TYPE 2" << std::endl;
+                return true;
+            }
+        }
+    }
+
+    // min_lat
+    {
+        xsec_count = CalcPlanePolyIntersection(eval.plane_max_lat,
+                                               list_frustum_vx,
+                                               list_xsec);
+
+        for(size_t i=0; i < xsec_count; i++) {
+            if(calcPointWithinTilePlanes(list_xsec[list_xsec.size()-1-i],
+                                         eval.plane_min_lon,
+                                         eval.plane_max_lon,
+                                         eval.plane_min_lat,
+                                         eval.plane_max_lat)) {
+//                std::cout << "#: XSEC TYPE 2" << std::endl;
+                return true;
+            }
+        }
+    }
+
+    // Check to see if the frustum poly completely
+    // contains the tile (the previous test verified
+    // the the tile isn't partially contained) by
+    // finding if any of the triangle regions of
+    // the frustum poly contains a point from the tile
+    {
+        // Test point from tile // TODO replace with Eval
+        osg::Vec3d const &ecef = eval.ecef_mid;
+
+        for(size_t i=0; i < list_frustum_tri_planes.size(); i+=3) {
+            Plane const &plane0 = list_frustum_tri_planes[i+0];
+            Plane const &plane1 = list_frustum_tri_planes[i+1];
+            Plane const &plane2 = list_frustum_tri_planes[i+2];
+
+            bool outside =
+                    ((ecef-plane0.p)*plane0.n > k_eps) ||
+                    ((ecef-plane1.p)*plane1.n > k_eps) ||
+                    ((ecef-plane2.p)*plane2.n > k_eps);
+
+            if(!outside) {
+//                std::cout << "#: XSEC_TYPE 3_" << i/3 << std::endl;
+                return true;
+            }
+        }
+    }
+}
+
+std::vector<Plane>
+TileSetLLByPixelArea::calcFrustumPolyTriPlanes(std::vector<osg::Vec3d> const &list_frustum_vx,
+                                               bool normalize) const
+{
+    static const std::vector<uint16_t> list_ix = {
+        0,1,7,
+        1,2,3,
+        3,4,5,
+        5,6,7,
+        5,7,1,
+        5,1,3
+    };
+
+    std::vector<Plane> list_tri_planes;
+    list_tri_planes.reserve(18);
+
+    for(size_t i=0; i < list_ix.size(); i+=3) {
+        // Each plane is the plane that goes through
+        // the points of a triangle edge, and (0,0,0)
+        // since each edge represents a great arc
+
+        osg::Vec3d const &v0 = list_frustum_vx[list_ix[i+0]];
+        osg::Vec3d const &v1 = list_frustum_vx[list_ix[i+1]];
+        osg::Vec3d const &v2 = list_frustum_vx[list_ix[i+2]];
+
+        Plane plane0;
+        plane0.n = (v1-v0)^v0;
+        if(normalize) {
+            plane0.n.normalize();
+        }
+        plane0.p = v0;
+        plane0.d = plane0.n*plane0.p;
+
+        Plane plane1;
+        plane1.n = (v2-v1)^v1;
+        if(normalize) {
+            plane1.n.normalize();
+        }
+        plane1.p = v1;
+        plane1.d = plane1.n*plane1.p;
+
+        Plane plane2;
+        plane2.n = (v0-v2)^v2;
+        if(normalize) {
+            plane2.n.normalize();
+        }
+        plane2.p = v2;
+        plane2.d = plane2.n*plane2.p;
+
+        list_tri_planes.push_back(plane0);
+        list_tri_planes.push_back(plane1);
+        list_tri_planes.push_back(plane2);
+    }
+
+    return list_tri_planes;
 }
 
 double TileSetLLByPixelArea::calcTileNDCAreaQuad(Eval const &eval,
