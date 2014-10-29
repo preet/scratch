@@ -19,6 +19,7 @@
 
 #include <TileSetLL.h>
 #include <GeometryUtils.h>
+#include <chrono>
 
 class TileSetLLByPixelRes : public TileSetLL
 {
@@ -58,14 +59,16 @@ public:
 
     Tile const * GetTile(uint64_t tile_id) const;
 
-    // debug
-    GeoBounds m_debug0;
-    GeoBounds m_debug1;
-
 private:
     struct Eval
     {
         Eval(GeoBounds const &bounds);
+
+        // surface area (m^2)
+        double surf_area_m2;
+
+        // mid
+        osg::Vec3d ecef_mid;
 
         // corner points
         // (min/max)lon_(min,max)lat
@@ -93,7 +96,7 @@ private:
     void buildTileSetList(std::unique_ptr<Tile> const &tile,
                           std::map<uint64_t,Tile const *> &list_tiles);
 
-    bool tilePxResExceedsLevel(Tile const * tile);
+    bool tilePxResExceedsLevel(Tile * tile);
 
     // * checks whether or not the projected frustum poly
     //   as specified by @list_frustum_vx,)_bounds,_tri_planes
@@ -137,17 +140,21 @@ private:
                                     Eval const &eval) const;
 
     //
-    double calcPixelsPerMeter(double dist,
-                              double screen_height_px,
-                              osg::Camera const * cam) const;
+    double calcPixelsPerMeterForDist(double dist_m,
+                                     double screen_height_px,
+                                     osg::Camera const * cam) const;
 
     // options
     Options const m_opts;
+    double const m_tile_tex_px_area;
 
     // view data
     osg::Camera const * m_cam;
     double const m_view_width;
     double const m_view_height;
+
+    osg::Vec3d m_eye;
+    LLA m_lla_eye;
 
     std::vector<osg::Vec3d> m_list_frustum_ecef;
     std::vector<LLA>        m_list_frustum_lla;
@@ -161,6 +168,9 @@ private:
 
     // clear list when full
     std::map<uint64_t,Eval> m_list_tile_eval;
+
+    // debug
+    std::chrono::time_point<std::chrono::system_clock> m_start;
 
 };
 

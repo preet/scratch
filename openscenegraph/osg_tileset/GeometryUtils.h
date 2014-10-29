@@ -354,6 +354,9 @@ bool CalcMinGeoBoundsFromLLAPoly(LLA const &camLLA,
                                  std::vector<LLA> const &listPLLA,
                                  std::vector<GeoBounds> &listBounds);
 
+osg::Vec3d ClosestPointCirclePoint(Circle const &c,
+                                   osg::Vec3d const &p);
+
 void BuildEarthSurface(double min_lon,
                        double max_lon,
                        double min_lat,

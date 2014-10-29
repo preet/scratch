@@ -17,8 +17,9 @@
 #include <GeometryUtils.h>
 #include <DataSetTilesLL.h>
 #include <OSGUtils.h>
+#include <osgText/Text>
 #include <osgDB/ReadFile>
-#include <TileSetLLByPixelArea.h>
+#include <TileSetLLByPixelRes.h>
 
 DataSetTilesLL::DataSetTilesLL(osg::Group * gp_tiles,
                                std::unique_ptr<TileSetLL> tileset) :
@@ -74,9 +75,43 @@ void DataSetTilesLL::Update(osg::Camera const * cam)
     }
 
     for(auto tile_id : list_tiles_add) {
+        TileSetLL::Tile const * tile = m_tileset->GetTile(tile_id);
         osg::ref_ptr<osg::Group> gp = createTileGm(tile_id);
+        auto gp_text = createTileTextGm(tile,"?");
+        gp_text->setName("text");
+        gp->addChild(gp_text);
+
+//        GeoBounds const tile_bounds(tile->min_lon,
+//                                    tile->max_lon,
+//                                    tile->min_lat,
+//                                    tile->max_lat);
+//        auto gp = BuildGeoBoundsNode("",
+//                                     tile_bounds,
+//                                     K_COLOR_TABLE[tile->level],
+//                                     360.0/16.0,
+//                                     tile->level);
+
         m_list_sg_tiles.emplace(tile_id,gp.get());
         m_gp_tiles->addChild(gp);
+    }
+
+    // update tile px values
+
+    for(auto it = m_list_sg_tiles.begin();
+        it != m_list_sg_tiles.end(); ++it)
+    {
+        osg::Group * gp = it->second;
+        for(size_t i=0; i < gp->getNumChildren(); i++) {
+            osg::Group * child = static_cast<osg::Group*>(gp->getChild(i));
+            if(child->getName() == "text") {
+                TileSetLL::Tile const * tile = m_tileset->GetTile(it->first);
+                std::string s = std::to_string(tile->tile_px_res);
+                osg::Geode * gd = static_cast<osg::Geode*>(child->getChild(0));
+                osgText::Text * txt = static_cast<osgText::Text*>(gd->getDrawable(0));
+                txt->setText(s);
+
+            }
+        }
     }
 
 //    // debug
@@ -194,4 +229,24 @@ osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)
     gp->addChild(gd);
 
     return gp;
+}
+
+osg::ref_ptr<osg::Group>
+DataSetTilesLL::createTileTextGm(TileSetLL::Tile const * tile,
+                                 std::string const &text)
+{
+    // center
+    LLA lla_mid;
+    lla_mid.lon = (tile->min_lon+tile->max_lon)*0.5;
+    lla_mid.lat = (tile->min_lat+tile->max_lat)*0.5;
+    lla_mid.alt = 0.0;
+    osg::Vec3d ecef_mid = ConvLLAToECEF(lla_mid);
+
+    // height
+    LLA lla_corner(tile->min_lon,tile->min_lat,0.0);
+    osg::Vec3d ecef_corner = ConvLLAToECEF(lla_corner);
+    double const height = (ecef_mid-ecef_corner).length() / 5.0;
+
+    return BuildTextNode("",text,K_COLOR_TABLE[tile->level],ecef_mid,height);
+//    return BuildTextNode("",text,K_COLOR_TABLE[0],ecef_mid,height);
 }

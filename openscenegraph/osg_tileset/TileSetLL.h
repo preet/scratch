@@ -104,6 +104,7 @@ public:
 
         {
             // empty
+            tile_px_res=-10;
         }
 
         Tile(Tile * parent,
@@ -121,6 +122,7 @@ public:
             clip(k_clip_NONE)
         {
             // empty
+            tile_px_res=-10;
         }
 
 
@@ -159,6 +161,8 @@ public:
         static const uint8_t k_clip_ALL = 15;
 
         uint8_t clip;
+
+        int64_t tile_px_res;
 
     private:
         static uint64_t getIdFromParentXY(Tile const * parent,

@@ -15,6 +15,7 @@
 */
 
 #include <OSGUtils.h>
+#include <osgText/Text>
 
 // ============================================================= //
 
@@ -471,7 +472,8 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(std::string const &name,
 osg::ref_ptr<osg::Group> BuildSurfacePolyNode(std::string const &name,
                                               std::vector<osg::Vec3d> const &list_ecef,
                                               osg::Vec4 const &cx,
-                                              double vx_size)
+                                              double vx_size,
+                                              int level_offset)
 {
     osg::ref_ptr<osg::Group> gp = new osg::Group;
     if(list_ecef.empty()) {
@@ -479,36 +481,41 @@ osg::ref_ptr<osg::Group> BuildSurfacePolyNode(std::string const &name,
     }
 
     // Create a ring node
-    osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
-    {
-        // Create a ring of vertices
-        osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
-        double const rotate_by_rads = (2.0*K_PI/list_vx->size());
+    if(vx_size > 0) {
+        osg::ref_ptr<osg::Geometry> gm_ring = new osg::Geometry;
+        {
+            // Create a ring of vertices
+            osg::ref_ptr<osg::Vec3dArray> list_vx = new osg::Vec3dArray(8);
+            double const rotate_by_rads = (2.0*K_PI/list_vx->size());
 
-        for(size_t j=0; j < list_vx->size(); j++){
-            list_vx->at(j) = osg::Vec3d(
-                        cos(rotate_by_rads*j),
-                        sin(rotate_by_rads*j),
-                        0);
+            for(size_t j=0; j < list_vx->size(); j++){
+                list_vx->at(j) = osg::Vec3d(
+                            cos(rotate_by_rads*j),
+                            sin(rotate_by_rads*j),
+                            0);
+            }
+
+            osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
+            list_cx->push_back(cx);
+
+            gm_ring->setVertexArray(list_vx);
+            gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
+            gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
         }
 
-        osg::ref_ptr<osg::Vec4Array> list_cx = new osg::Vec4Array;
-        list_cx->push_back(cx);
+        for(auto const & ecef : list_ecef) {
+            osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
+            osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
+            gd_ring->getOrCreateStateSet()->setRenderBinDetails(
+                        -101+level_offset,"RenderBin");
 
-        gm_ring->setVertexArray(list_vx);
-        gm_ring->setColorArray(list_cx,osg::Array::BIND_OVERALL);
-        gm_ring->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
-    }
-
-    for(auto const & ecef : list_ecef) {
-        osg::ref_ptr<osg::AutoTransform> xf_ring = new osg::AutoTransform;
-        osg::ref_ptr<osg::Geode> gd_ring = new osg::Geode;
-        gd_ring->addDrawable(gm_ring);
-        xf_ring->addChild(gd_ring);
-        xf_ring->setScale(vx_size);
-        xf_ring->setPosition(ecef);
-        xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
-        gp->addChild(xf_ring);
+            gd_ring->addDrawable(gm_ring);
+            xf_ring->addChild(gd_ring);
+            xf_ring->setScale(vx_size);
+            xf_ring->setPosition(ecef);
+            xf_ring->setAutoRotateMode(osg::AutoTransform::ROTATE_TO_SCREEN);
+            gp->addChild(xf_ring);
+        }
     }
 
     // Create poly edges
@@ -529,6 +536,8 @@ osg::ref_ptr<osg::Group> BuildSurfacePolyNode(std::string const &name,
         gm_edges->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_LOOP,0,list_vx->size()));
 
         osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+        gd->getOrCreateStateSet()->setRenderBinDetails(
+                    -101+level_offset,"RenderBin");
         gd->addDrawable(gm_edges);
         gp->addChild(gd);
     }
@@ -541,7 +550,8 @@ osg::ref_ptr<osg::Group> BuildSurfacePolyNode(std::string const &name,
 osg::ref_ptr<osg::Group> BuildGeoBoundsNode(std::string const &name,
                                             GeoBounds const &b,
                                             osg::Vec4 const &color,
-                                            double min_angle)
+                                            double min_angle,
+                                            int level_offset)
 {
     static const double k_eps = 1E-8;
 
@@ -583,7 +593,7 @@ osg::ref_ptr<osg::Group> BuildGeoBoundsNode(std::string const &name,
         list_ecef.push_back(ConvLLAToECEF(lla));
     }
 
-    return BuildSurfacePolyNode(name,list_ecef,color);
+    return BuildSurfacePolyNode(name,list_ecef,color,0.0,level_offset);
 }
 
 // ============================================================= //
@@ -748,3 +758,29 @@ osg::ref_ptr<osg::Group> BuildPlaneNode(std::string const &name,
     return gp_plane;
 }
 
+osg::ref_ptr<osg::Group> BuildTextNode(std::string const &name,
+                                       std::string const &text_str,
+                                       osg::Vec4 const &color,
+                                       osg::Vec3d const &center,
+                                       double const height_m)
+{
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->setName(name);
+
+    if(text_str.empty()) {
+        return gp;
+    }
+
+    osg::ref_ptr<osgText::Text> text = new osgText::Text;
+    text->setText(text_str);
+    text->setCharacterSize(height_m);
+    text->setAutoRotateToScreen(true);
+    text->setPosition(center);
+    text->setColor(color);
+
+    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+    gd->addDrawable(text);
+
+    gp->addChild(gd);
+    return gp;
+}

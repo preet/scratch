@@ -3,7 +3,7 @@
 
 #include <ViewController.hpp>
 #include <OSGUtils.h>
-#include <TileSetLLByPixelArea.h>
+#include <TileSetLLByPixelRes.h>
 #include <DataSetTilesLL.h>
 
 int main()
@@ -24,9 +24,9 @@ int main()
     list_root_tiles.emplace_back(0,-180,180,-90,90);
 
     // create TileSet
-    TileSetLLByPixelArea::Options opts;
+    TileSetLLByPixelRes::Options opts;
     std::unique_ptr<TileSetLL> tileset(
-                new TileSetLLByPixelArea(640,480,opts,list_root_tiles));
+                new TileSetLLByPixelRes(640,480,opts,list_root_tiles));
 
     // create dataset
     osg::ref_ptr<osg::Group> gp_tiles = new osg::Group;

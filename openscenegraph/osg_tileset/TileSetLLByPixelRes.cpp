@@ -24,6 +24,35 @@
 // ============================================================= //
 
 // TODO move these to GeometryUtils
+static osg::Vec3d CalcPointLineProjection(osg::Vec3d const &pt,
+                                          osg::Vec3d const &a,
+                                          osg::Vec3d const &b,
+                                          bool clamp=false)
+{
+    static const double k_eps = 1E-8;
+
+    osg::Vec3d const dirn = b-a;
+
+    double const u_den = dirn*dirn;
+    if(fabs(u_den) < k_eps) {
+        return a;
+    }
+
+    double const u = ((pt*dirn)-(a*dirn))/u_den;
+
+    if(clamp) {
+        if(u < 0) {
+            return a;
+        }
+        else if(u > 1) {
+            return b;
+        }
+    }
+
+    return (a+(dirn*u));
+}
+
+
 static Circle CalcCircleForLatPlane(Plane const &plane_lat)
 {
     Circle c;
@@ -48,6 +77,16 @@ static Circle CalcCircleForLonPlane(Plane const &plane_lon)
 
 TileSetLLByPixelRes::Eval::Eval(GeoBounds const &bounds)
 {
+    // surface area
+    surf_area_m2 = CalcGeoBoundsArea(bounds);
+
+    // (mid lon,mid lat) ecef
+    LLA lla_mid;
+    lla_mid.lon = (bounds.minLon+bounds.maxLon)*0.5;
+    lla_mid.lat = (bounds.minLat+bounds.maxLat)*0.5;
+    lla_mid.alt = 0.0;
+    ecef_mid = ConvLLAToECEF(lla_mid);
+
     // corners
     c_min_min = ConvLLAToECEF(LLA(bounds.minLon,bounds.minLat));
     c_max_min = ConvLLAToECEF(LLA(bounds.maxLon,bounds.minLat));
@@ -70,11 +109,12 @@ TileSetLLByPixelRes::Eval::Eval(GeoBounds const &bounds)
 
 // ============================================================= //
 
-TileSetLLByPixelRes::TileSetLLByPixelLength(double view_width,
-                                            double view_height,
-                                            Options const &opts,
-                                            std::vector<RootTileDesc> const &list_root_tiles) :
+TileSetLLByPixelRes::TileSetLLByPixelRes(double view_width,
+                                         double view_height,
+                                         Options const &opts,
+                                         std::vector<RootTileDesc> const &list_root_tiles) :
     m_opts(opts),
+    m_tile_tex_px_area(m_opts.tile_sz_px*m_opts.tile_sz_px),
     m_view_width(view_width),
     m_view_height(view_height)
 {
@@ -84,6 +124,9 @@ TileSetLLByPixelRes::TileSetLLByPixelLength(double view_width,
         m_list_root_tiles.push_back(std::move(tile));
     }
     m_tile_count = m_list_root_tiles.size();
+
+    // debug
+    m_start = std::chrono::system_clock::now();
 }
 
 TileSetLLByPixelRes::~TileSetLLByPixelRes()
@@ -98,27 +141,22 @@ void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
 {
     // update view data
     m_cam = cam;
-    m_mvp = cam->getViewMatrix()*
-            cam->getProjectionMatrix();
 
     osg::Vec3d eye,vpt,up;
     cam->getViewMatrixAsLookAt(eye,vpt,up);
-    m_view_dirn = vpt-eye;
-    m_view_dirn.normalize();
-
-    m_near_plane.n = m_view_dirn;
-    m_near_plane.n.normalize();
-
-    m_near_plane.p = eye + m_near_plane.n*100.0;
-    m_near_plane.d = m_near_plane.n*m_near_plane.p;
 
     double ar,fovy,z_near,z_far;
     cam->getProjectionMatrixAsPerspective(fovy,ar,z_near,z_far);
 
+    //
+    m_eye = eye;
+    m_lla_eye = ConvECEFToLLA(eye);
+
     Frustum frustum;
-    {
+    {   // create the frustum
         auto osg_frustum = BuildFrustumNode(
                     "frustum",cam,frustum,z_near,z_far);
+        (void)osg_frustum;
     }
 
     Plane horizon_plane = CalcHorizonPlane(eye);
@@ -136,22 +174,8 @@ void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
         return;
     }
 
-    m_frustum_pole = 0;
-    for(auto const &bounds : m_list_frustum_bounds) {
-        if(bounds.maxLat == 90.0) {
-            m_frustum_pole = 1;
-            break;
-        }
-
-        if(bounds.minLat == -90.0) {
-            m_frustum_pole = 2;
-            break;
-        }
-    }
-
     m_list_frustum_tri_planes =
             calcFrustumPolyTriPlanes(m_list_frustum_ecef,true);
-
 
     // rebuild the tileset with the new view data
     m_tile_count = m_list_root_tiles.size();
@@ -206,6 +230,16 @@ TileSetLL::Tile const * TileSetLLByPixelRes::GetTile(uint64_t tile_id) const
 void TileSetLLByPixelRes::buildTileSet(std::unique_ptr<Tile> &tile,
                                        size_t &tile_count)
 {
+    if((tile_count >= (m_opts.max_tiles - 2))) {
+        auto now = std::chrono::system_clock::now();
+        std::chrono::duration<double> elapsed_seconds = now-m_start;
+        std::cout << "#: " << elapsed_seconds.count()*1000.0
+                  << ": " << tile_count
+                  << ", tile limit exceeded"
+                  << std::endl;
+
+    }
+
     if( (tile->level < m_opts.max_level) &&
         (tile_count < (m_opts.max_tiles - 2)) &&
         tilePxResExceedsLevel(tile.get()) ) {
@@ -253,11 +287,8 @@ void TileSetLLByPixelRes::buildTileSetList(std::unique_ptr<Tile> const &tile,
     }
 }
 
-bool TileSetLLByPixelRes::tilePxResExceedsLevel(Tile const * tile)
+bool TileSetLLByPixelRes::tilePxResExceedsLevel(Tile * tile)
 {
-    double const k_ndc_to_px =
-            (m_view_width*m_view_height*0.25);
-
     GeoBounds const tile_bounds(tile->min_lon,
                                 tile->max_lon,
                                 tile->min_lat,
@@ -274,9 +305,7 @@ bool TileSetLLByPixelRes::tilePxResExceedsLevel(Tile const * tile)
         it = m_list_tile_eval.emplace(
                     std::pair<uint64_t,Eval>(
                         tile->id,
-                        Eval(tile_bounds,
-                             m_mvp,
-                             m_opts.min_eval_angle_degs))).first;
+                        Eval(tile_bounds))).first;
     }
 
     if(!calcFrustumTileIntersection(it->second,
@@ -286,10 +315,35 @@ bool TileSetLLByPixelRes::tilePxResExceedsLevel(Tile const * tile)
                                     tile_bounds))
     {
         // The tile isn't visible with the current frustum
+        tile->tile_px_res = -2;
         return false;
     }
 
-    //
+    // Estimate the number of pixels taken up by this
+    // tile by using the tile's surface area, and the
+    // number of pixels per meter at the closest
+    // point on the tile wrt to the camera eye
+
+    osg::Vec3d const closest =
+            calcTileClosestPoint(m_lla_eye,
+                                 m_eye,
+                                 tile_bounds,
+                                 it->second);
+
+    double const px_m =
+            calcPixelsPerMeterForDist((m_eye-closest).length(),
+                                      m_view_height,
+                                      m_cam);
+
+    // Estimated pixel area = (pix/m)*(pix/m)*(m^2)
+    double const tile_view_px_area =
+            px_m*px_m*(it->second.surf_area_m2);
+
+    tile->tile_px_res = sqrt(tile_view_px_area);
+
+    // Return true if the current view's tile pixel area
+    // exceeds its texture pixel area
+    return (tile_view_px_area > m_tile_tex_px_area);
 }
 
 bool TileSetLLByPixelRes::calcFrustumTileIntersection(Eval const &eval,
@@ -496,4 +550,84 @@ TileSetLLByPixelRes::calcFrustumPolyTriPlanes(std::vector<osg::Vec3d> const &lis
     }
 
     return list_tri_planes;
+}
+
+osg::Vec3d TileSetLLByPixelRes::calcTileClosestPoint(LLA const &lla_distal,
+                                                     osg::Vec3d const &ecef_distal,
+                                                     GeoBounds const &bounds,
+                                                     Eval const &eval) const
+{
+    // If the LLA of the distal point falls within
+    // the bounds, return the corresponding ecef
+    if(CalcWithinGeoBounds(bounds,lla_distal)) {
+        // TODO CalcRayBodyIntersection might be faster
+        LLA lla_closest = lla_distal;
+        lla_closest.alt = 0.0;
+        return ConvLLAToECEF(lla_closest);
+    }
+
+    // Generate a list of possible closest points from
+    // tile corner points and tile edges
+    std::vector<osg::Vec3d> list_closest;
+    list_closest.reserve(8);
+
+    // Add the corner points of the tile
+    list_closest.push_back(eval.c_min_min);
+    list_closest.push_back(eval.c_max_min);
+    list_closest.push_back(eval.c_max_max);
+    list_closest.push_back(eval.c_min_max);
+
+    // Add the closest points on the great circle arc
+    // edges for each tile (and filter out points that
+    // aren't along the edges of the tile)
+    std::vector<Circle const *> const list_circles = {
+        &eval.circle_min_lon,
+        &eval.circle_max_lon,
+        &eval.circle_min_lat,
+        &eval.circle_max_lat
+    };
+
+    for(auto const circle : list_circles) {
+        osg::Vec3d closest = ClosestPointCirclePoint(*circle,ecef_distal);
+        if(calcPointWithinTilePlanes(closest,
+                                     eval.plane_min_lon,
+                                     eval.plane_max_lon,
+                                     eval.plane_min_lat,
+                                     eval.plane_max_lat))
+        {
+            list_closest.push_back(closest);
+        }
+    }
+
+    // Calculate all the dist2s for the closest points
+    std::vector<double> list_closest_dist2;
+    list_closest_dist2.reserve(list_closest.size());
+    for(auto const &closest : list_closest) {
+        list_closest_dist2.push_back((ecef_distal-closest).length2());
+    }
+
+    double abs_closest_dist2 = list_closest_dist2[0];
+    osg::Vec3d abs_closest = list_closest[0];
+
+    for(size_t i=1; i < list_closest_dist2.size(); i++) {
+        if(list_closest_dist2[i] < abs_closest_dist2) {
+            abs_closest_dist2 = list_closest_dist2[i];
+            abs_closest = list_closest[i];
+        }
+    }
+
+    return abs_closest;
+}
+
+double TileSetLLByPixelRes::calcPixelsPerMeterForDist(double dist_m,
+                                                      double screen_height_px,
+                                                      osg::Camera const * cam) const
+{
+    double fovy_degs,ar,znear,zfar;
+    cam->getProjectionMatrixAsPerspective(fovy_degs,ar,znear,zfar);
+
+    double fovy_rads = fovy_degs * K_PI/180.0;
+    double px_per_m = screen_height_px/(2.0*dist_m*tan(fovy_rads*0.5));
+
+    return px_per_m;
 }

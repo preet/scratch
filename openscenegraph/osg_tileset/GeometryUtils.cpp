@@ -1309,6 +1309,34 @@ bool CalcMinGeoBoundsFromLLAPoly(LLA const &camLLA,
     return true;
 }
 
+// From WildMagic, (c) Geometric Tools LLC
+// See Eberly, Distance between Point and Circle
+osg::Vec3d ClosestPointCirclePoint(Circle const &c,
+                                   osg::Vec3d const &p)
+{
+    // Signed distance from point to plane of circle.
+    osg::Vec3d diff0 = p-c.center;
+    double dist = diff0*c.normal;
+
+    // Projection of P-C onto plane is Q-C = P-C - (fDist)*N.
+    osg::Vec3d diff1 = diff0 - c.normal*dist;
+    double sqrLen = diff1.length2();
+
+    double sqrDistance;
+    osg::Vec3d closestPoint1;
+
+    if(sqrLen >= K_EPS) {
+        closestPoint1 = c.center + diff1*(c.radius/sqrt(sqrLen));
+        osg::Vec3d diff2 = p - closestPoint1;
+        sqrDistance = diff2.length2();
+    }
+    else {
+        closestPoint1 = p;
+        sqrDistance = c.radius*c.radius + dist*dist;
+    }
+
+    return closestPoint1;
+}
 
 void BuildEarthSurface(double min_lon,
                        double max_lon,

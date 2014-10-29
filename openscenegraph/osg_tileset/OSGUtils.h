@@ -54,12 +54,14 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(std::string const &name,
 osg::ref_ptr<osg::Group> BuildSurfacePolyNode(std::string const &name,
                                               std::vector<osg::Vec3d> const &list_ecef,
                                               osg::Vec4 const &cx,
-                                              double vx_size=1.0);
+                                              double vx_size=1.0,
+                                              int level_offset=0);
 
 osg::ref_ptr<osg::Group> BuildGeoBoundsNode(std::string const &name,
                                             GeoBounds const &b,
                                             osg::Vec4 const &color,
-                                            double min_angle=360.0/16.0);
+                                            double min_angle=360.0/16.0,
+                                            int level_offset=0);
 
 osg::ref_ptr<osg::Group> BuildAxesGeometry(std::string const &name,
                                            double length=3.0);
@@ -80,6 +82,12 @@ osg::ref_ptr<osg::Group> BuildPlaneNode(std::string const &name,
                                         Plane const &plane,
                                         double plane_radius,
                                         osg::Vec4 const &color);
+
+osg::ref_ptr<osg::Group> BuildTextNode(std::string const &name,
+                                       std::string const &text_str,
+                                       osg::Vec4 const &color,
+                                       osg::Vec3d const &center,
+                                       double const height_m);
 
 
 #endif // SCRATCH_OSG_UTILS_H

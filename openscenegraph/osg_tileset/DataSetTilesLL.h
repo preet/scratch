@@ -35,6 +35,8 @@ public:
 
 private:
     osg::ref_ptr<osg::Group> createTileGm(uint64_t tile_id);
+    osg::ref_ptr<osg::Group> createTileTextGm(TileSetLL::Tile const * tile,
+                                              std::string const &text);
 
     osg::Group * m_gp_tiles;
     std::unique_ptr<TileSetLL> m_tileset;
