@@ -75,7 +75,8 @@ static Circle CalcCircleForLonPlane(Plane const &plane_lon)
     return c;
 }
 
-TileSetLLByPixelRes::Eval::Eval(GeoBounds const &bounds)
+TileSetLLByPixelRes::Eval::Eval(TileId id,GeoBounds const &bounds) :
+    id(id)
 {
     // surface area
     surf_area_m2 = CalcGeoBoundsArea(bounds);
@@ -114,7 +115,7 @@ TileSetLLByPixelRes::TileSetLLByPixelRes(double view_width,
                                          Options const &opts,
                                          std::vector<RootTileDesc> const &list_root_tiles) :
     m_opts(opts),
-    m_tile_tex_px_area(m_opts.tile_sz_px*m_opts.tile_sz_px),
+    m_tex_px2_m2(m_opts.tile_sz_px*m_opts.tile_sz_px),
     m_view_width(view_width),
     m_view_height(view_height)
 {
@@ -123,7 +124,6 @@ TileSetLLByPixelRes::TileSetLLByPixelRes(double view_width,
         std::unique_ptr<Tile> tile(new Tile(root_tile));
         m_list_root_tiles.push_back(std::move(tile));
     }
-    m_tile_count = m_list_root_tiles.size();
 
     // debug
     m_start = std::chrono::system_clock::now();
@@ -177,11 +177,12 @@ void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
     m_list_frustum_tri_planes =
             calcFrustumPolyTriPlanes(m_list_frustum_ecef,true);
 
+    // ========================================================= //
+
     // rebuild the tileset with the new view data
-    m_tile_count = m_list_root_tiles.size();
     std::map<uint64_t,Tile const *> list_tileset_new;
     for(auto & root_tile : m_list_root_tiles) {
-        buildTileSet(root_tile,m_tile_count);
+        buildTileSet(root_tile);
         buildTileSetList(root_tile,list_tileset_new);
     }
 
@@ -214,6 +215,8 @@ void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
     list_tiles_upd.clear();
 
     m_list_tileset = list_tileset_new;
+
+    std::cout << "#: tileset_sz: " << m_list_tileset.size() << std::endl;
 }
 
 TileSetLL::Tile const * TileSetLLByPixelRes::GetTile(uint64_t tile_id) const
@@ -227,21 +230,11 @@ TileSetLL::Tile const * TileSetLLByPixelRes::GetTile(uint64_t tile_id) const
     }
 }
 
-void TileSetLLByPixelRes::buildTileSet(std::unique_ptr<Tile> &tile,
-                                       size_t &tile_count)
+
+
+void TileSetLLByPixelRes::buildTileSet(std::unique_ptr<Tile> &tile)
 {
-    if((tile_count >= (m_opts.max_tiles - 2))) {
-        auto now = std::chrono::system_clock::now();
-        std::chrono::duration<double> elapsed_seconds = now-m_start;
-        std::cout << "#: " << elapsed_seconds.count()*1000.0
-                  << ": " << tile_count
-                  << ", tile limit exceeded"
-                  << std::endl;
-
-    }
-
     if( (tile->level < m_opts.max_level) &&
-        (tile_count < (m_opts.max_tiles - 2)) &&
         tilePxResExceedsLevel(tile.get()) ) {
         //
         if(tile->clip == Tile::k_clip_NONE) {
@@ -253,14 +246,10 @@ void TileSetLLByPixelRes::buildTileSet(std::unique_ptr<Tile> &tile,
             tile->tile_RT.reset(new Tile(tile.get(),x+1,y+1));
             tile->clip = Tile::k_clip_ALL;
         }
-
-        tile_count += 4; // add children
-        tile_count -= 1; // rem parent
-
-        buildTileSet(tile->tile_LT,tile_count);
-        buildTileSet(tile->tile_LB,tile_count);
-        buildTileSet(tile->tile_RB,tile_count);
-        buildTileSet(tile->tile_RT,tile_count);
+        buildTileSet(tile->tile_LT);
+        buildTileSet(tile->tile_LB);
+        buildTileSet(tile->tile_RB);
+        buildTileSet(tile->tile_RT);
     }
     else {
         if(tile->clip == Tile::k_clip_ALL) {
@@ -287,6 +276,41 @@ void TileSetLLByPixelRes::buildTileSetList(std::unique_ptr<Tile> const &tile,
     }
 }
 
+TileSetLLByPixelRes::Eval const *
+TileSetLLByPixelRes::getEvalData(Tile const * tile,
+                                 GeoBounds const &tile_bounds)
+{
+    // Find the eval for this tile
+    auto it = m_lkup_eval.find(tile->id);
+
+    if(it == m_lkup_eval.end()) {
+        // Create the evalution geometry
+
+        // If the max num of allowed Eval data has been
+        // exceeded, remove the LRU ones first
+        if(m_lru_eval.size() > m_opts.max_eval_sz) {
+            size_t const exceeded_by =
+                    m_lru_eval.size()-
+                    m_opts.max_eval_sz;
+
+            for(size_t i=0; i < exceeded_by; i++) {
+                //
+                m_lkup_eval.erase(m_lru_eval.back()->id);
+                m_lru_eval.pop_back();
+            }
+        }
+
+        // Build and save
+        m_lru_eval.emplace_front(
+                    new Eval(tile->id,tile_bounds));
+
+        it = m_lkup_eval.emplace(
+                    tile->id,m_lru_eval.begin()).first;
+    }
+
+    return (it->second->get());
+}
+
 bool TileSetLLByPixelRes::tilePxResExceedsLevel(Tile * tile)
 {
     GeoBounds const tile_bounds(tile->min_lon,
@@ -294,21 +318,10 @@ bool TileSetLLByPixelRes::tilePxResExceedsLevel(Tile * tile)
                                 tile->min_lat,
                                 tile->max_lat);
 
-    // Create the evalution geometry if required
-    if(m_list_tile_eval.size() > m_opts.max_level*2) {
-        // TODO proper metric for clearing this list
-        m_list_tile_eval.clear();
-    }
+    // get eval data
+    Eval const * eval = this->getEvalData(tile,tile_bounds);
 
-    auto it = m_list_tile_eval.find(tile->id);
-    if(it == m_list_tile_eval.end()) {
-        it = m_list_tile_eval.emplace(
-                    std::pair<uint64_t,Eval>(
-                        tile->id,
-                        Eval(tile_bounds))).first;
-    }
-
-    if(!calcFrustumTileIntersection(it->second,
+    if(!calcFrustumTileIntersection((*eval),
                                     m_list_frustum_ecef,
                                     m_list_frustum_bounds,
                                     m_list_frustum_tri_planes,
@@ -328,7 +341,7 @@ bool TileSetLLByPixelRes::tilePxResExceedsLevel(Tile * tile)
             calcTileClosestPoint(m_lla_eye,
                                  m_eye,
                                  tile_bounds,
-                                 it->second);
+                                 (*eval));
 
     double const px_m =
             calcPixelsPerMeterForDist((m_eye-closest).length(),
@@ -336,14 +349,14 @@ bool TileSetLLByPixelRes::tilePxResExceedsLevel(Tile * tile)
                                       m_cam);
 
     // Estimated pixel area = (pix/m)*(pix/m)*(m^2)
-    double const tile_view_px_area =
-            px_m*px_m*(it->second.surf_area_m2);
+    double const view_px2_m2 =
+            px_m*px_m*(eval->surf_area_m2);
 
-    tile->tile_px_res = sqrt(tile_view_px_area);
+    tile->tile_px_res = sqrt(view_px2_m2);
 
     // Return true if the current view's tile pixel area
     // exceeds its texture pixel area
-    return (tile_view_px_area > m_tile_tex_px_area);
+    return (view_px2_m2 > m_tex_px2_m2);
 }
 
 bool TileSetLLByPixelRes::calcFrustumTileIntersection(Eval const &eval,

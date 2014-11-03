@@ -137,8 +137,8 @@ struct Circle
 {
     osg::Vec3d center;
     osg::Vec3d normal;
-    osg::Vec3d u;
-    osg::Vec3d v;
+//    osg::Vec3d u;
+//    osg::Vec3d v;
     double radius;
 };
 

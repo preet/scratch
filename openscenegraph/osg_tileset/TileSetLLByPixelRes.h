@@ -29,19 +29,19 @@ public:
     {
         // Initialize to sane defaults
         Options() :
-            max_tiles(96),
-            tile_sz_px(256),
+            tile_sz_px(350),
             min_level(0),
             max_level(18),
             fix_level(1),
+            max_eval_sz(320),
             max_adj_offset_dist2_m(1000000.0*1000000.0)
         {}
 
-        size_t max_tiles;
         size_t tile_sz_px;
         size_t min_level;
         size_t max_level;
         size_t fix_level;
+        size_t max_eval_sz;
         double max_adj_offset_dist2_m;
     };
 
@@ -62,7 +62,10 @@ public:
 private:
     struct Eval
     {
-        Eval(GeoBounds const &bounds);
+        Eval(TileId id,
+             GeoBounds const &bounds);
+
+        TileId const id;
 
         // surface area (m^2)
         double surf_area_m2;
@@ -90,11 +93,13 @@ private:
         Circle circle_max_lat;
     };
 
-    void buildTileSet(std::unique_ptr<Tile> &tile,
-                      size_t &tile_count);
+    void buildTileSet(std::unique_ptr<Tile> &tile);
 
     void buildTileSetList(std::unique_ptr<Tile> const &tile,
                           std::map<uint64_t,Tile const *> &list_tiles);
+
+    Eval const * getEvalData(Tile const * tile,
+                             GeoBounds const &tile_bounds);
 
     bool tilePxResExceedsLevel(Tile * tile);
 
@@ -146,7 +151,9 @@ private:
 
     // options
     Options const m_opts;
-    double const m_tile_tex_px_area;
+
+    //
+    double const m_tex_px2_m2;
 
     // view data
     osg::Camera const * m_cam;
@@ -164,9 +171,11 @@ private:
     // tiles
     std::vector<std::unique_ptr<Tile>> m_list_root_tiles;
     std::map<uint64_t,Tile const *> m_list_tileset;
-    size_t m_tile_count;
 
-    // clear list when full
+    std::list<std::unique_ptr<Eval>> m_lru_eval;
+    std::map<TileId,std::list<std::unique_ptr<Eval>>::iterator> m_lkup_eval;
+
+
     std::map<uint64_t,Eval> m_list_tile_eval;
 
     // debug

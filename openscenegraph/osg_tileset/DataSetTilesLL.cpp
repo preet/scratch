@@ -14,12 +14,44 @@
    limitations under the License.
 */
 
+#include <mutex>
+
 #include <GeometryUtils.h>
 #include <DataSetTilesLL.h>
 #include <OSGUtils.h>
 #include <osgText/Text>
 #include <osgDB/ReadFile>
 #include <TileSetLLByPixelRes.h>
+
+//
+std::mutex mutex_tile_textures;
+
+DataSetTilesLL::DataSetTilesLL(Options const &opts,
+                               std::unique_ptr<TileSetLL> tileset,
+                               osg::Group * gp_tiles) :
+    m_opts(opts),
+    m_tileset(std::move(tileset)),
+    m_gp_tiles(gp_tiles)
+{
+    //
+    m_num_base_textures = 0;
+    for(auto level : m_opts.list_base_levels) {
+        m_num_base_textures += pow(4,level);
+    }
+
+    //
+    m_max_view_textures = 0;
+    if(m_opts.max_textures > m_num_base_textures) {
+        m_max_view_textures = m_opts.max_textures-m_num_base_textures;
+    }
+
+    // Preload the base textures
+    m_base_textures_loaded = false;
+
+    // debug
+    m_gp_debug = new osg::Group;
+    m_gp_tiles->addChild(m_gp_debug);
+}
 
 DataSetTilesLL::DataSetTilesLL(osg::Group * gp_tiles,
                                std::unique_ptr<TileSetLL> tileset) :
@@ -67,85 +99,97 @@ void DataSetTilesLL::Update(osg::Camera const * cam)
                              list_tiles_upd,
                              list_tiles_rem);
 
-    for(auto tile_id : list_tiles_rem) {
-        osg::Group * gp_tile = m_list_sg_tiles.find(tile_id)->second;
-        m_gp_tiles->removeChild(gp_tile);
+}
 
-        m_list_sg_tiles.erase(tile_id);
-    }
+//void DataSetTilesLL::Update(osg::Camera const * cam)
+//{
+//    std::vector<uint64_t> list_tiles_add;
+//    std::vector<uint64_t> list_tiles_upd;
+//    std::vector<uint64_t> list_tiles_rem;
+//    m_tileset->UpdateTileSet(cam,
+//                             list_tiles_add,
+//                             list_tiles_upd,
+//                             list_tiles_rem);
 
-    for(auto tile_id : list_tiles_add) {
-        TileSetLL::Tile const * tile = m_tileset->GetTile(tile_id);
-        osg::ref_ptr<osg::Group> gp = createTileGm(tile_id);
-        auto gp_text = createTileTextGm(tile,"?");
-        gp_text->setName("text");
-        gp->addChild(gp_text);
+//    for(auto tile_id : list_tiles_rem) {
+//        osg::Group * gp_tile = m_list_sg_tiles.find(tile_id)->second;
+//        m_gp_tiles->removeChild(gp_tile);
 
-//        GeoBounds const tile_bounds(tile->min_lon,
-//                                    tile->max_lon,
-//                                    tile->min_lat,
-//                                    tile->max_lat);
-//        auto gp = BuildGeoBoundsNode("",
-//                                     tile_bounds,
-//                                     K_COLOR_TABLE[tile->level],
-//                                     360.0/16.0,
-//                                     tile->level);
+//        m_list_sg_tiles.erase(tile_id);
+//    }
 
-        m_list_sg_tiles.emplace(tile_id,gp.get());
-        m_gp_tiles->addChild(gp);
-    }
+//    for(auto tile_id : list_tiles_add) {
+//        TileSetLL::Tile const * tile = m_tileset->GetTile(tile_id);
+//        osg::ref_ptr<osg::Group> gp = createTileGm(tile_id);
+//        auto gp_text = createTileTextGm(tile,"?");
+//        gp_text->setName("text");
+//        gp->addChild(gp_text);
 
-    // update tile px values
+////        GeoBounds const tile_bounds(tile->min_lon,
+////                                    tile->max_lon,
+////                                    tile->min_lat,
+////                                    tile->max_lat);
+////        auto gp = BuildGeoBoundsNode("",
+////                                     tile_bounds,
+////                                     K_COLOR_TABLE[tile->level],
+////                                     360.0/16.0,
+////                                     tile->level);
 
-    for(auto it = m_list_sg_tiles.begin();
-        it != m_list_sg_tiles.end(); ++it)
-    {
-        osg::Group * gp = it->second;
-        for(size_t i=0; i < gp->getNumChildren(); i++) {
-            osg::Group * child = static_cast<osg::Group*>(gp->getChild(i));
-            if(child->getName() == "text") {
-                TileSetLL::Tile const * tile = m_tileset->GetTile(it->first);
-                std::string s = std::to_string(tile->tile_px_res);
-                osg::Geode * gd = static_cast<osg::Geode*>(child->getChild(0));
-                osgText::Text * txt = static_cast<osgText::Text*>(gd->getDrawable(0));
-                txt->setText(s);
+//        m_list_sg_tiles.emplace(tile_id,gp.get());
+//        m_gp_tiles->addChild(gp);
+//    }
 
-            }
-        }
-    }
+//    // update tile px values
 
-//    // debug
-//    for(size_t i=0; i < m_gp_debug->getNumChildren(); i++) {
-//        std::string const name =
-//                m_gp_debug->getChild(i)->getName();
+//    for(auto it = m_list_sg_tiles.begin();
+//        it != m_list_sg_tiles.end(); ++it)
+//    {
+//        osg::Group * gp = it->second;
+//        for(size_t i=0; i < gp->getNumChildren(); i++) {
+//            osg::Group * child = static_cast<osg::Group*>(gp->getChild(i));
+//            if(child->getName() == "text") {
+//                TileSetLL::Tile const * tile = m_tileset->GetTile(it->first);
+//                std::string s = std::to_string(tile->tile_px_res);
+//                osg::Geode * gd = static_cast<osg::Geode*>(child->getChild(0));
+//                osgText::Text * txt = static_cast<osgText::Text*>(gd->getDrawable(0));
+//                txt->setText(s);
 
-//        if(name == "debug0") {
-//            m_gp_debug->removeChild(i);
-//            i--;
+//            }
 //        }
 //    }
 
-//    TileSetLLByPixelArea * tileset_ptr =
-//            static_cast<TileSetLLByPixelArea*>(m_tileset.get());
+////    // debug
+////    for(size_t i=0; i < m_gp_debug->getNumChildren(); i++) {
+////        std::string const name =
+////                m_gp_debug->getChild(i)->getName();
 
-//    GeoBounds const &debug0 = tileset_ptr->m_debug0;
+////        if(name == "debug0") {
+////            m_gp_debug->removeChild(i);
+////            i--;
+////        }
+////    }
 
-//    if(debug0.minLon == 0.0 &&
-//       debug0.maxLon == 0.0 &&
-//       debug0.minLat == 0.0 &&
-//       debug0.maxLat == 0.0)
-//    {
-//        return;
-//    }
+////    TileSetLLByPixelArea * tileset_ptr =
+////            static_cast<TileSetLLByPixelArea*>(m_tileset.get());
 
-//    auto gp0 = BuildGeoBoundsSurfaceNode(
-//                "debug0",tileset_ptr->m_debug0,osg::Vec4(1,1,1,1),20,true,0,0);
-//    m_gp_debug->addChild(gp0);
+////    GeoBounds const &debug0 = tileset_ptr->m_debug0;
 
-//    auto gp1 = BuildGeoBoundsSurfaceNode(
-//                "debug0",tileset_ptr->m_debug1,osg::Vec4(1,0,0,1),21,true,0,0);
-//    m_gp_debug->addChild(gp1);
-}
+////    if(debug0.minLon == 0.0 &&
+////       debug0.maxLon == 0.0 &&
+////       debug0.minLat == 0.0 &&
+////       debug0.maxLat == 0.0)
+////    {
+////        return;
+////    }
+
+////    auto gp0 = BuildGeoBoundsSurfaceNode(
+////                "debug0",tileset_ptr->m_debug0,osg::Vec4(1,1,1,1),20,true,0,0);
+////    m_gp_debug->addChild(gp0);
+
+////    auto gp1 = BuildGeoBoundsSurfaceNode(
+////                "debug0",tileset_ptr->m_debug1,osg::Vec4(1,0,0,1),21,true,0,0);
+////    m_gp_debug->addChild(gp1);
+//}
 
 osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(uint64_t tile_id)
 {

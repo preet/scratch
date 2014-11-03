@@ -26,8 +26,18 @@
 class DataSetTilesLL : public DataSetTiles
 {
 public:
+    struct Options
+    {
+        size_t max_textures;
+        std::vector<uint8_t> list_base_levels;
+    };
+
     DataSetTilesLL(osg::Group * gp_tiles,
                    std::unique_ptr<TileSetLL> tileset);
+
+    DataSetTilesLL(Options const &opts,
+                   std::unique_ptr<TileSetLL> tileset,
+                   osg::Group * gp_tiles);
 
     ~DataSetTilesLL();
 
@@ -38,8 +48,26 @@ private:
     osg::ref_ptr<osg::Group> createTileTextGm(TileSetLL::Tile const * tile,
                                               std::string const &text);
 
+
+    Options const m_opts;
     osg::Group * m_gp_tiles;
     std::unique_ptr<TileSetLL> m_tileset;
+
+
+    // max_base_textures
+    // * The number of preloaded static textures to use
+    //   as a 'fallback' when a texture for a given tile
+    //   isn't available (ie. if its loading)
+    // * Generally contains textures close to the root
+    // * Must be
+    size_t m_num_base_textures;
+    size_t m_max_view_textures;
+    bool m_base_textures_loaded;
+
+    //
+    std::vector<osg::ref_ptr<osg::Texture2D>> m_list_textures;
+
+
     std::map<uint64_t,osg::Group*> m_list_sg_tiles;
 
     std::vector<osg::ref_ptr<osg::Texture2D>> m_list_tile_level_tex;

@@ -58,6 +58,12 @@ void SplitSets(std::vector<T> const &sorted_list_a,
     list_xsec.resize(it-list_xsec.begin());
 }
 
+class TileLL
+{
+public:
+    typedef uint64_t Id;
+};
+
 class TileSetLL
 {
 public:
@@ -87,9 +93,12 @@ public:
 
     // ============================================================= //
 
+    typedef uint64_t TileId;
+
     class Tile
     {
     public:
+
         Tile(RootTileDesc const &r) :
             id(static_cast<uint64_t>(r.id) << 56),
             level(0),
@@ -163,6 +172,14 @@ public:
         uint8_t clip;
 
         int64_t tile_px_res;
+
+        // ============================= //
+
+        static bool CompareLevelDescending(Tile const * a,Tile const * b)
+        {
+            return (a->level < b->level);
+        }
+
 
     private:
         static uint64_t getIdFromParentXY(Tile const * parent,

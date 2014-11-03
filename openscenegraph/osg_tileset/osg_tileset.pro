@@ -28,14 +28,16 @@ HEADERS += \
         GeometryUtils.h \
         OSGUtils.h \
         TileSetLL.h \
-        TileSetLLByPixelArea.h \
+#        TileDataSource.h \
+#        TileSetLLByPixelArea.h \
         TileSetLLByPixelRes.h \
         DataSetTilesLL.h
 	
 SOURCES += \
         GeometryUtils.cpp \
         OSGUtils.cpp \
-        TileSetLLByPixelArea.cpp \
+#        TileDataSource.cpp \
+#        TileSetLLByPixelArea.cpp \
         TileSetLLByPixelRes.cpp \
         DataSetTilesLL.cpp
 
