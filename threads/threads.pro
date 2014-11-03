@@ -2,7 +2,12 @@ TEMPLATE    = app
 TARGET      = runme
 CONFIG      -= qt
 
-HEADERS += ThreadPool.h
+HEADERS += \
+    ThreadPool.h
+
+SOURCES += \
+    ThreadPool.cpp
+
 SOURCES += main.cpp
 
 # need these flags for gcc 4.8.x bug

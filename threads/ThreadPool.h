@@ -18,13 +18,11 @@
 #define SCRATCH_THREAD_POOL_H
 
 #include <vector>
-#include <queue>
+#include <deque>
 #include <atomic>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-#include <deque>
-#include <iostream>
 #include <future>
 
 namespace scratch
@@ -33,76 +31,33 @@ namespace scratch
 	{
     public:
 
+        // ============================================================= //
+
         class Task
         {
         public:
-            Task() :
-                m_started(false),
-                m_running(false),
-                m_canceled(false),
-                m_finished(false),
-                m_future(m_promise.get_future())
-            {
-                // empty
-            }
-
-            virtual ~Task()
-            {
-                // empty
-            }
+            Task();
+            virtual ~Task();
 
             // No copying allowed
             Task(Task const &)              = delete;
             Task & operator=(Task const &)  = delete;
 
-            bool IsStarted() const
-            {
-                return m_started;
-            }
+            bool IsStarted() const;
+            bool IsRunning() const;
+            bool IsCanceled() const;
+            bool IsFinished() const;
 
-            bool IsRunning() const
-            {
-                return m_running;
-            }
-
-            bool IsCanceled() const
-            {
-                return m_canceled;
-            }
-
-            bool IsFinished() const
-            {
-                return m_finished;
-            }
-
-            virtual void Wait() // TODO add duration wait
-            {
-                m_future.wait();
-            }
+            // TODO add duration wait
+            void Wait();
 
             virtual void Process() = 0;
             virtual void Cancel() = 0;
 
         protected:
-            void onStarted()
-            {
-                m_started = true;
-                m_running = true;
-            }
-
-            void onFinished()
-            {
-                m_running = false;
-                m_finished = true;
-                m_promise.set_value();
-            }
-
-            void onCanceled()
-            {
-                m_running = false;
-                m_canceled = true;
-                m_promise.set_value();
-            }
+            void onStarted();
+            void onFinished();
+            void onCanceled();
 
         private:
             std::atomic<bool> m_started;
@@ -114,91 +69,32 @@ namespace scratch
             std::future<void>  m_future;
         };
 
-        ThreadPool(size_t thread_count) :
-            m_thread_count(thread_count),
-            m_running(false)
-        {
-            this->Resume();
-        }
+        // ============================================================= //
 
-        ~ThreadPool()
-        {
-            this->Stop();
-        }
-
-        void Push(std::shared_ptr<Task> const &task)
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            // Add work to shared queue
-            m_queue_tasks.push_back(task);
-
-            // Wake one thread from the pool
-            m_wait_cond.notify_one();
-        }
-
-        void Stop()
-        {
-            if(m_running) {
-                m_running = false;
-                m_wait_cond.notify_all();
-
-                for(auto & thread : m_list_threads) {
-                    thread.join();
-                }
-                m_list_threads.clear();
-            }
-        }
-
-        void Resume()
-        {
-            if(!m_running) {
-                m_running = true;
-                for(size_t i=0; i < m_thread_count; i++) {
-                    m_list_threads.emplace_back(&ThreadPool::loop,this);
-                }
-            }
-        }
+        ThreadPool(size_t thread_count);
+        ~ThreadPool();
 
         // No copying allowed
         ThreadPool(ThreadPool const &)              = delete;
         ThreadPool & operator=(ThreadPool const &)  = delete;
+
+        size_t GetTaskCount() const;
+        void Push(std::shared_ptr<Task> const &task);
+        void Stop();
+        void Resume();
 		
     private:
-        void loop()
-        {
-            while(m_running)
-            {
-                // acquire lock
-                std::unique_lock<std::mutex> lock(m_mutex);
-
-                while(m_running && m_queue_tasks.empty()) {
-                    // wait while there are no tasks to process
-                    m_wait_cond.wait(lock);
-                }
-                // wake-up automatically reacquires lock
-
-                if(!m_running) {
-                    return;
-                }
-
-                // Take a task to process
-                std::shared_ptr<Task> task = std::move(m_queue_tasks.front());
-                m_queue_tasks.pop_front();
-
-                lock.unlock(); // release lock
-
-                // Process task
-                task->Process();
-            }
-        }
+        void loop();
 
         size_t m_thread_count;
         std::vector<std::thread> m_list_threads;
         std::deque<std::shared_ptr<Task>> m_queue_tasks;
 
         std::atomic<bool> m_running;
-        std::mutex m_mutex;
+        mutable std::mutex m_mutex;
         std::condition_variable m_wait_cond;
+
+        // ============================================================= //
 	};
 
 } // scratch
