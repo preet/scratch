@@ -75,7 +75,7 @@ static Circle CalcCircleForLonPlane(Plane const &plane_lon)
     return c;
 }
 
-TileSetLLByPixelRes::Eval::Eval(TileId id,GeoBounds const &bounds) :
+TileSetLLByPixelRes::Eval::Eval(TileLL::Id id,GeoBounds const &bounds) :
     id(id)
 {
     // surface area
@@ -110,19 +110,44 @@ TileSetLLByPixelRes::Eval::Eval(TileId id,GeoBounds const &bounds) :
 
 // ============================================================= //
 
-TileSetLLByPixelRes::TileSetLLByPixelRes(double view_width,
-                                         double view_height,
+TileSetLLByPixelRes::TileSetLLByPixelRes(GeoBounds const &bounds,
+                                         uint8_t min_level,
+                                         uint8_t max_level,
+                                         uint8_t num_root_tiles_x,
+                                         uint8_t num_root_tiles_y,
                                          Options const &opts,
-                                         std::vector<RootTileDesc> const &list_root_tiles) :
+                                         double view_width_px,
+                                         double view_height_px) :
+    TileSetLL(bounds,
+              min_level,
+              max_level,
+              num_root_tiles_x,
+              num_root_tiles_y),
     m_opts(opts),
     m_tex_px2_m2(m_opts.tile_sz_px*m_opts.tile_sz_px),
-    m_view_width(view_width),
-    m_view_height(view_height)
+    m_view_width(view_width_px),
+    m_view_height(view_height_px)
 {
-    // Generate tiles from list_root_tiles
-    for(auto const &root_tile : list_root_tiles) {
-        std::unique_ptr<Tile> tile(new Tile(root_tile));
-        m_list_root_tiles.push_back(std::move(tile));
+    // Generate root tiles from the number of
+    // root tiles in x and y
+    double const lon_width =
+            (bounds.maxLon-bounds.minLon)/num_root_tiles_x;
+
+    double const lat_width =
+            (bounds.maxLat-bounds.minLat)/num_root_tiles_y;
+
+    for(size_t y=0; y < num_root_tiles_y; y++) {
+        for(size_t x=0; x < num_root_tiles_x; x++) {
+            // Create bounds for this tile
+            GeoBounds b(bounds.minLon,
+                        bounds.minLon+(lon_width*(x+1)),
+                        bounds.minLat,
+                        bounds.minLat+(lat_width*(y+1)));
+
+            // save
+            m_list_root_tiles.emplace_back(
+                        new TileLL(b,x,y));
+        }
     }
 
     // debug
@@ -135,9 +160,9 @@ TileSetLLByPixelRes::~TileSetLLByPixelRes()
 }
 
 void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
-                                        std::vector<uint64_t> &list_tiles_add,
-                                        std::vector<uint64_t> &list_tiles_upd,
-                                        std::vector<uint64_t> &list_tiles_rem)
+                                        std::vector<TileLL::Id> &list_tiles_add,
+                                        std::vector<TileLL::Id> &list_tiles_upd,
+                                        std::vector<TileLL::Id> &list_tiles_rem)
 {
     // update view data
     m_cam = cam;
@@ -180,14 +205,14 @@ void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
     // ========================================================= //
 
     // rebuild the tileset with the new view data
-    std::map<uint64_t,Tile const *> list_tileset_new;
+    std::map<TileLL::Id,TileLL const *> list_tileset_new;
     for(auto & root_tile : m_list_root_tiles) {
         buildTileSet(root_tile);
         buildTileSetList(root_tile,list_tileset_new);
     }
 
     // get tileset lists as sorted lists of tile ids
-    std::vector<uint64_t> list_tiles_new;
+    std::vector<TileLL::Id> list_tiles_new;
     list_tiles_new.reserve(list_tileset_new.size());
     for(auto it = list_tileset_new.begin();
         it != list_tileset_new.end(); ++it)
@@ -195,7 +220,7 @@ void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
         list_tiles_new.push_back(it->first);
     }
 
-    std::vector<uint64_t> list_tiles_old;
+    std::vector<TileLL::Id> list_tiles_old;
     list_tiles_old.reserve(m_list_tileset.size());
     for(auto it = m_list_tileset.begin();
         it != m_list_tileset.end(); ++it)
@@ -219,7 +244,7 @@ void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
     std::cout << "#: tileset_sz: " << m_list_tileset.size() << std::endl;
 }
 
-TileSetLL::Tile const * TileSetLLByPixelRes::GetTile(uint64_t tile_id) const
+TileLL const * TileSetLLByPixelRes::GetTile(TileLL::Id tile_id) const
 {
     auto it = m_list_tileset.find(tile_id);
     if(it == m_list_tileset.end()) {
@@ -232,19 +257,19 @@ TileSetLL::Tile const * TileSetLLByPixelRes::GetTile(uint64_t tile_id) const
 
 
 
-void TileSetLLByPixelRes::buildTileSet(std::unique_ptr<Tile> &tile)
+void TileSetLLByPixelRes::buildTileSet(std::unique_ptr<TileLL> &tile)
 {
-    if( (tile->level < m_opts.max_level) &&
+    if( (tile->level < this->GetMaxLevel()) &&
         tilePxResExceedsLevel(tile.get()) ) {
         //
-        if(tile->clip == Tile::k_clip_NONE) {
+        if(tile->clip == TileLL::k_clip_NONE) {
             uint32_t const x = tile->x*2;
             uint32_t const y = tile->y*2;
-            tile->tile_LT.reset(new Tile(tile.get(),x,y+1));
-            tile->tile_LB.reset(new Tile(tile.get(),x,y));
-            tile->tile_RB.reset(new Tile(tile.get(),x+1,y));
-            tile->tile_RT.reset(new Tile(tile.get(),x+1,y+1));
-            tile->clip = Tile::k_clip_ALL;
+            tile->tile_LT.reset(new TileLL(tile.get(),x,y+1));
+            tile->tile_LB.reset(new TileLL(tile.get(),x,y));
+            tile->tile_RB.reset(new TileLL(tile.get(),x+1,y));
+            tile->tile_RT.reset(new TileLL(tile.get(),x+1,y+1));
+            tile->clip = TileLL::k_clip_ALL;
         }
         buildTileSet(tile->tile_LT);
         buildTileSet(tile->tile_LB);
@@ -252,21 +277,21 @@ void TileSetLLByPixelRes::buildTileSet(std::unique_ptr<Tile> &tile)
         buildTileSet(tile->tile_RT);
     }
     else {
-        if(tile->clip == Tile::k_clip_ALL) {
+        if(tile->clip == TileLL::k_clip_ALL) {
             tile->tile_LT = nullptr;
             tile->tile_LB = nullptr;
             tile->tile_RB = nullptr;
             tile->tile_RT = nullptr;
-            tile->clip = Tile::k_clip_NONE;
+            tile->clip = TileLL::k_clip_NONE;
         }
     }
 }
 
-void TileSetLLByPixelRes::buildTileSetList(std::unique_ptr<Tile> const &tile,
-                                           std::map<uint64_t,Tile const *> &list_tiles)
+void TileSetLLByPixelRes::buildTileSetList(std::unique_ptr<TileLL> const &tile,
+                                           std::map<TileLL::Id,TileLL const *> &list_tiles)
 {
-    if(tile->clip == Tile::k_clip_NONE) { // visible w no children
-        list_tiles.insert(std::pair<uint64_t,Tile const *>(tile->id,tile.get()));
+    if(tile->clip == TileLL::k_clip_NONE) { // visible w no children
+        list_tiles.insert(std::pair<TileLL::Id,TileLL const *>(tile->id,tile.get()));
     }
     else {
         buildTileSetList(tile->tile_LT,list_tiles);
@@ -277,7 +302,7 @@ void TileSetLLByPixelRes::buildTileSetList(std::unique_ptr<Tile> const &tile,
 }
 
 TileSetLLByPixelRes::Eval const *
-TileSetLLByPixelRes::getEvalData(Tile const * tile,
+TileSetLLByPixelRes::getEvalData(TileLL const * tile,
                                  GeoBounds const &tile_bounds)
 {
     // Find the eval for this tile
@@ -311,12 +336,12 @@ TileSetLLByPixelRes::getEvalData(Tile const * tile,
     return (it->second->get());
 }
 
-bool TileSetLLByPixelRes::tilePxResExceedsLevel(Tile * tile)
+bool TileSetLLByPixelRes::tilePxResExceedsLevel(TileLL * tile)
 {
-    GeoBounds const tile_bounds(tile->min_lon,
-                                tile->max_lon,
-                                tile->min_lat,
-                                tile->max_lat);
+    GeoBounds const tile_bounds(tile->bounds.minLon,
+                                tile->bounds.maxLon,
+                                tile->bounds.minLat,
+                                tile->bounds.maxLat);
 
     // get eval data
     Eval const * eval = this->getEvalData(tile,tile_bounds);
@@ -506,6 +531,8 @@ bool TileSetLLByPixelRes::calcFrustumTileIntersection(Eval const &eval,
             }
         }
     }
+
+    return false;
 }
 
 std::vector<Plane>

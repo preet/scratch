@@ -159,7 +159,7 @@ namespace scratch
             lock.unlock(); // release lock
 
             // Process task
-            task->Process();
+            task->process();
         }
     }
 

@@ -27,8 +27,9 @@ HEADERS += \
         DataSetTiles.h \
         GeometryUtils.h \
         OSGUtils.h \
+        ThreadPool.h \
         TileSetLL.h \
-#        TileDataSource.h \
+        TileDataSource.h \
 #        TileSetLLByPixelArea.h \
         TileSetLLByPixelRes.h \
         DataSetTilesLL.h
@@ -36,7 +37,8 @@ HEADERS += \
 SOURCES += \
         GeometryUtils.cpp \
         OSGUtils.cpp \
-#        TileDataSource.cpp \
+        ThreadPool.cpp \
+        TileDataSource.cpp \
 #        TileSetLLByPixelArea.cpp \
         TileSetLLByPixelRes.cpp \
         DataSetTilesLL.cpp

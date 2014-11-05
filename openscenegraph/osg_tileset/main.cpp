@@ -19,19 +19,20 @@ int main()
     // axes
     auto gp_axes = BuildAxesGeometry("axes",RAD_AV*1.15);
 
-    // create root tiles
-    std::vector<TileSetLL::RootTileDesc> list_root_tiles;
-    list_root_tiles.emplace_back(0,-180,180,-90,90);
-
     // create TileSet
-    TileSetLLByPixelRes::Options opts;
+    TileSetLLByPixelRes::Options tileset_opts;
     std::unique_ptr<TileSetLL> tileset(
-                new TileSetLLByPixelRes(640,480,opts,list_root_tiles));
+                new TileSetLLByPixelRes(GeoBounds(-180,180,-90,90),
+                                        0,18,1,1,tileset_opts,
+                                        640,480));
 
     // create dataset
+    DataSetTilesLL::Options dataset_opts;
     osg::ref_ptr<osg::Group> gp_tiles = new osg::Group;
     std::unique_ptr<DataSetTiles> dataset(
-                new DataSetTilesLL(gp_tiles,std::move(tileset)));
+                new DataSetTilesLL(dataset_opts,
+                                   std::move(tileset),
+                                   gp_tiles));
 
     // setup view
     osgViewer::CompositeViewer viewer;

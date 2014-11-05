@@ -30,42 +30,51 @@ public:
         // Initialize to sane defaults
         Options() :
             tile_sz_px(350),
-            min_level(0),
-            max_level(18),
-            fix_level(1),
             max_eval_sz(320),
             max_adj_offset_dist2_m(1000000.0*1000000.0)
         {}
 
+        // tile_sz_px
+        // * The length of one edge of the tile in pixels used
+        //   to determine if the tile should be subdivided
+        // * Does not have to match the actual pixel resolution
+        //   and can be tweaked to adjust how 'easily' tiles are
+        //   subdivided with respect to the view
         size_t tile_sz_px;
-        size_t min_level;
-        size_t max_level;
-        size_t fix_level;
+
+        // max_eval_count
+        // * The max number of Eval data structs to keep cached
         size_t max_eval_sz;
+
+        //
         double max_adj_offset_dist2_m;
     };
 
-    TileSetLLByPixelRes(double view_width,
-                        double view_height,
+    TileSetLLByPixelRes(GeoBounds const &bounds,
+                        uint8_t min_level,
+                        uint8_t max_level,
+                        uint8_t num_root_tiles_x,
+                        uint8_t num_root_tiles_y,
                         Options const &opts,
-                        std::vector<RootTileDesc> const &list_root_tiles);
+                        double view_width_px,
+                        double view_height_px);
 
     ~TileSetLLByPixelRes();
 
     void UpdateTileSet(osg::Camera const * cam,
-                       std::vector<uint64_t> &list_tiles_add,
-                       std::vector<uint64_t> &list_tiles_upd,
-                       std::vector<uint64_t> &list_tiles_rem);
+                       std::vector<TileLL::Id> &list_tiles_add,
+                       std::vector<TileLL::Id> &list_tiles_upd,
+                       std::vector<TileLL::Id> &list_tiles_rem);
 
-    Tile const * GetTile(uint64_t tile_id) const;
+    TileLL const * GetTile(TileLL::Id tile_id) const;
 
 private:
     struct Eval
     {
-        Eval(TileId id,
+        Eval(TileLL::Id id,
              GeoBounds const &bounds);
 
-        TileId const id;
+        TileLL::Id const id;
 
         // surface area (m^2)
         double surf_area_m2;
@@ -93,15 +102,15 @@ private:
         Circle circle_max_lat;
     };
 
-    void buildTileSet(std::unique_ptr<Tile> &tile);
+    void buildTileSet(std::unique_ptr<TileLL> &tile);
 
-    void buildTileSetList(std::unique_ptr<Tile> const &tile,
-                          std::map<uint64_t,Tile const *> &list_tiles);
+    void buildTileSetList(std::unique_ptr<TileLL> const &tile,
+                          std::map<TileLL::Id,TileLL const *> &list_tiles);
 
-    Eval const * getEvalData(Tile const * tile,
+    Eval const * getEvalData(TileLL const * tile,
                              GeoBounds const &tile_bounds);
 
-    bool tilePxResExceedsLevel(Tile * tile);
+    bool tilePxResExceedsLevel(TileLL * tile);
 
     // * checks whether or not the projected frustum poly
     //   as specified by @list_frustum_vx,)_bounds,_tri_planes
@@ -169,14 +178,14 @@ private:
     std::vector<Plane>      m_list_frustum_tri_planes;
 
     // tiles
-    std::vector<std::unique_ptr<Tile>> m_list_root_tiles;
-    std::map<uint64_t,Tile const *> m_list_tileset;
+    std::vector<std::unique_ptr<TileLL>> m_list_root_tiles;
+    std::map<TileLL::Id,TileLL const *> m_list_tileset;
 
     std::list<std::unique_ptr<Eval>> m_lru_eval;
-    std::map<TileId,std::list<std::unique_ptr<Eval>>::iterator> m_lkup_eval;
+    std::map<TileLL::Id,std::list<std::unique_ptr<Eval>>::iterator> m_lkup_eval;
 
 
-    std::map<uint64_t,Eval> m_list_tile_eval;
+    std::map<TileLL::Id,Eval> m_list_tile_eval;
 
     // debug
     std::chrono::time_point<std::chrono::system_clock> m_start;

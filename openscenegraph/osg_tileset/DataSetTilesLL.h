@@ -19,6 +19,7 @@
 
 #include <DataSetTiles.h>
 #include <TileSetLL.h>
+#include <TileDataSource.h>
 
 #include <osg/PolygonMode>
 #include <osg/Texture2D>
@@ -28,12 +29,15 @@ class DataSetTilesLL : public DataSetTiles
 public:
     struct Options
     {
+        // sane defaults
+        Options() :
+            max_textures(64),
+            list_base_levels({0,1})
+        {}
+
         size_t max_textures;
         std::vector<uint8_t> list_base_levels;
     };
-
-    DataSetTilesLL(osg::Group * gp_tiles,
-                   std::unique_ptr<TileSetLL> tileset);
 
     DataSetTilesLL(Options const &opts,
                    std::unique_ptr<TileSetLL> tileset,
@@ -44,14 +48,15 @@ public:
     void Update(osg::Camera const * cam);
 
 private:
-    osg::ref_ptr<osg::Group> createTileGm(uint64_t tile_id);
-    osg::ref_ptr<osg::Group> createTileTextGm(TileSetLL::Tile const * tile,
+    osg::ref_ptr<osg::Group> createTileGm(TileLL::Id tile_id);
+    osg::ref_ptr<osg::Group> createTileTextGm(TileLL const * tile,
                                               std::string const &text);
 
 
     Options const m_opts;
-    osg::Group * m_gp_tiles;
     std::unique_ptr<TileSetLL> m_tileset;
+    osg::Group * m_gp_tiles;
+    std::unique_ptr<TileImageSourceLLLocal> m_tile_image_source;
 
 
     // max_base_textures
@@ -64,11 +69,16 @@ private:
     size_t m_max_view_textures;
     bool m_base_textures_loaded;
 
+
+
+    std::vector<std::shared_ptr<TileImageSourceLL::Task>> m_list_req_images;
+
     //
-    std::vector<osg::ref_ptr<osg::Texture2D>> m_list_textures;
+    std::vector<osg::ref_ptr<osg::Texture2D>> m_list_base_textures;
+    std::vector<osg::ref_ptr<osg::Texture2D>> m_list_view_textures;
 
 
-    std::map<uint64_t,osg::Group*> m_list_sg_tiles;
+    std::map<TileLL::Id,osg::Group*> m_list_sg_tiles;
 
     std::vector<osg::ref_ptr<osg::Texture2D>> m_list_tile_level_tex;
 
