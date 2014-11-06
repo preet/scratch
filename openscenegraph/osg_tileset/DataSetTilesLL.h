@@ -32,7 +32,7 @@ public:
         // sane defaults
         Options() :
             max_textures(64),
-            list_base_levels({0,1})
+            list_base_levels({0,1}) // TODO: MUST BE SORTED
         {}
 
         size_t max_textures;
@@ -49,8 +49,28 @@ public:
 
 private:
     osg::ref_ptr<osg::Group> createTileGm(TileLL::Id tile_id);
+
+    osg::ref_ptr<osg::Group> createTileGm(TileLL const * tile,
+                                          osg::ref_ptr<osg::Texture2D> const &tex,
+                                          double const s_start,
+                                          double const s_delta,
+                                          double const t_start,
+                                          double const t_delta);
+
+
     osg::ref_ptr<osg::Group> createTileTextGm(TileLL const * tile,
                                               std::string const &text);
+
+    void moveReadyImagesToBaseTextures();
+    void moveReadyImagesToViewTextures();
+
+    void getTileTexture(osg::ref_ptr<osg::Texture2D> &texture,
+                        double &s_start,
+                        double &s_delta,
+                        double &t_start,
+                        double &t_delta);
+
+    void applyDefaultTextureSettings(osg::Texture2D * texture) const;
 
 
     Options const m_opts;
@@ -59,25 +79,36 @@ private:
     std::unique_ptr<TileImageSourceLLLocal> m_tile_image_source;
 
 
-    // max_base_textures
+    std::vector<uint8_t> m_list_level_is_base; // 0 = view, 1 = base
+
+    // num_base_textures
     // * The number of preloaded static textures to use
     //   as a 'fallback' when a texture for a given tile
     //   isn't available (ie. if its loading)
     // * Generally contains textures close to the root
     // * Must be
+
     size_t m_num_base_textures;
     size_t m_max_view_textures;
     bool m_base_textures_loaded;
 
+    // list_req_images
+    // TODO want to rename to lkup_image_requests
+    // * List of pending async requested images
+    std::map<TileLL::Id,std::shared_ptr<TileImageSourceLL::Task>> m_lkup_req_images;
 
+    // lkup_base_textures
+    // * container for base textures with id based lookup
+    std::map<TileLL::Id,osg::ref_ptr<osg::Texture2D>> m_lkup_base_textures;
 
-    std::vector<std::shared_ptr<TileImageSourceLL::Task>> m_list_req_images;
+    // lru_view_textures
+    // * container for view textures with id based lookup
+    // * container is a cache with a max capacity of
+    //   (max_view_textures-num_base_textures)
+    scratch::LRUCacheMap<TileLL::Id,osg::ref_ptr<osg::Texture2D>> m_lru_view_textures;
 
-    //
-    std::vector<osg::ref_ptr<osg::Texture2D>> m_list_base_textures;
-    std::vector<osg::ref_ptr<osg::Texture2D>> m_list_view_textures;
-
-
+    // list_sg_tiles
+    // * list of scenegraph tile data for all tiles
     std::map<TileLL::Id,osg::Group*> m_list_sg_tiles;
 
     std::vector<osg::ref_ptr<osg::Texture2D>> m_list_tile_level_tex;

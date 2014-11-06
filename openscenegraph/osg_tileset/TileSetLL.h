@@ -19,6 +19,9 @@
 
 #include <memory>
 #include <algorithm>
+#include <limits>
+#include <cassert>
+
 #include <osg/Camera>
 
 #include <GeometryUtils.h>
@@ -58,6 +61,201 @@ void SplitSets(std::vector<T> const &sorted_list_a,
                                list_xsec.begin());
     list_xsec.resize(it-list_xsec.begin());
 }
+
+namespace scratch
+{
+    // K and V must be default constructible
+    // and have an assignment copy constructor
+
+    template<typename K,typename V>
+    class LRUCacheVector
+    {
+    public:
+        LRUCacheVector(size_t capacity) :
+            m_capacity(capacity)
+        {
+            m_lru.reserve(capacity);
+        }
+
+        void insert(K const &key, V const &val)
+        {
+            if(size() == capacity()) {
+                // make room by erasing the lru element
+                m_lru.pop_back();
+            }
+
+            auto it = find(key);
+            if(it == m_lru.end()) {
+                m_lru.emplace_back(key,val);
+            }
+        }
+
+        void reuse(K const &key)
+        {
+            auto it = find(key);
+            if(it == m_lru.end()) {
+                return;
+            }
+
+            std::pair<K,V> copy(it->first,it->second);
+            m_lru.erase(it);
+            m_lru.insert(m_lru.begin(),copy);
+        }
+
+        void erase(K const &key)
+        {
+            auto it = find(key);
+            if(it == m_lru.end()) {
+                return;
+            }
+
+            m_lru.erase(it);
+        }
+
+        void clear()
+        {
+            m_lru.clear();
+        }
+
+        bool exists(K const &key) const
+        {
+            return (find(key) != m_lru.end());
+        }
+
+        V const & get(K const &key) const
+        {
+            auto it = find(key);
+            assert(it != m_lru.end());
+
+            return it->second;
+        }
+
+        size_t size() const
+        {
+            return m_lru.size();
+        }
+
+        size_t capacity() const
+        {
+            return m_capacity;
+        }
+
+    private:
+        std::vector<std::pair<K,V>>::iterator find(K const &key)
+        {
+            for(auto it = m_lru.begin();
+                it != m_lru.end(); ++it)
+            {
+                if(it->first == key) {
+                    return it;
+                }
+            }
+
+            return m_lru.end();
+        }
+
+        size_t const m_capacity;
+        std::vector<std::pair<K,V>> m_lru;
+    };
+
+
+
+    template<typename K,
+             typename V,
+             template<typename,typename> class map_type>
+    class LRUCacheMap
+    {
+    public:
+
+        LRUCacheMap(size_t capacity) :
+            m_capacity(capacity)
+        {
+            // empty
+        }
+
+        void insert(K const &key, V const &val)
+        {
+            // make room by erasing the lru element if required
+            if(size() == capacity()) {
+                auto it = m_lkup.find(m_lru.back());
+                m_lkup.erase(it);
+                m_lru.pop_back();
+            }
+
+            // add to lru
+            m_lru.push_front(key);
+
+            // add to lookup
+            m_lkup.insert(std::make_pair(
+                              key,std::make_pair(
+                                  val,m_lru.begin())));
+        }
+
+        void reuse(K const &key)
+        {
+            // move key to the front of the lru
+            auto lkup_it = m_lkup.find(key);
+            if(lkup_it == m_lkup.end()) {
+                return;
+            }
+
+            auto lru_it = lkup_it->second.second;
+            m_lru.splice(m_lru.begin(),m_lru,lru_it);
+        }
+
+        void erase(K const &key)
+        {
+            auto lkup_it = m_lkup.find(key);
+            if(lkup_it == m_lkup.end()) {
+                return;
+            }
+
+            // remove from lru and lkup
+            auto lru_it = lkup_it->second.second;
+            m_lru.erase(lru_it);
+            m_lkup.erase(lkup_it);
+        }
+
+        void clear()
+        {
+            m_lkup.clear();
+            m_lru.clear();
+        }
+
+        bool exists(K const &key) const
+        {
+            return (m_lkup.find(key) != m_lkup.end());
+        }
+
+        V const & get(K const &key) const
+        {
+            auto lkup_it = m_lkup.find(key);
+            assert(lkup_it != m_lkup.end());
+
+            return lkup_it->second.first;
+        }
+
+        size_t size() const
+        {
+            return m_lkup.size();
+        }
+
+        size_t capacity() const
+        {
+            return m_capacity;
+        }
+
+    private:
+        size_t m_capacity;
+        std::list<K> m_lru;
+        std::map<K,std::pair<V,std::list<K>::iterator>>  m_lkup;
+    };
+}
+
+
+
+
+
 
 class TileLL
 {

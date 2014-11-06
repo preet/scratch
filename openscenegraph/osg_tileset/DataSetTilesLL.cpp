@@ -15,6 +15,7 @@
 */
 
 #include <mutex>
+#include <algorithm>
 
 #include <GeometryUtils.h>
 #include <DataSetTilesLL.h>
@@ -30,6 +31,15 @@ DataSetTilesLL::DataSetTilesLL(Options const &opts,
     m_tileset(std::move(tileset)),
     m_gp_tiles(gp_tiles)
 {
+    // create a list of which levels have base textures
+    m_list_level_is_base.resize(m_tileset->GetMaxLevel(),0);
+    for(size_t i=0; i <  m_list_level_is_base.size(); i++) {
+        for(auto base_level : m_opts.list_base_levels) {
+            if(i == base_level) {
+                m_list_level_is_base[i] = 1;
+            }
+        }
+    }
 
     // init the tile image source
     std::function<std::string(TileLL::Id)> image_path_gen =
@@ -64,23 +74,23 @@ DataSetTilesLL::DataSetTilesLL(Options const &opts,
 
     // Preload the base textures
     m_base_textures_loaded = false;
-//    for(auto level : m_opts.list_base_levels) {
-//        // request an image for all tiles in this level
-//        size_t const tiles_in_x =
-//                pow(4,level)*m_tileset->GetNumRootTilesX();
+    for(auto level : m_opts.list_base_levels) {
+        // request an image for all tiles in this level
+        size_t const tiles_in_x =
+                pow(4,level)*m_tileset->GetNumRootTilesX();
 
-//        size_t const tiles_in_y =
-//                pow(4,level)*m_tileset->GetNumRootTilesY();
+        size_t const tiles_in_y =
+                pow(4,level)*m_tileset->GetNumRootTilesY();
 
-//        for(size_t y=0; y < tiles_in_y; y++) {
-//            for(size_t x=0; x < tiles_in_x; x++) {
-//                // request image and save
-//                m_list_req_images.push_back(
-//                            m_tile_image_source->RequestImage(
-//                                TileLL::GetIdFromLevelXY(level,x,y)));
-//            }
-//        }
-//    }
+        for(size_t y=0; y < tiles_in_y; y++) {
+            for(size_t x=0; x < tiles_in_x; x++) {
+                // request image and save
+                m_list_req_images.push_back(
+                            m_tile_image_source->RequestImage(
+                                TileLL::GetIdFromLevelXY(level,x,y)));
+            }
+        }
+    }
 
 
 
@@ -94,54 +104,234 @@ DataSetTilesLL::DataSetTilesLL(Options const &opts,
     m_gp_tiles->addChild(m_gp_debug);
 }
 
-//DataSetTilesLL::DataSetTilesLL(osg::Group * gp_tiles,
-//                               std::unique_ptr<TileSetLL> tileset) :
-//    m_gp_tiles(gp_tiles),
-//    m_tileset(std::move(tileset))
-//{
-//    m_gp_debug = new osg::Group;
-//    m_gp_tiles->addChild(m_gp_debug);
-
-//    m_poly_mode = new osg::PolygonMode;
-//    m_poly_mode->setMode(osg::PolygonMode::FRONT_AND_BACK,
-//                         osg::PolygonMode::LINE);
-
-//    for(size_t i=0; i < 20; i++) {
-//        std::string const path =
-//                "/home/preet/Dev/misc/tile_test/" +
-//                std::to_string(i)+
-//                ".png";
-
-//        osg::ref_ptr<osg::Image> image = osgDB::readImageFile(path);
-
-//        osg::ref_ptr<osg::Texture2D> texture = new osg::Texture2D;
-//        texture->setImage(image);
-//        texture->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
-//        texture->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
-//        texture->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
-//        texture->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
-
-//        m_list_tile_level_tex.push_back(texture);
-//    }
-//}
-
 DataSetTilesLL::~DataSetTilesLL()
 {
 
 }
 
-//void DataSetTilesLL::Update(osg::Camera const * cam)
-//{
-//    std::vector<uint64_t> list_tiles_add;
-//    std::vector<uint64_t> list_tiles_upd;
-//    std::vector<uint64_t> list_tiles_rem;
-//    m_tileset->UpdateTileSet(cam,
-//                             list_tiles_add,
-//                             list_tiles_upd,
-//                             list_tiles_rem);
+void DataSetTilesLL::applyDefaultTextureSettings(osg::Texture2D *texture) const
+{
+    texture->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
+    texture->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
+    texture->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
+    texture->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+}
 
-//}
+void DataSetTilesLL::getTileTexture(TileLL const * tile,
+                                    osg::ref_ptr<osg::Texture2D> &texture,
+                                    double &s_start,
+                                    double &s_delta,
+                                    double &t_start,
+                                    double &t_delta)
+{
+    // get the texture for this tile
+    s_start = 0.0;
+    s_delta = 1.0;
+    t_start = 0.0;
+    t_delta = 1.0;
 
+    if(m_list_level_is_base[tile->level]) {
+        // lookup tile texture in base textures
+        auto it = m_lkup_base_textures.find(tile->id);
+        assert(it != m_lkup_base_textures.end());
+
+        texture = it->second;
+    }
+    else {
+        // The tile texture hasn't been preloaded.
+        // The texture is either
+        // 1. already available
+        // 2a. unavailable but has been requested
+        // 2b. unavailable and has not been requested
+
+        if(m_lru_view_textures.exists(tile->id)) {
+            // 1. already available
+
+        }
+        else {
+            // 2. unavailable
+
+            if(m_lkup_req_images.find(tile->id) ==
+               m_lkup_req_images.end())
+            {   // request the texture since no
+                // prior request exists
+                m_lkup_req_images.emplace(
+                            tile_id,
+                            m_tile_image_source->RequestImage(tile->id));
+            }
+
+            // Since the tile texture is unavailable,
+            // use the closest parent in base textures
+            // as a placeholder
+
+            auto it = m_opts.list_base_levels.begin();
+            for(it = m_opts.list_base_levels.begin();
+                it != m_opts.list_base_levels.end(); ++it)
+            {
+                if((*it) > tile->level) {
+                    break;
+                }
+            }
+            std::advance(it,-1);
+
+            TileLL * parent = tile;
+            while(parent->level != (*it)) {
+                parent = parent->parent;
+            }
+
+            // save texture
+            texture = m_lkup_base_textures.find(tile->id)->second;
+
+            // save tex coords
+            double const parent_width =
+                    parent->bounds.maxLon-parent->bounds.minLon;
+
+            double const parent_height =
+                    parent->bounds.maxLat-parent->bounds.minLat;
+
+            s_start = tile->bounds.minLon/parent_width;
+            s_delta = s_start-(tile->bounds.maxLon/parent_width);
+
+            t_start = tile->bounds.minLat/parent_height;
+            t_delta = t_start-(tile->bounds.maxLat/parent_height);
+        }
+    }
+}
+
+void DataSetTilesLL::moveReadyImagesToBaseTextures()
+{
+    for(auto it = m_lkup_req_images.begin();
+        it != m_lkup_req_images.end();)
+    {
+        auto const &request = it->second;
+        if(request->IsFinished()) {
+            // convert to texture
+            osg::ref_ptr<osg::Image> image = request->GetImage();
+            osg::ref_ptr<osg::Texture2D> texture = new osg::Texture2D;
+            texture->setImage(image);
+            applyDefaultTextureSettings(texture);
+
+            // save to base textures
+            m_lkup_base_textures.emplace(request->GetId(),texture);
+
+            // remove from requests
+            it = m_lkup_req_images.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+}
+
+void DataSetTilesLL::moveReadyImagesToViewTextures()
+{
+    for(auto it = m_lkup_req_images.begin();
+        it != m_lkup_req_images.end();)
+    {
+        auto const &request = it->second;
+        if(request->IsFinished()) {
+            // convert to texture
+            osg::ref_ptr<osg::Image> image = request->GetImage();
+            osg::ref_ptr<osg::Texture2D> texture = new osg::Texture2D;
+            texture->setImage(image);
+            applyDefaultTextureSettings(texture);
+
+            // save to view textures
+            m_lru_view_textures.insert(request->GetId(),texture);
+
+            // remove from requests
+            it = m_lkup_req_images.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+}
+
+void DataSetTilesLL::Update(osg::Camera const * cam)
+{
+    // Check if the base textures have been loaded yet
+    if(!m_base_textures_loaded) {
+        //
+        moveReadyImagesToBaseTextures();
+
+        // if there are pending requests, check again later
+        if(!m_lkup_req_images.empty()) {
+            return;
+        }
+
+        m_base_textures_loaded = true;
+    }
+
+    //
+    moveReadyImagesToViewTextures();
+
+    //
+    std::vector<TileLL::Id> list_tiles_add;
+    std::vector<TileLL::Id> list_tiles_upd;
+    std::vector<TileLL::Id> list_tiles_rem;
+    m_tileset->UpdateTileSet(cam,
+                             list_tiles_add,
+                             list_tiles_upd,
+                             list_tiles_rem);
+
+    // remove
+    for(auto tile_id : list_tiles_rem) {
+        osg::Group * gp_tile = m_list_sg_tiles.find(tile_id)->second;
+        m_gp_tiles->removeChild(gp_tile);
+
+        m_list_sg_tiles.erase(tile_id);
+    }
+
+    // add
+    for(auto tile_id : list_tiles_add) {
+        //
+        TileLL const * tile = m_tileset->GetTile(tile_id);
+
+        // get tile texture
+        osg::ref_ptr<osg::Texture2D> texture;
+        double s_start;
+        double s_delta;
+        double t_start;
+        double t_delta;
+
+        getTileTexture(texture,
+                       s_start,
+                       s_delta,
+                       t_start,
+                       t_delta);
+
+
+
+        osg::ref_ptr<osg::Group> gp = createTileGm(tile_id);
+
+        std::string desc =
+                std::to_string(tile->level) +
+                ":" +
+                std::to_string(tile->x) +
+                "," +
+                std::to_string(tile->y);
+
+        auto gp_text = createTileTextGm(tile,desc);
+        gp_text->setName("text");
+        gp->addChild(gp_text);
+
+//        GeoBounds const tile_bounds(tile->min_lon,
+//                                    tile->max_lon,
+//                                    tile->min_lat,
+//                                    tile->max_lat);
+//        auto gp = BuildGeoBoundsNode("",
+//                                     tile_bounds,
+//                                     K_COLOR_TABLE[tile->level],
+//                                     360.0/16.0,
+//                                     tile->level);
+
+        m_list_sg_tiles.emplace(tile_id,gp.get());
+        m_gp_tiles->addChild(gp);
+    }
+}
+
+/*
 void DataSetTilesLL::Update(osg::Camera const * cam)
 {
     std::vector<TileLL::Id> list_tiles_add;
@@ -239,6 +429,7 @@ void DataSetTilesLL::Update(osg::Camera const * cam)
 //                "debug0",tileset_ptr->m_debug1,osg::Vec4(1,0,0,1),21,true,0,0);
 //    m_gp_debug->addChild(gp1);
 }
+*/
 
 osg::ref_ptr<osg::Group> DataSetTilesLL::createTileGm(TileLL::Id tile_id)
 {
