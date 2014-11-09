@@ -72,6 +72,8 @@ private:
 
     void applyDefaultTextureSettings(osg::Texture2D * texture) const;
 
+    osg::ref_ptr<osg::Texture2D> createTextureForImage(osg::Image * image) const;
+
 
     Options const m_opts;
     std::unique_ptr<TileSetLL> m_tileset;
@@ -92,26 +94,74 @@ private:
     size_t m_max_view_textures;
     bool m_base_textures_loaded;
 
-    // list_req_images
-    // TODO want to rename to lkup_image_requests
-    // * List of pending async requested images
-    std::map<TileLL::Id,std::shared_ptr<TileImageSourceLL::Task>> m_lkup_req_images;
-
-    // lkup_base_textures
-    // * container for base textures with id based lookup
-    std::map<TileLL::Id,osg::ref_ptr<osg::Texture2D>> m_lkup_base_textures;
-
     // lru_view_textures
     // * container for view textures with id based lookup
     // * container is a cache with a max capacity of
     //   (max_view_textures-num_base_textures)
-    scratch::LRUCacheMap<TileLL::Id,osg::ref_ptr<osg::Texture2D>> m_lru_view_textures;
+
+    // need better name than TextureRequest
+    struct TextureRequest
+    {
+        enum class Status : uint8_t {
+            Start,
+            Loading,
+            Finished,
+            Failed
+        };
+
+        TextureRequest(std::shared_ptr<TileImageSourceLL::Task> request=nullptr) :
+            status(Status::Start),
+            request(request),
+            texture(nullptr)
+        {
+            // empty
+        }
+
+        ~TextureRequest()
+        {
+            if(!request->IsFinished()) {
+                request->Cancel();
+            }
+        }
+
+        Status status;
+        std::shared_ptr<TileImageSourceLL::Task> request;
+        osg::ref_ptr<osg::Texture2D> texture;
+    };
+
+    class TextureRequestRefData : public TileLL::Data
+    {
+    public:
+        TextureRequestRefData(TextureRequest * texreq) :
+            texreq(texreq)
+        {
+            // empty
+        }
+
+        TextureRequest * texreq;
+    };
+
+    // lkup_base_textures
+    // * container for base textures with id based lookup
+    std::map<TileLL::Id,TextureRequest> m_lkup_base_textures;
+
+    scratch::LRUCacheMap<TileLL::Id,TextureRequest,std::map> m_lru_view_textures;
 
     // list_sg_tiles
     // * list of scenegraph tile data for all tiles
-    std::map<TileLL::Id,osg::Group*> m_list_sg_tiles;
 
-    std::vector<osg::ref_ptr<osg::Texture2D>> m_list_tile_level_tex;
+    struct SGData
+    {
+        SGData() :
+            geometry(nullptr),
+            texture(nullptr)
+        {}
+
+        osg::ref_ptr<osg::Group> geometry;
+        osg::ref_ptr<osg::Texture2D> texture;
+    };
+
+    std::map<TileLL::Id,SGData> m_list_sg_tiles;
 
     osg::PolygonMode * m_poly_mode;
 

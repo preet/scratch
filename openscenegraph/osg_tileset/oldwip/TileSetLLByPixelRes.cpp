@@ -15,7 +15,6 @@
 */
 
 #include <iostream>
-
 #include <cassert>
 #include <TileSetLLByPixelRes.h>
 #include <GeometryUtils.h>
@@ -237,25 +236,100 @@ void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
               list_tiles_upd); // tiles common
 
     // TEMP TODO
-    list_tiles_upd.clear();
+//    list_tiles_upd.clear();
 
     m_list_tileset = list_tileset_new;
 
     std::cout << "#: tileset_sz: " << m_list_tileset.size() << std::endl;
 }
 
-TileLL const * TileSetLLByPixelRes::GetTile(TileLL::Id tile_id) const
+void TileSetLLByPixelRes::UpdateTileSet(osg::Camera const * cam,
+                                        std::vector<TileLL const *> &list_tiles_add,
+                                        std::vector<TileLL const *> &list_tiles_upd,
+                                        std::vector<TileLL const *> &list_tiles_rem)
 {
-    auto it = m_list_tileset.find(tile_id);
-    if(it == m_list_tileset.end()) {
-        return nullptr;
+    // update view data
+    m_cam = cam;
+
+    osg::Vec3d eye,vpt,up;
+    cam->getViewMatrixAsLookAt(eye,vpt,up);
+
+    double ar,fovy,z_near,z_far;
+    cam->getProjectionMatrixAsPerspective(fovy,ar,z_near,z_far);
+
+    //
+    m_eye = eye;
+    m_lla_eye = ConvECEFToLLA(eye);
+
+    Frustum frustum;
+    {   // create the frustum
+        auto osg_frustum = BuildFrustumNode(
+                    "frustum",cam,frustum,z_near,z_far);
+        (void)osg_frustum;
     }
-    else {
-        return it->second;
+
+    Plane horizon_plane = CalcHorizonPlane(eye);
+
+    // TODO check calcprojfrustumpoly is successful
+    CalcProjFrustumPoly(frustum,horizon_plane,m_list_frustum_ecef);
+
+    m_list_frustum_bounds.clear();
+    m_list_frustum_lla = ConvListECEFToLLA(m_list_frustum_ecef);
+    CalcMinGeoBoundsFromLLAPoly(ConvECEFToLLA(eye),
+                                m_list_frustum_lla,
+                                m_list_frustum_bounds);
+
+    if(m_list_frustum_bounds.empty()) {
+        return;
     }
+
+    m_list_frustum_tri_planes =
+            calcFrustumPolyTriPlanes(m_list_frustum_ecef,true);
+
+
+    // ========================================================= //
+
+    // rebuild the tileset with the new view data
+    std::vector<TileLL const *> list_tiles_new; // TODO reserve
+    for(auto & root_tile : m_list_root_tiles) {
+        buildTileSet(root_tile);
+        buildTileSetList(root_tile,list_tiles_new);
+    }
+
+    // sort the tiles by tile id; we use this sort
+    // criteria to split the tiles into sets
+    std::sort(list_tiles_new.begin(),
+              list_tiles_new.end(),
+              TileLL::CompareIdIncreasing);
+
+    // split the new and old tile sets into
+    // tiles added, removed and common
+    SplitSets(list_tiles_new,
+              m_list_tiles,
+              list_tiles_add,  // tiles added
+              list_tiles_rem,  // tiles removed
+              list_tiles_upd,  // tiles common
+              TileLL::CompareIdIncreasing);
+
+    std::swap(m_list_tiles,list_tiles_new);
 }
 
+TileLL const * TileSetLLByPixelRes::GetTile(TileLL::Id tile_id) const
+{
+    // expect m_list_tiles to be sorted according
+    // to TileLL::CompareIdIncreasing
+    auto it = std::lower_bound(
+                m_list_tiles.begin(),
+                m_list_tiles.end(),
+                tile_id,
+                TileLL::CompareIdIncreasing);
 
+    if(it == m_list_tiles.end()) {
+        return nullptr;
+    }
+
+    return (*it);
+}
 
 void TileSetLLByPixelRes::buildTileSet(std::unique_ptr<TileLL> &tile)
 {
@@ -292,6 +366,20 @@ void TileSetLLByPixelRes::buildTileSetList(std::unique_ptr<TileLL> const &tile,
 {
     if(tile->clip == TileLL::k_clip_NONE) { // visible w no children
         list_tiles.insert(std::pair<TileLL::Id,TileLL const *>(tile->id,tile.get()));
+    }
+    else {
+        buildTileSetList(tile->tile_LT,list_tiles);
+        buildTileSetList(tile->tile_LB,list_tiles);
+        buildTileSetList(tile->tile_RB,list_tiles);
+        buildTileSetList(tile->tile_RT,list_tiles);
+    }
+}
+
+void TileSetLLByPixelRes::buildTileSetList(std::unique_ptr<TileLL> const &tile,
+                                           std::vector<TileLL const *> &list_tiles)
+{
+    if(tile->clip == TileLL::k_clip_NONE) { // visible w no children
+        list_tiles.push_back(tile.get());
     }
     else {
         buildTileSetList(tile->tile_LT,list_tiles);

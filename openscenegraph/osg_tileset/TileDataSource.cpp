@@ -63,11 +63,15 @@ osg::ref_ptr<osg::Image> TileImageSourceLLLocal::TaskLocal::GetImage() const
 
 void TileImageSourceLLLocal::TaskLocal::Cancel()
 {
-    // empty, TaskLocal cannot be canceled
+    this->onCanceled();
 }
 
 void TileImageSourceLLLocal::TaskLocal::process()
 {
+    if(this->IsCanceled()) {
+        return;
+    }
+
     this->onStarted();
     m_image = osgDB::readImageFile(m_path);
     this->onFinished();

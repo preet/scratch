@@ -84,15 +84,15 @@ DataSetTilesLL::DataSetTilesLL(Options const &opts,
 
         for(size_t y=0; y < tiles_in_y; y++) {
             for(size_t x=0; x < tiles_in_x; x++) {
-                // request image and save
-                m_list_req_images.push_back(
-                            m_tile_image_source->RequestImage(
-                                TileLL::GetIdFromLevelXY(level,x,y)));
+                // save request
+                auto const tile_id = TileLL::GetIdFromLevelXY(level,x,y);
+                m_lkup_base_textures.emplace(
+                            tile_id,
+                            TextureRequest(
+                                m_tile_image_source->RequestImage(tile_id)));
             }
         }
     }
-
-
 
     // poly mode for wireframe tiles
     m_poly_mode = new osg::PolygonMode;
@@ -115,6 +115,20 @@ void DataSetTilesLL::applyDefaultTextureSettings(osg::Texture2D *texture) const
     texture->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
     texture->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
     texture->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+}
+
+osg::ref_ptr<osg::Texture2D>
+DataSetTilesLL::createTextureForImage(osg::Image * image) const
+{
+    osg::ref_ptr<osg::Texture2D> texture = new osg::Texture2D;
+    texture->setImage(image);
+
+    texture->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
+    texture->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
+    texture->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
+    texture->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+
+    return texture;
 }
 
 void DataSetTilesLL::getTileTexture(TileLL const * tile,
@@ -251,84 +265,226 @@ void DataSetTilesLL::moveReadyImagesToViewTextures()
 void DataSetTilesLL::Update(osg::Camera const * cam)
 {
     // Check if the base textures have been loaded yet
-    if(!m_base_textures_loaded) {
-        //
-        moveReadyImagesToBaseTextures();
+    if(!m_base_textures_loaded)
+    {
+        for(auto const & tex_req : m_lkup_base_textures) {
+            if(tex_req.texture == nullptr) {
+                if(tex_req.request->IsFinished()) {
+                    // get texture for image
+                    tex_req.texture =
+                            createTextureForImage(
+                                tex_req.request->GetImage().get());
 
-        // if there are pending requests, check again later
-        if(!m_lkup_req_images.empty()) {
-            return;
+                    // clear request data
+                    tex_req.request = nullptr;
+                }
+                else {
+                    // We don't do anything until all of
+                    // the base textures have been loaded
+                    return;
+                }
+            }
         }
 
         m_base_textures_loaded = true;
     }
 
-    //
-    moveReadyImagesToViewTextures();
-
-    //
-    std::vector<TileLL::Id> list_tiles_add;
-    std::vector<TileLL::Id> list_tiles_upd;
-    std::vector<TileLL::Id> list_tiles_rem;
+    // Get the tileset difference
+    std::vector<TileLL const *> list_tiles_add;
+    std::vector<TileLL const *> list_tiles_upd;
+    std::vector<TileLL const *> list_tiles_rem;
     m_tileset->UpdateTileSet(cam,
                              list_tiles_add,
                              list_tiles_upd,
                              list_tiles_rem);
 
     // remove
-    for(auto tile_id : list_tiles_rem) {
-        osg::Group * gp_tile = m_list_sg_tiles.find(tile_id)->second;
+    for(auto tile : list_tiles_rem) {
+        // Cancel any queued image requests
+        bool ok;
+        auto & tex_req = m_lru_view_textures.get(tile->id,ok);
+        if(ok) {
+            tex_req.request->Cancel();
+        }
+
+        // Delete this tile's geometry
+        osg::Group * gp_tile = m_list_sg_tiles.find(tile->id)->second;
         m_gp_tiles->removeChild(gp_tile);
-
-        m_list_sg_tiles.erase(tile_id);
+        m_list_sg_tiles.erase(tile->id);
     }
 
-    // add
-    for(auto tile_id : list_tiles_add) {
-        //
-        TileLL const * tile = m_tileset->GetTile(tile_id);
+    // add new geometries
 
-        // get tile texture
-        osg::ref_ptr<osg::Texture2D> texture;
-        double s_start;
-        double s_delta;
-        double t_start;
-        double t_delta;
+    // update
 
-        getTileTexture(texture,
-                       s_start,
-                       s_delta,
-                       t_start,
-                       t_delta);
+    // sort by some criteria (shouldn't add
+    // and update be combined for this?)
 
+    // bool==true/false indicates the tile is add/upd
+    std::vector<std::pair<TileLL const *,bool>> list_tiles_add_and_upd;
+    list_tiles_add_and_upd.reserve(list_tiles_upd.size()+
+                                   list_tiles_add.size());
 
-
-        osg::ref_ptr<osg::Group> gp = createTileGm(tile_id);
-
-        std::string desc =
-                std::to_string(tile->level) +
-                ":" +
-                std::to_string(tile->x) +
-                "," +
-                std::to_string(tile->y);
-
-        auto gp_text = createTileTextGm(tile,desc);
-        gp_text->setName("text");
-        gp->addChild(gp_text);
-
-//        GeoBounds const tile_bounds(tile->min_lon,
-//                                    tile->max_lon,
-//                                    tile->min_lat,
-//                                    tile->max_lat);
-//        auto gp = BuildGeoBoundsNode("",
-//                                     tile_bounds,
-//                                     K_COLOR_TABLE[tile->level],
-//                                     360.0/16.0,
-//                                     tile->level);
-
-        m_list_sg_tiles.emplace(tile_id,gp.get());
-        m_gp_tiles->addChild(gp);
+    for(auto tile_add : list_tiles_add) {
+        list_tiles_add_and_upd.push_back(
+                    std::make_pair(tile_add,true));
     }
+
+    for(auto tile_upd : list_tiles_upd) {
+        list_tiles_add_and_upd.push_back(
+                    std::make_pair(tile_upd,false));
+    }
+
+    // sort list by increasing importance (since
+    // they will be inserted in the opposite order
+    // in the LRU)
+    // TODO would a member function or functor be faster?
+    std::sort(list_tiles_add_and_upd.begin(),
+              list_tiles_add_and_upd.end(),
+              [](std::pair<TileLL const *,bool> const &a,
+                 std::pair<TileLL const *,bool> const &b) {
+                    return (a.first->importance < b.first->importance);
+              });
+
+    // 1. Make all changes to textures
+
+    // move these tiles to the front of the LRU
+    for(auto tile_add_upd : list_tiles_add_and_upd)
+    {
+        TileLL const * tile = tile_add_upd.first;
+
+        // IF NOT A BASE TEXTURE (check level)
+        {
+            // If the view texture req DNE, add it
+            // to the front of the LRU
+
+            // Else move the req to the front
+
+            TextureRequest & texreq =
+                m_lru_view_textures.insert_use_get(
+                        tile->id,TextureRequest);
+
+            if(texreq.status == TextureRequest::Status::Start) {
+                // Create a new request
+                texreq.request = m_tile_image_source->RequestImage(tile->id);
+                texreq.status = TextureRequest::Status::Loading;
+            }
+            else if(texreq.status == TextureRequest::Status::Loading) {
+                // Check if finished
+                if(texreq.request->IsFinished()) {
+                    texreq.status = TextureRequest::Status::Finished;
+                    texreq.texture = createTextureForImage(
+                                texreq.request->GetImage().get());
+                    texreq.request = nullptr;
+                }
+            }
+        }
+    }
+
+
+
+    // 2. Pick best avail textures for geometry
+
+    // ... Given a random list of tiles and a random
+    // list of tile textures how do i pick the best
+    // textures for the tiles?
+
+    // * get lru keys
+    // * get tiles for each key (what if the tile doesnt exist?)
+    //   well then you cant traverse to that tile so it doesnt matter
+    // * attach texture req data to each tile
+    // * use that data to get texture when traversing
+    //   up the tree
+
+    // get lru keys
+    std::vector<TileLL const *> list_lru_tiles;
+    list_lru_tiles.reserve(m_lru_view_textures.size());
+
+    auto list_lru_tile_ids = m_lru_view_textures.get_keys();
+    for(auto tile_id : list_lru_tile_ids) {
+        bool ok;
+        TextureRequest &texreq =
+                m_lru_view_textures.get(tile_id,ok);
+
+        if(ok) {
+            if(texreq.status == TextureRequest::Status::Finished) {
+                // this is a valid/ready texture
+                // save ref to it as temporary placeholder data
+                TileLL const * tile = m_tileset->GetTile(tile_id);
+                tile->data.reset(new TextureRequestRefData(&texreq));
+                list_lru_tiles.push_back(tile);
+            }
+        }
+    }
+
+    // Set the best texture for each add/upd tile
+    // For tiles that do not have their texture
+    // available, set the next closest parent
+
+    for(auto tile_add_upd : list_tiles_add_and_upd)
+    {
+        TileLL const * tile = tile_add_upd.first;
+
+        // IF NOT A BASE TEXTURE (check level)
+        {
+            TextureRequestRefData * data =
+                    static_cast<TextureRequestRefData>(tile->data);
+
+            // Update tile's texture if required
+            if(data->texreq->status == TextureRequest::Status::Finished) {
+                if(data->texreq->texture == 0);
+            }
+        }
+    }
+
+
+
+//    // add
+//    for(auto tile_id : list_tiles_add) {
+//        //
+//        TileLL const * tile = m_tileset->GetTile(tile_id);
+
+//        // get tile texture
+//        osg::ref_ptr<osg::Texture2D> texture;
+//        double s_start;
+//        double s_delta;
+//        double t_start;
+//        double t_delta;
+
+//        getTileTexture(texture,
+//                       s_start,
+//                       s_delta,
+//                       t_start,
+//                       t_delta);
+
+
+
+//        osg::ref_ptr<osg::Group> gp = createTileGm(tile_id);
+
+//        std::string desc =
+//                std::to_string(tile->level) +
+//                ":" +
+//                std::to_string(tile->x) +
+//                "," +
+//                std::to_string(tile->y);
+
+//        auto gp_text = createTileTextGm(tile,desc);
+//        gp_text->setName("text");
+//        gp->addChild(gp_text);
+
+////        GeoBounds const tile_bounds(tile->min_lon,
+////                                    tile->max_lon,
+////                                    tile->min_lat,
+////                                    tile->max_lat);
+////        auto gp = BuildGeoBoundsNode("",
+////                                     tile_bounds,
+////                                     K_COLOR_TABLE[tile->level],
+////                                     360.0/16.0,
+////                                     tile->level);
+
+//        m_list_sg_tiles.emplace(tile_id,gp.get());
+//        m_gp_tiles->addChild(gp);
+//    }
 }
 
 /*

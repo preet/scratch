@@ -24,7 +24,6 @@
 class TileSetLLByPixelRes : public TileSetLL
 {
 public:
-
     struct Options
     {
         // Initialize to sane defaults
@@ -50,6 +49,12 @@ public:
         double max_adj_offset_dist2_m;
     };
 
+    struct TileData : TileLL::Data
+    {
+        bool visible;
+        int64_t tile_px_res;
+    };
+
     TileSetLLByPixelRes(GeoBounds const &bounds,
                         uint8_t min_level,
                         uint8_t max_level,
@@ -62,9 +67,9 @@ public:
     ~TileSetLLByPixelRes();
 
     void UpdateTileSet(osg::Camera const * cam,
-                       std::vector<TileLL::Id> &list_tiles_add,
-                       std::vector<TileLL::Id> &list_tiles_upd,
-                       std::vector<TileLL::Id> &list_tiles_rem);
+                       std::vector<TileLL const *> &list_tiles_add,
+                       std::vector<TileLL const *> &list_tiles_upd,
+                       std::vector<TileLL const *> &list_tiles_rem);
 
     TileLL const * GetTile(TileLL::Id tile_id) const;
 
@@ -106,6 +111,9 @@ private:
 
     void buildTileSetList(std::unique_ptr<TileLL> const &tile,
                           std::map<TileLL::Id,TileLL const *> &list_tiles);
+
+    void buildTileSetList(std::unique_ptr<TileLL> const &tile,
+                          std::vector<TileLL const *> &list_tiles);
 
     Eval const * getEvalData(TileLL const * tile,
                              GeoBounds const &tile_bounds);
@@ -178,8 +186,9 @@ private:
     std::vector<Plane>      m_list_frustum_tri_planes;
 
     // tiles
+
     std::vector<std::unique_ptr<TileLL>> m_list_root_tiles;
-    std::map<TileLL::Id,TileLL const *> m_list_tileset;
+    std::vector<TileLL const *> m_list_tiles; // sorted by tile->id
 
     std::list<std::unique_ptr<Eval>> m_lru_eval;
     std::map<TileLL::Id,std::list<std::unique_ptr<Eval>>::iterator> m_lkup_eval;

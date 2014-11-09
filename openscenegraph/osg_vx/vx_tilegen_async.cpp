@@ -72,7 +72,7 @@ struct TileData
     osg::ref_ptr<osg::Texture2D> tx;
 };
 
-size_t K_MAX_TILE_CACHE = 48;
+size_t K_MAX_TILE_CACHE = 24;
 std::map<uint64_t,TileData> map_tile_cache;
 
 void GetTileLevelXY(uint64_t id,
@@ -1127,10 +1127,11 @@ void BuildXYTileGeometry(XYTile * tile)
                             list_tx->begin(),
                             list_tx->end());
 
-        osg::Vec4 cx = K_COLOR_TABLE[tile->level];
-        cx.r() *= 0.5;
-        cx.g() *= 0.5;
-        cx.b() *= 0.5;
+//        osg::Vec4 cx = K_COLOR_TABLE[tile->level];
+        osg::Vec4 cx(1.0,1.0,1.0,1.0);
+//        cx.r() *= 0.5;
+//        cx.g() *= 0.5;
+//        cx.b() *= 0.5;
         list_cx->push_back(cx);
 //        list_cx->push_back(osg::Vec4(1,1,1,1));
 
@@ -1174,10 +1175,11 @@ void BuildXYTileGeometry(XYTile * tile)
                             list_tx->begin(),
                             list_tx->end());
 
-        osg::Vec4 cx = K_COLOR_TABLE[tile->level];
-        cx.r() *= 0.625;
-        cx.g() *= 0.625;
-        cx.b() *= 0.625;
+//        osg::Vec4 cx = K_COLOR_TABLE[tile->level];
+        osg::Vec4 cx(1.0,1.0,1.0,1.0);
+//        cx.r() *= 0.625;
+//        cx.g() *= 0.625;
+//        cx.b() *= 0.625;
         list_cx->push_back(cx);
 //        list_cx->push_back(osg::Vec4(1,1,1,1));
 
@@ -1221,10 +1223,11 @@ void BuildXYTileGeometry(XYTile * tile)
                             list_tx->begin(),
                             list_tx->end());
 
-        osg::Vec4 cx = K_COLOR_TABLE[tile->level];
-        cx.r() *= 0.75;
-        cx.g() *= 0.75;
-        cx.b() *= 0.75;
+//        osg::Vec4 cx = K_COLOR_TABLE[tile->level];
+        osg::Vec4 cx(1.0,1.0,1.0,1.0);
+//        cx.r() *= 0.75;
+//        cx.g() *= 0.75;
+//        cx.b() *= 0.75;
         list_cx->push_back(cx);
 //        list_cx->push_back(osg::Vec4(1,1,1,1));
 
@@ -1268,10 +1271,11 @@ void BuildXYTileGeometry(XYTile * tile)
                             list_tx->begin(),
                             list_tx->end());
 
-        osg::Vec4 cx = K_COLOR_TABLE[tile->level];
-        cx.r() *= 1.0;
-        cx.g() *= 1.0;
-        cx.b() *= 1.0;
+//        osg::Vec4 cx = K_COLOR_TABLE[tile->level];
+        osg::Vec4 cx(1.0,1.0,1.0,1.0);
+//        cx.r() *= 1.0;
+//        cx.g() *= 1.0;
+//        cx.b() *= 1.0;
         list_cx->push_back(cx);
 //        list_cx->push_back(osg::Vec4(1,1,1,1));
 

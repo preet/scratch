@@ -102,11 +102,51 @@ namespace scratch
         return m_queue_tasks.size();
     }
 
-    void ThreadPool::Push(std::shared_ptr<Task> const &task)
+    void ThreadPool::PushFront(std::shared_ptr<Task> const &task)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        // Add work to shared queue
+        m_queue_tasks.push_front(task);
+
+        // Wake one thread from the pool
+        m_wait_cond.notify_one();
+    }
+
+    void ThreadPool::PushBack(std::shared_ptr<Task> const &task)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         // Add work to shared queue
         m_queue_tasks.push_back(task);
+
+        // Wake one thread from the pool
+        m_wait_cond.notify_one();
+    }
+
+    void ThreadPool::PushFront(std::vector<std::shared_ptr<Task>> const &list_tasks)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        // Add work to shared queue
+        for(auto r_it = list_tasks.rbegin();
+            r_it != list_tasks.rend(); ++r_it)
+        {
+            m_queue_tasks.push_front(*r_it);
+        }
+
+        // Wake one thread from the pool
+        m_wait_cond.notify_one();
+    }
+
+    void ThreadPool::PushBack(std::vector<std::shared_ptr<Task>> const &list_tasks)
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        // Add work to shared queue
+        for(auto it = list_tasks.begin();
+            it != list_tasks.end(); ++it)
+        {
+            m_queue_tasks.push_back(*it);
+        }
 
         // Wake one thread from the pool
         m_wait_cond.notify_one();

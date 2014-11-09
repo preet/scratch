@@ -81,7 +81,10 @@ namespace scratch
         ThreadPool & operator=(ThreadPool const &)  = delete;
 
         size_t GetTaskCount() const;
-        void Push(std::shared_ptr<Task> const &task);
+        void PushFront(std::shared_ptr<Task> const &task);
+        void PushBack(std::shared_ptr<Task> const &task);
+        void PushFront(std::vector<std::shared_ptr<Task>> const &list_tasks);
+        void PushBack(std::vector<std::shared_ptr<Task>> const &list_tasks);
         void Stop();
         void Resume();
 		

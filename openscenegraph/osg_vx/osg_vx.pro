@@ -27,4 +27,5 @@ HEADERS += clipper.hpp
 SOURCES += clipper.cpp
 
 
-SOURCES += vx_tilearea.cpp
+#SOURCES += vx_tilegen_async.cpp
+SOURCES += vx_tilegen4.cpp

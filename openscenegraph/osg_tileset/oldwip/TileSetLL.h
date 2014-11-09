@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <limits>
 #include <cassert>
+#include <functional>
 
 #include <osg/Camera>
 
@@ -62,6 +63,46 @@ void SplitSets(std::vector<T> const &sorted_list_a,
     list_xsec.resize(it-list_xsec.begin());
 }
 
+template <typename T, typename Comparator>
+void SplitSets(std::vector<T> const &sorted_list_a,
+               std::vector<T> const &sorted_list_b,
+               std::vector<T> &list_diff_a,
+               std::vector<T> &list_diff_b,
+               std::vector<T> &list_xsec,
+               Comparator compare)
+{
+    list_diff_a.resize(sorted_list_a.size());
+    list_diff_b.resize(sorted_list_b.size());
+    list_xsec.resize(std::min(sorted_list_a.size(),
+                              sorted_list_b.size()));
+
+    typename std::vector<T>::iterator it;
+
+    it = std::set_difference(sorted_list_a.begin(),
+                             sorted_list_a.end(),
+                             sorted_list_b.begin(),
+                             sorted_list_b.end(),
+                             list_diff_a.begin(),
+                             compare);
+    list_diff_a.resize(it-list_diff_a.begin());
+
+    it = std::set_difference(sorted_list_b.begin(),
+                             sorted_list_b.end(),
+                             sorted_list_a.begin(),
+                             sorted_list_a.end(),
+                             list_diff_b.begin(),
+                             compare);
+    list_diff_b.resize(it-list_diff_b.begin());
+
+    it = std::set_intersection(sorted_list_a.begin(),
+                               sorted_list_a.end(),
+                               sorted_list_b.begin(),
+                               sorted_list_b.end(),
+                               list_xsec.begin(),
+                               compare);
+    list_xsec.resize(it-list_xsec.begin());
+}
+
 namespace scratch
 {
     // K and V must be default constructible
@@ -86,7 +127,7 @@ namespace scratch
 
             auto it = find(key);
             if(it == m_lru.end()) {
-                m_lru.emplace_back(key,val);
+                m_lru.insert(m_lru.begin(),std::make_pair(key,val));
             }
         }
 
@@ -186,9 +227,50 @@ namespace scratch
             m_lru.push_front(key);
 
             // add to lookup
+
+            // check if insert successful before adding to lru
+
             m_lkup.insert(std::make_pair(
                               key,std::make_pair(
                                   val,m_lru.begin())));
+        }
+
+
+        // * (insert) insert key,val if the key doesn't exist
+        // * (use) push key to the front of the lru if it already exists
+        // * (get) return val
+        V & insert_use_get(K const &key, V const &val)
+        {
+            // TODO
+            // THIS IS WRONG, WHAT IF THE KEY ALREADY EXISTS?
+            // WE HAVE TO INSERT FIRST, THEN REMOVE IF NECESSARY
+
+            // make room by erasing the lru element if required
+            if(size() == capacity()) {
+                auto it = m_lkup.find(m_lru.back());
+                m_lkup.erase(it);
+                m_lru.pop_back();
+            }
+
+            // Attempt an insert (the lru iterator is just
+            // a placeholder for now)
+            auto ins_it = m_lkup.insert(std::make_pair(
+                                            key,std::make_pair(
+                                                val,m_lru.end())));
+
+            if(ins_it.second) {
+                // insert was successful, push key to the
+                // front of the lru and update its iterator
+                m_lru.push_front(key);
+                ins_it.second->second.second = m_lru.begin();
+            }
+            else {
+                // key already existed, move it to the front
+                auto lru_it = ins_it.second->second.second;
+                m_lru.splice(m_lru.begin(),m_lru,lru_it);
+            }
+
+            return (ins_it.second->second.first);
         }
 
         void reuse(K const &key)
@@ -227,12 +309,27 @@ namespace scratch
             return (m_lkup.find(key) != m_lkup.end());
         }
 
-        V const & get(K const &key) const
+        V & get(K const &key, bool &ok) const
         {
             auto lkup_it = m_lkup.find(key);
-            assert(lkup_it != m_lkup.end());
-
+            if(lkup_it == m_lkup.end()) {
+                ok = false;
+                return m_null_value;
+            }
+            ok = true;
             return lkup_it->second.first;
+        }
+
+        std::vector<K> get_keys() const
+        {
+            std::vector<K> list_keys;
+            list_keys.reserve(m_lkup.size());
+
+            for(auto it : m_lkup) {
+                list_keys.push_back(it->first);
+            }
+
+            return list_keys;
         }
 
         size_t size() const
@@ -249,9 +346,9 @@ namespace scratch
         size_t m_capacity;
         std::list<K> m_lru;
         std::map<K,std::pair<V,std::list<K>::iterator>>  m_lkup;
+        V m_null_value;
     };
 }
-
 
 
 
@@ -329,13 +426,42 @@ public:
 
     uint8_t clip;
 
+    double importance;
+
     int64_t tile_px_res;
+
+    class Data
+    {
+    public:
+        virtual ~Data() = 0;
+    };
+
+    std::unique_ptr<Data> data;
 
     // ============================= //
 
-    static bool CompareLevelDescending(TileLL const * a,TileLL const * b)
+    static bool CompareLevelIncreasing(TileLL const * a,
+                                       TileLL const * b)
     {
         return (a->level < b->level);
+    }
+
+    static bool CompareIdIncreasing(TileLL const * a,
+                                    TileLL const * b)
+    {
+        return (a->id < b->id);
+    }
+
+    static bool CompareImportanceIncreasing(TileLL const * a,
+                                            TileLL const * b)
+    {
+        return (a->importance < b->importance);
+    }
+
+    static bool CompareImportanceDecreasing(TileLL const * a,
+                                            TileLL const * b)
+    {
+        return (a->importance > b->importance);
     }
 
     static Id GetIdFromLevelXY(uint8_t level,
@@ -452,9 +578,9 @@ public:
     virtual TileLL const * GetTile(TileLL::Id id) const = 0;
 
     virtual void UpdateTileSet(osg::Camera const * cam,
-                               std::vector<TileLL::Id> &list_tiles_add,
-                               std::vector<TileLL::Id> &list_tiles_upd,
-                               std::vector<TileLL::Id> &list_tiles_rem) = 0;
+                               std::vector<TileLL const *> &list_tiles_add,
+                               std::vector<TileLL const *> &list_tiles_upd,
+                               std::vector<TileLL const *> &list_tiles_rem) = 0;
 
 private:
     GeoBounds const m_bounds;
