@@ -20,7 +20,18 @@
 #include <functional>
 
 #include <ThreadPool.h>
-#include <TileSetLL.h>
+#include <TileLL.h>
+
+// ============================================================= //
+
+class TileData
+{
+    virtual bool AllowsSampling(); // TileDataSource shoudl spec this
+};
+
+// ============================================================= //
+
+
 
 // ============================================================= //
 

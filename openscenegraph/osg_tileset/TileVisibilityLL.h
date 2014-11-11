@@ -14,17 +14,31 @@
    limitations under the License.
 */
 
-#ifndef SCRATCH_DATASET_TILES_H
-#define SCRATCH_DATASET_TILES_H
+#ifndef SCRATCH_TILE_VISIBILITY_LL_H
+#define SCRATCH_TILE_VISIBILITY_LL_H
 
-#include <osg/Group>
 #include <osg/Camera>
 
-class DataSetTiles
-{
-public:
-    virtual ~DataSetTiles() {}
-    virtual void Update(osg::Camera const * camera)=0;
-};
+#include <TileLL.h>
 
-#endif // SCRATCH_DATASET_TILES_H
+namespace scratch
+{
+    class TileVisibilityLL
+    {
+    public:
+        virtual ~TileVisibilityLL()
+        {
+            // empty
+        }
+
+        virtual void Update(osg::Camera const * cam) = 0;
+
+        virtual void GetVisibility(TileLL const * tile,
+                                   bool & is_visible,
+                                   bool & exceeds_err_threshold) = 0;
+    };
+
+
+} // scratch
+
+#endif // SCRATCH_TILE_VISIBILITY_LL_H

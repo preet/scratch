@@ -24,23 +24,28 @@ LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -lOpenThreads
 
 HEADERS += \
         ViewController.hpp \
-        DataSetTiles.h \
+        MiscUtils.h \
         GeometryUtils.h \
         OSGUtils.h \
         ThreadPool.h \
+        TileLL.h \
+        TileDataSourceLL.h \
+        TileImageSourceLL.h \
+        TileVisibilityLL.h \
+        TileVisibilityLLPixelsPerMeter.h \
         TileSetLL.h \
-        TileDataSource.h \
-#        TileSetLLByPixelArea.h \
-        TileSetLLByPixelRes.h \
         DataSetTilesLL.h
 	
 SOURCES += \
         GeometryUtils.cpp \
+        MiscUtils.cpp \
         OSGUtils.cpp \
         ThreadPool.cpp \
-        TileDataSource.cpp \
-#        TileSetLLByPixelArea.cpp \
-        TileSetLLByPixelRes.cpp \
+        TileLL.cpp \
+        TileDataSourceLL.cpp \
+        TileImageSourceLL.cpp \
+        TileVisibilityLLPixelsPerMeter.cpp \
+        TileSetLL.cpp \
         DataSetTilesLL.cpp
 
 SOURCES += main.cpp
@@ -49,3 +54,4 @@ SOURCES += main.cpp
 #SOURCES += debug.cpp
 #SOURCES += test_proj_clip_speed.cpp
 #SOURCES += test_tileclosestpoint.cpp
+
