@@ -126,6 +126,8 @@ namespace scratch
         std::map<K,std::pair<V,typename std::list<K>::iterator>>  m_lkup;
         V m_null_value;
 
+        // TODO allow specifying load factor
+
     public:
         LRUCacheMap(size_t capacity) :
             m_capacity(capacity)
@@ -134,9 +136,12 @@ namespace scratch
         }
 
         // copy insert
-        void insert(K const &key, V const &val)
+        // @check: check if the key already exists, can be
+        //         set to false for a possible speed up if
+        //         you know for sure the key is new
+        void insert(K const &key, V const &val, bool check=true)
         {
-            if(m_lkup.count(key) > 0) {
+            if(check && (m_lkup.count(key) > 0)) {
                 return;
             }
 
@@ -159,9 +164,12 @@ namespace scratch
         }
 
         // move insert
-        void insert(K const &key, V && val)
+        // @check: check if the key already exists, can be
+        //         set to false for a possible speed up if
+        //         you know for sure the key is new
+        void insert(K const &key, V && val, bool check=true)
         {
-            if(m_lkup.count(key) > 0) {
+            if(check && (m_lkup.count(key) > 0)) {
                 return;
             }
 

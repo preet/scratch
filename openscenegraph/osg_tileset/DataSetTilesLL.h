@@ -24,8 +24,7 @@ namespace scratch
     class DataSetTilesLL
     {
     public:
-        DataSetTilesLL(std::unique_ptr<TileSetLL> tileset,
-                       osg::Group * gp_tiles);
+        DataSetTilesLL(osg::Group * gp_tiles);
 
         ~DataSetTilesLL();
 

@@ -3,6 +3,7 @@
 
 #include <ViewController.hpp>
 #include <OSGUtils.h>
+#include <TileImageSourceLL.h>
 #include <DataSetTilesLL.h>
 
 int main()
@@ -18,12 +19,10 @@ int main()
     // axes
     auto gp_axes = BuildAxesGeometry("axes",RAD_AV*1.15);
 
-    // create TileSet
-
     // create dataset
     osg::ref_ptr<osg::Group> gp_tiles = new osg::Group;
     std::unique_ptr<scratch::DataSetTilesLL> dataset(
-                new scratch::DataSetTilesLL(nullptr,gp_tiles));
+                new scratch::DataSetTilesLL(gp_tiles));
 
     // setup view
     osgViewer::CompositeViewer viewer;

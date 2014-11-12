@@ -31,6 +31,9 @@ namespace scratch
         {
             TileLL const * tile;
             std::shared_ptr<TileDataSourceLL::Data> data;
+
+            // sample data (s_start,s_delta,t_start,t_delta)
+            // also needs to go here
         };
 
         struct Options
@@ -39,25 +42,26 @@ namespace scratch
             Options() :
                 min_level(0),
                 max_level(18),
-                max_data(-1),
+                max_data(std::numeric_limits<uint64_t>::max()/2),
                 cache_size_hint(128),
                 list_preload_levels({0,1}),
                 upsample_hint(false)
-            {}
+            {
+                // empty
+            }
 
             uint8_t min_level;
             uint8_t max_level;
 
             // The max number of data associated to a tile
             // (textures, geometry, etc) from TileDataSource
-            // thats allowed. If set to less than 0, no limit
-            // is applied.
-            int64_t max_data;
+            // thats allowed.
+            uint64_t max_data;
 
             // Hint for amount of TileDataSource::Data that is cached.
             // The amount may be exceeded if the number of visible tiles
             // during a given update is greater than the size hint.
-            size_t cache_size_hint;
+            uint64_t cache_size_hint;
 
             // List of levels to preload tile data from.
             // max_data includes preloaded data.
@@ -68,8 +72,6 @@ namespace scratch
             // TileDataSource implementation must allow sampling.
             bool upsample_hint;
         };
-
-        class TileSelectorLL;
 
         TileSetLL(std::unique_ptr<TileDataSourceLL> tile_data_source,
                   std::unique_ptr<TileVisibilityLL> tile_visibility,
@@ -93,24 +95,43 @@ namespace scratch
                            std::vector<TileItem> &list_tiles_rem);
 
     private:
+        void buildTileSetBFS();
+        void buildTileSetRanked();
+
+        TileDataSourceLL::Request const *
+        getOrCreateDataRequest(TileLL const * tile);
+
         static Options validateOptions(TileDataSourceLL const * source,
                                        Options opts);
 
+
+
         //
         std::unique_ptr<TileDataSourceLL> m_tile_data_source;
+        std::unique_ptr<TileVisibilityLL> m_tile_visibility;
         Options const m_opts;
+
 
         //
         std::vector<std::unique_ptr<TileLL>> m_list_root_tiles;
 
-        // lkup_base_textures
-        // * container for base textures with id based lookup
-        std::map<
-                TileLL::Id,
-                TileDataSourceLL::Data
-                > m_lkup_base_data;
+        // 0 = view, 1 = base
+        std::vector<uint8_t> m_list_level_is_preloaded;
 
-        //
+        // lkup_preloaded_data
+        std::map<
+            TileLL::Id,
+            std::shared_ptr<TileDataSourceLL::Request>
+            > m_lkup_preloaded_data;
+
+        // lru_view_data
+        LRUCacheMap<
+            TileLL::Id,
+            std::shared_ptr<TileDataSourceLL::Request>,
+            std::map
+            > m_lru_view_data;
+
+        bool m_preloaded_data_ready;
     };
 }
 

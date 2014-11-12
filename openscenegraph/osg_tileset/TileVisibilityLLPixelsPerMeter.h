@@ -82,6 +82,7 @@ namespace scratch
                                          std::vector<Plane> const &list_frustum_tri_planes,
                                          GeoBounds const &tile_bounds) const;
 
+        // TODO desc
         bool calcPointWithinTilePlanes(osg::Vec3d const &point,
                                        Plane const &plane_min_lon,
                                        Plane const &plane_max_lon,
@@ -97,13 +98,13 @@ namespace scratch
         calcFrustumPolyTriPlanes(std::vector<osg::Vec3d> const &list_frustum_vx,
                                  bool normalize) const;
 
-        //
+        // TODO desc
         osg::Vec3d calcTileClosestPoint(LLA const &lla_distal,
                                         osg::Vec3d const &ecef_distal,
                                         GeoBounds const &bounds,
                                         Eval const &eval) const;
 
-        //
+        // TODO desc
         double calcPixelsPerMeterForDist(double dist_m,
                                          double screen_height_px,
                                          osg::Camera const * cam) const;
