@@ -77,9 +77,9 @@ namespace scratch
     template <typename T, typename Comparator>
     void SplitSets(std::vector<T> const &sorted_list_a,
                    std::vector<T> const &sorted_list_b,
-                   std::vector<T> &list_diff_a,
-                   std::vector<T> &list_diff_b,
-                   std::vector<T> &list_xsec,
+                   std::vector<T> &list_diff_a, // in a, not in b
+                   std::vector<T> &list_diff_b, // in b, not in a
+                   std::vector<T> &list_xsec,   // in both
                    Comparator compare)
     {
         list_diff_a.resize(sorted_list_a.size());
@@ -114,6 +114,8 @@ namespace scratch
         list_xsec.resize(it-list_xsec.begin());
     }
 
+    // ============================================================= //
+
 
     template<typename K,
              typename V,
@@ -121,16 +123,40 @@ namespace scratch
     class LRUCacheMap
     {
     private:
+        typedef typename std::list<K>::iterator key_list_it;
+
         size_t const m_capacity;
         std::list<K> m_lru;
-        std::map<K,std::pair<V,typename std::list<K>::iterator>>  m_lkup;
+        map_type<K,std::pair<V,key_list_it>>  m_lkup;
+
+        K m_null_key;
         V m_null_value;
 
-        // TODO allow specifying load factor
+        key_list_it m_it_mark; // TODO initialize to tail
+
+        // TODO allow specifying load factor for map
+
+        void reuse_element(key_list_it lru_it)
+        {
+            if(lru_it == m_it_mark) {
+                ++m_it_mark;
+            }
+            m_lru.splice(m_lru.begin(),m_lru,lru_it);
+        }
 
     public:
+        LRUCacheMap() :
+            m_capacity(std::numeric_limits<uint32_t>::max()/2),
+            m_it_mark(m_lru.end())
+          // Basically init with unlimited capacity,
+          // its expected the user will manually trim
+        {
+            // empty
+        }
+
         LRUCacheMap(size_t capacity) :
-            m_capacity(capacity)
+            m_capacity(capacity),
+            m_it_mark(m_lru.end())
         {
             // empty
         }
@@ -139,92 +165,65 @@ namespace scratch
         // @check: check if the key already exists, can be
         //         set to false for a possible speed up if
         //         you know for sure the key is new
-        void insert(K const &key, V const &val, bool check=true)
+        V & insert(K const &key, V const &val,
+                   bool check=true, bool reuse=false)
         {
-            if(check && (m_lkup.count(key) > 0)) {
-                return;
+            if(check) {
+                auto lkup_it = m_lkup.find(key);
+                if(lkup_it != m_lkup.end()) {
+                    if(reuse) {
+                        reuse_element(lkup_it->second.second);
+                    }
+                    return lkup_it->second.first;
+                }
             }
 
-            // make room by erasing the least recently
-            // used element if required
-            if(size() == capacity()) {
-                auto it = m_lkup.find(m_lru.back());
-                m_lkup.erase(it);
-                m_lru.pop_back();
-            }
+            // make room if required
+            trim_against_capacity();
 
             // add to lru
             m_lru.push_front(key);
 
             // add to lookup
-            m_lkup.insert(std::make_pair(
-                              key,std::make_pair(
-                                  val,
-                                  m_lru.begin())));
+            auto lkup_it = m_lkup.insert(
+                        std::make_pair(
+                            key,std::make_pair(
+                                val,m_lru.begin()))).first;
+
+            return lkup_it->second.first;
         }
 
         // move insert
         // @check: check if the key already exists, can be
         //         set to false for a possible speed up if
         //         you know for sure the key is new
-        void insert(K const &key, V && val, bool check=true)
+        V & insert(K const &key, V && val,
+                   bool check=true, bool reuse=false)
         {
-            if(check && (m_lkup.count(key) > 0)) {
-                return;
+            if(check) {
+                auto lkup_it = m_lkup.find(key);
+                if(lkup_it != m_lkup.end()) {
+                    if(reuse) {
+                        reuse_element(lkup_it->second.second);
+                    }
+                    return lkup_it->second.first;
+                }
             }
 
-            // make room by erasing the least recently
-            // used element if required
-            if(size() == capacity()) {
-                auto it = m_lkup.find(m_lru.back());
-                m_lkup.erase(it);
-                m_lru.pop_back();
-            }
+            // make room if required
+            trim_against_capacity();
 
             // add to lru
             m_lru.push_front(key);
 
             // add to lookup
-            m_lkup.insert(std::make_pair(
-                              key,std::make_pair(
-                                  std::move(val),
-                                  m_lru.begin())));
-        }
+            auto lkup_it = m_lkup.insert(
+                        std::make_pair(
+                         key,std::make_pair(
+                             std::move(val),
+                             m_lru.begin()))).first;
 
-        void reuse(K const &key)
-        {
-            // move key to the front of the lru
-            auto lkup_it = m_lkup.find(key);
-            if(lkup_it == m_lkup.end()) {
-                return;
-            }
-
-            auto lru_it = lkup_it->second.second;
-            m_lru.splice(m_lru.begin(),m_lru,lru_it);
-        }
-
-        void erase(K const &key)
-        {
-            auto lkup_it = m_lkup.find(key);
-            if(lkup_it == m_lkup.end()) {
-                return;
-            }
-
-            // remove from lru and lkup
-            auto lru_it = lkup_it->second.second;
-            m_lru.erase(lru_it);
-            m_lkup.erase(lkup_it);
-        }
-
-        void clear()
-        {
-            m_lkup.clear();
-            m_lru.clear();
-        }
-
-        bool exists(K const &key) const
-        {
-            return (m_lkup.find(key) != m_lkup.end());
+            return lkup_it->second.first;
         }
 
         V & get(K const &key,bool reuse,bool &ok)
@@ -236,22 +235,102 @@ namespace scratch
             }
 
             if(reuse) {
-                // move key to the front of the lru
-                auto lru_it = lkup_it->second.second;
-                m_lru.splice(m_lru.begin(),m_lru,lru_it);
+                reuse_element(lkup_it->second.second);
             }
 
             ok = true;
             return lkup_it->second.first;
         }
 
+        bool mark_exists() const
+        {
+            return (m_it_mark != m_lru.end());
+        }
+
+        void mark_head()
+        {
+            m_it_mark = m_lru.begin();
+        }
+
+        bool mark_key(K const &key)
+        {
+            auto lkup_it = m_lkup.find(key);
+            if(lkup_it == m_lkup.end()) {
+                return false;
+            }
+
+            m_it_mark = lkup_it->second.second;
+            return true;
+        }
+
+        void erase(K const &key)
+        {
+            auto lkup_it = m_lkup.find(key);
+            if(lkup_it == m_lkup.end()) {
+                return;
+            }
+
+            // remove from lru and lkup
+            auto lru_it = lkup_it->second.second;
+            if(lru_it = m_it_mark) {
+                ++m_it_mark;
+            }
+            m_lru.erase(lru_it);
+            m_lkup.erase(lkup_it);
+        }
+
+        void trim_against_mark(size_t max_size=0)
+        {
+            while((m_lru.size() > max_size) &&
+                  (m_it_mark != m_lru.end()))
+            {
+                auto it_lru = m_lru.end();
+                std::advance(it_lru,-1);
+                if(m_it_mark == it_lru) {
+                    m_it_mark = m_lru.end();
+                }
+
+                m_lkup.erase(m_lkup.find(m_lru.back()));
+                m_lru.pop_back();
+            }
+        }
+
+        void trim_against_capacity()
+        {
+            while(size() >= capacity()) {
+                if(m_it_mark != m_lru.end()) {
+                    auto it_lru = m_lru.end();
+                    std::advance(it_lru,-1);
+                    if(m_it_mark == it_lru) {
+                        m_it_mark = m_lru.end();
+                    }
+                }
+
+                auto it_lkup = m_lkup.find(m_lru.back());
+                m_lkup.erase(it_lkup);
+                m_lru.pop_back();
+            }
+        }
+
+        void clear()
+        {
+            m_lkup.clear();
+            m_lru.clear();
+            m_it_mark=m_lru.end();
+        }
+
+        bool exists(K const &key) const
+        {
+            return (m_lkup.find(key) != m_lkup.end());
+        }
+
         std::vector<K> get_keys() const
         {
             std::vector<K> list_keys;
-            list_keys.reserve(m_lkup.size());
+            list_keys.reserve(m_lru.size());
 
-            for(auto it : m_lkup) {
-                list_keys.push_back(it->first);
+            for(auto const &it : m_lru) {
+                list_keys.push_back(it);
             }
 
             return list_keys;
@@ -268,153 +347,8 @@ namespace scratch
         }
     };
 
-//    template<typename K,
-//             typename V,
-//             template<typename,typename> class map_type>
-//    class LRUCacheMap
-//    {
-//    public:
 
-//        LRUCacheMap(size_t capacity) :
-//            m_capacity(capacity)
-//        {
-//            // empty
-//        }
-
-//        void insert(K const &key, V const &val)
-//        {
-//            // make room by erasing the lru element if required
-//            if(size() == capacity()) {
-//                auto it = m_lkup.find(m_lru.back());
-//                m_lkup.erase(it);
-//                m_lru.pop_back();
-//            }
-
-//            // add to lru
-//            m_lru.push_front(key);
-
-//            // add to lookup
-
-//            // check if insert successful before adding to lru
-
-//            m_lkup.insert(std::make_pair(
-//                              key,std::make_pair(
-//                                  val,m_lru.begin())));
-//        }
-
-
-//        // * (insert) insert key,val if the key doesn't exist
-//        // * (use) push key to the front of the lru if it already exists
-//        // * (get) return val
-//        V & insert_use_get(K const &key, V const &val)
-//        {
-//            // TODO
-//            // THIS IS WRONG, WHAT IF THE KEY ALREADY EXISTS?
-//            // WE HAVE TO INSERT FIRST, THEN REMOVE IF NECESSARY
-
-//            // make room by erasing the lru element if required
-//            if(size() == capacity()) {
-//                auto it = m_lkup.find(m_lru.back());
-//                m_lkup.erase(it);
-//                m_lru.pop_back();
-//            }
-
-//            // Attempt an insert (the lru iterator is just
-//            // a placeholder for now)
-//            auto ins_it = m_lkup.insert(std::make_pair(
-//                                            key,std::make_pair(
-//                                                val,m_lru.end())));
-
-//            if(ins_it.second) {
-//                // insert was successful, push key to the
-//                // front of the lru and update its iterator
-//                m_lru.push_front(key);
-//                ins_it.second->second.second = m_lru.begin();
-//            }
-//            else {
-//                // key already existed, move it to the front
-//                auto lru_it = ins_it.second->second.second;
-//                m_lru.splice(m_lru.begin(),m_lru,lru_it);
-//            }
-
-//            return (ins_it.second->second.first);
-//        }
-
-//        void reuse(K const &key)
-//        {
-//            // move key to the front of the lru
-//            auto lkup_it = m_lkup.find(key);
-//            if(lkup_it == m_lkup.end()) {
-//                return;
-//            }
-
-//            auto lru_it = lkup_it->second.second;
-//            m_lru.splice(m_lru.begin(),m_lru,lru_it);
-//        }
-
-//        void erase(K const &key)
-//        {
-//            auto lkup_it = m_lkup.find(key);
-//            if(lkup_it == m_lkup.end()) {
-//                return;
-//            }
-
-//            // remove from lru and lkup
-//            auto lru_it = lkup_it->second.second;
-//            m_lru.erase(lru_it);
-//            m_lkup.erase(lkup_it);
-//        }
-
-//        void clear()
-//        {
-//            m_lkup.clear();
-//            m_lru.clear();
-//        }
-
-//        bool exists(K const &key) const
-//        {
-//            return (m_lkup.find(key) != m_lkup.end());
-//        }
-
-//        V & get(K const &key, bool &ok) const
-//        {
-//            auto lkup_it = m_lkup.find(key);
-//            if(lkup_it == m_lkup.end()) {
-//                ok = false;
-//                return m_null_value;
-//            }
-//            ok = true;
-//            return lkup_it->second.first;
-//        }
-
-//        std::vector<K> get_keys() const
-//        {
-//            std::vector<K> list_keys;
-//            list_keys.reserve(m_lkup.size());
-
-//            for(auto it : m_lkup) {
-//                list_keys.push_back(it->first);
-//            }
-
-//            return list_keys;
-//        }
-
-//        size_t size() const
-//        {
-//            return m_lkup.size();
-//        }
-
-//        size_t capacity() const
-//        {
-//            return m_capacity;
-//        }
-
-//    private:
-//        size_t m_capacity;
-//        std::list<K> m_lru;
-//        map_type<K,std::pair<V,std::list<K>::iterator>>  m_lkup;
-//        V m_null_value;
-//    };
+    // ============================================================= //
 }
 
 

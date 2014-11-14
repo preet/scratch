@@ -51,6 +51,7 @@ namespace scratch
         }
 
         this->onStarted();
+        m_data = std::make_shared<ImageData>();
         m_data->image = osgDB::readImageFile(m_path);
         this->onFinished();
     }

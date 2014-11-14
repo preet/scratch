@@ -18,6 +18,7 @@
 #define SCRATCH_DATASET_TILES_LL_H
 
 #include <TileSetLL.h>
+#include <osg/PolygonMode>
 
 namespace scratch
 {
@@ -31,8 +32,17 @@ namespace scratch
         void Update(osg::Camera const * cam);
 
     private:
+        //
+        osg::ref_ptr<osg::Group>
+        createTileGm(TileSetLL::TileItem const *tile_item);
+
+        //
         std::unique_ptr<TileSetLL> m_tileset;
+
+        // scene graph
         osg::Group * m_gp_tiles;
+        osg::PolygonMode * m_poly_mode;
+        std::map<TileLL::Id,osg::ref_ptr<osg::Group>> m_lkup_sg_tiles;
     };
 }
 

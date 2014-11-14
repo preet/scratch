@@ -29,8 +29,10 @@ namespace scratch
     public:
         struct TileItem
         {
+            TileLL::Id id;
+
             TileLL const * tile;
-            std::shared_ptr<TileDataSourceLL::Data> data;
+            TileDataSourceLL::Data const * data;
 
             // sample data (s_start,s_delta,t_start,t_delta)
             // also needs to go here
@@ -90,16 +92,72 @@ namespace scratch
         uint8_t GetNumRootTilesY() const;
 
         void UpdateTileSet(osg::Camera const * cam,
-                           std::vector<TileItem> &list_tiles_add,
-                           std::vector<TileItem> &list_tiles_upd,
-                           std::vector<TileItem> &list_tiles_rem);
+                           std::vector<TileLL::Id> &list_tiles_add,
+                           std::vector<TileLL::Id> &list_tiles_upd,
+                           std::vector<TileLL::Id> &list_tiles_rem);
+
+        TileItem const * GetTile(TileLL::Id tile_id) const;
+
+
+        // TileItem Comparators
+        static bool CompareTileItemPtrIdIncreasing(TileItem const * a,
+                                                   TileItem const * b)
+        {
+            return (a->id < b->id);
+        }
+
+        static bool CompareTileItemIdIncreasing(TileItem const & a,
+                                                TileItem const & b)
+        {
+            return (a.id < b.id);
+        }
 
     private:
-        void buildTileSetBFS();
-        void buildTileSetRanked();
+
+        struct TileMetaData
+        {
+            TileMetaData(TileLL * tile) :
+                tile(tile),
+                is_visible(false),
+                exceeds_err(false),
+                request(nullptr)
+            {
+                // empty
+            }
+
+            TileMetaData(TileLL * tile,
+                         bool is_visible,
+                         bool exceeds_err,
+                         TileDataSourceLL::Request const * request) :
+                tile(tile),
+                is_visible(is_visible),
+                exceeds_err(exceeds_err),
+                request(request)
+            {
+
+            }
+
+            TileLL * tile;
+            bool is_visible;
+            bool exceeds_err;
+            TileDataSourceLL::Request const * request;
+        };
+
+        std::vector<TileItem> buildTileSetBFS();
+        std::vector<TileItem> buildTileSetRanked();
+
+        std::vector<TileMetaData>
+        getOrCreateChildDataRequests(TileLL * tile,
+                                     bool & child_data_ready);
+
 
         TileDataSourceLL::Request const *
         getOrCreateDataRequest(TileLL const * tile);
+
+        void createChildren(TileLL * tile) const; // TODO inline
+        void destroyChildren(TileLL * tile) const; // TODO inline
+
+
 
         static Options validateOptions(TileDataSourceLL const * source,
                                        Options opts);
@@ -132,6 +190,8 @@ namespace scratch
             > m_lru_view_data;
 
         bool m_preloaded_data_ready;
+
+        std::vector<TileItem> m_list_tiles;
     };
 }
 

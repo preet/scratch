@@ -172,7 +172,7 @@ namespace scratch
                         new Eval(tile->id,tile->bounds));
 
             m_lru_eval.insert(tile->id,std::move(new_eval));
-            eval = m_lru_eval.get(tile->id,true,exists).get();
+            eval = m_lru_eval.get(tile->id,false,exists).get();
         }
 
 
