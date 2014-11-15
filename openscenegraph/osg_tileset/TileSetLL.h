@@ -58,7 +58,7 @@ namespace scratch
             // The max number of data associated to a tile
             // (textures, geometry, etc) from TileDataSource
             // thats allowed.
-            uint64_t max_data;
+            uint64_t max_data; // rename max_tile_data
 
             // Hint for amount of TileDataSource::Data that is cached.
             // The amount may be exceeded if the number of visible tiles
@@ -158,22 +158,22 @@ namespace scratch
         void destroyChildren(TileLL * tile) const; // TODO inline
 
 
-
-        static Options validateOptions(TileDataSourceLL const * source,
-                                       Options opts);
-
-
+        //
+        Options initOptions(Options opts) const;
+        uint64_t initNumPreloadData() const;
+        uint64_t initMaxViewData() const;
 
         //
         std::unique_ptr<TileDataSourceLL> m_tile_data_source;
         std::unique_ptr<TileVisibilityLL> m_tile_visibility;
         Options const m_opts;
-
+        uint64_t const m_num_preload_data;
+        uint64_t const m_max_view_data;
 
         //
         std::vector<std::unique_ptr<TileLL>> m_list_root_tiles;
 
-        // 0 = view, 1 = base
+        // 0 = view, 1 = preload
         std::vector<uint8_t> m_list_level_is_preloaded;
 
         // lkup_preloaded_data

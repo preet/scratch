@@ -14,6 +14,8 @@
    limitations under the License.
 */
 
+#include <thread>
+
 #include <TileImageSourceLL.h>
 
 #include <osgDB/ReadFile>
@@ -51,8 +53,9 @@ namespace scratch
         }
 
         this->onStarted();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         m_data = std::make_shared<ImageData>();
-        m_data->image = osgDB::readImageFile(m_path);
+        //m_data->image = osgDB::readImageFile(m_path);
         this->onFinished();
     }
 

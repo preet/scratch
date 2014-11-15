@@ -124,18 +124,18 @@ namespace scratch
                                    uint32_t x,
                                    uint32_t y);
 
-        // Comparators for sorting tiles
-        static bool CompareLevelIncreasing(TileLL const * a,
-                                           TileLL const * b)
-        {
-            return (a->level < b->level);
-        }
+//        // Comparators for sorting tiles
+//        static bool CompareLevelIncreasing(TileLL const * a,
+//                                           TileLL const * b)
+//        {
+//            return (a->level < b->level);
+//        }
 
-        static bool CompareIdIncreasing(TileLL const * a,
-                                        TileLL const * b)
-        {
-            return (a->id < b->id);
-        }
+//        static bool CompareIdIncreasing(TileLL const * a,
+//                                        TileLL const * b)
+//        {
+//            return (a->id < b->id);
+//        }
     };
 }
 

@@ -35,7 +35,8 @@ namespace scratch
                         18,
                         1,
                         1,
-                        image_path_gen));
+                        image_path_gen,
+                        2));
 
 
         // TileVisibility
