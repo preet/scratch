@@ -27,7 +27,6 @@
 #include <functional>
 #include <iostream>
 
-
 namespace scratch
 {
     template <typename T>

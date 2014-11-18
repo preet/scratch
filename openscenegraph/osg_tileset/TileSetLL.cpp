@@ -324,10 +324,10 @@ namespace scratch
         }
 
         m_lru_view_data.trim_against_capacity(m_max_view_data);
-        m_lru_view_data.trim_against_mark(m_opts.cache_size_hint);
+//        m_lru_view_data.trim_against_mark(m_opts.cache_size_hint);
 
 
-//        std::cout << "lru sz: " << m_lru_view_data.size() << std::endl;
+        std::cout << "lru sz: " << m_lru_view_data.size() << std::endl;
 
 //        auto list_keys = m_lru_view_data.get_keys();
 //        std::cout << "keys (" << list_keys.size() << ")" << std::endl;

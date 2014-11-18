@@ -22,6 +22,8 @@
 #include <TileDataSourceLL.h>
 #include <TileVisibilityLL.h>
 
+#include <LookupList.h>
+
 namespace scratch
 {
     class TileSetLL
@@ -206,6 +208,13 @@ namespace scratch
             std::shared_ptr<TileDataSourceLL::Request>,
             std::map
             > m_lru_view_data;
+
+//        LookupList<
+//            TileLL::Id,
+//            std::shared_ptr<TileDataSourceLL::Request>,
+//            std::map
+//            > m_ll_view_data;
+
 
         bool m_preloaded_data_ready;
 

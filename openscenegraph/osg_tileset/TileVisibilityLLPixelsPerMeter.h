@@ -20,6 +20,7 @@
 #include <osg/Camera>
 
 #include <MiscUtils.h>
+#include <LookupList.h>
 #include <TileVisibilityLL.h>
 
 namespace scratch
@@ -130,13 +131,17 @@ namespace scratch
         size_t const m_eval_cache_size;
 
         //
-        LRUCacheMap<
+//        LRUCacheMap<
+//                TileLL::Id,
+//                std::unique_ptr<Eval>,
+//                std::map
+//                > m_lru_eval;
+
+        LookupList<
                 TileLL::Id,
                 std::unique_ptr<Eval>,
                 std::map
                 > m_lru_eval;
-
-
     };
 
 } // scratch

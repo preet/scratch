@@ -161,21 +161,24 @@ namespace scratch
                   bool & exceeds_err_threshold)
     {
         // Get the eval for this tile
-        bool exists;
-        Eval const * eval = m_lru_eval.get(
-                    tile->id,true,exists).get();
+        Eval const * eval;
+        auto eval_it = m_lru_eval.find(tile->id);
 
-        if(!exists) {
+        if(eval_it == m_lru_eval.end()) {
             // Create the evaluation geometry
             std::unique_ptr<Eval> new_eval(
                         new Eval(tile->id,tile->bounds));
 
-            m_lru_eval.insert(tile->id,std::move(new_eval));
-            eval = m_lru_eval.get(tile->id,false,exists).get();
+            eval_it = m_lru_eval.insert(
+                        m_lru_eval.begin(),
+                        std::make_pair(
+                            tile->id,
+                            std::move(new_eval)));
 
-            m_lru_eval.trim_against_capacity(m_eval_cache_size);
+            m_lru_eval.move(eval_it,m_lru_eval.begin());
+            m_lru_eval.trim(m_eval_cache_size);
         }
-
+        eval = eval_it->second.get();
 
         // Determine if the tile is visible by intersecting
         // it with the projection of the view frustum

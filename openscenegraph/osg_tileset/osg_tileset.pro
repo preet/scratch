@@ -25,7 +25,7 @@ LIBS += -L$${PATH_OPENSCENEGRAPH_LIB} -lOpenThreads
 HEADERS += \
         ViewController.hpp \
         MiscUtils.h \
-        LookupQueue.h \
+        LookupList.h \
         GeometryUtils.h \
         OSGUtils.h \
         ThreadPool.h \
@@ -40,7 +40,6 @@ HEADERS += \
 SOURCES += \
         GeometryUtils.cpp \
         MiscUtils.cpp \
-        LookupQueue.cpp \
         OSGUtils.cpp \
         ThreadPool.cpp \
         TileLL.cpp \
