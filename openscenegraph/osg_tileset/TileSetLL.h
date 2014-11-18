@@ -44,7 +44,7 @@ namespace scratch
             Options() :
                 min_level(0),
                 max_level(18),
-                max_data(std::numeric_limits<uint64_t>::max()/2),
+                max_tile_data(std::numeric_limits<uint64_t>::max()/2),
                 cache_size_hint(128),
                 list_preload_levels({0,1}),
                 upsample_hint(false)
@@ -58,7 +58,7 @@ namespace scratch
             // The max number of data associated to a tile
             // (textures, geometry, etc) from TileDataSource
             // thats allowed.
-            uint64_t max_data; // rename max_tile_data
+            uint64_t max_tile_data;
 
             // Hint for amount of TileDataSource::Data that is cached.
             // The amount may be exceeded if the number of visible tiles
@@ -66,7 +66,7 @@ namespace scratch
             uint64_t cache_size_hint;
 
             // List of levels to preload tile data from.
-            // max_data includes preloaded data.
+            // max_tile_data includes preloaded data.
             std::vector<uint8_t> list_preload_levels;
 
             // Upsample data for individual TileItems from parent
@@ -96,6 +96,8 @@ namespace scratch
                            std::vector<TileLL::Id> &list_tiles_upd,
                            std::vector<TileLL::Id> &list_tiles_rem);
 
+        void quickTest();
+
         TileItem const * GetTile(TileLL::Id tile_id) const;
 
 
@@ -113,9 +115,18 @@ namespace scratch
         }
 
     private:
-
+        // todo make POD?
         struct TileMetaData
         {
+            TileMetaData() :
+                tile(nullptr),
+                is_visible(false),
+                exceeds_err(false),
+                request(nullptr)
+            {
+                // empty
+            }
+
             TileMetaData(TileLL * tile) :
                 tile(tile),
                 is_visible(false),
@@ -141,10 +152,14 @@ namespace scratch
             bool is_visible;
             bool exceeds_err;
             TileDataSourceLL::Request const * request;
+            bool ready;
         };
 
+        // strict load order where all requested
+        // tile data in the same level must be loaded
+        // before higher levels are loaded
         std::vector<TileItem> buildTileSetBFS();
-        std::vector<TileItem> buildTileSetRanked();
+        std::vector<TileItem> buildTileSetBFS_czm(); // TODO test
 
         std::vector<TileMetaData>
         getOrCreateChildDataRequests(TileLL * tile,
@@ -152,7 +167,10 @@ namespace scratch
 
 
         TileDataSourceLL::Request const *
-        getOrCreateDataRequest(TileLL const * tile);
+        getOrCreateDataRequest(TileLL const * tile, bool * existed=nullptr);
+
+        TileDataSourceLL::Request const *
+        getDataRequest(TileLL const * tile, bool reuse=false);
 
         void createChildren(TileLL * tile) const; // TODO inline
         void destroyChildren(TileLL * tile) const; // TODO inline
@@ -192,6 +210,9 @@ namespace scratch
         bool m_preloaded_data_ready;
 
         std::vector<TileItem> m_list_tiles;
+
+        std::vector<TileItem> m_list_tiles_prev;
+        std::vector<TileItem> m_list_tiles_next;
     };
 }
 

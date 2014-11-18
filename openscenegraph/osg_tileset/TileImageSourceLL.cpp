@@ -39,6 +39,9 @@ namespace scratch
     TileImageSourceLL::ImageRequest::~ImageRequest()
     {
         // empty
+        if(!this->IsFinished()) {
+            Cancel();
+        }
     }
 
     void TileImageSourceLL::ImageRequest::Cancel()
@@ -92,6 +95,8 @@ namespace scratch
 
     std::shared_ptr<TileDataSourceLL::Request> TileImageSourceLL::RequestData(TileLL::Id id)
     {
+//        std::cout << "###: task_count " << m_thread_pool.GetTaskCount() << std::endl;
+
         std::shared_ptr<ImageRequest> request =
                 std::make_shared<ImageRequest>(
                     id,m_path_gen(id));

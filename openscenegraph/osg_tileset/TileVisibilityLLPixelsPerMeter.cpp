@@ -102,8 +102,7 @@ namespace scratch
         m_view_height(view_height_px),
         m_texture_px_size(texture_px_size),
         m_texture_px_area(texture_px_size*texture_px_size),
-        m_eval_cache_size(eval_cache_size),
-        m_lru_eval(eval_cache_size)
+        m_eval_cache_size(eval_cache_size)
     {
 
     }
@@ -173,6 +172,8 @@ namespace scratch
 
             m_lru_eval.insert(tile->id,std::move(new_eval));
             eval = m_lru_eval.get(tile->id,false,exists).get();
+
+            m_lru_eval.trim_against_capacity(m_eval_cache_size);
         }
 
 

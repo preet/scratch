@@ -22,7 +22,8 @@ namespace scratch
 {
     // ============================================================= //
 
-    ThreadPool::Task::Task() :
+    ThreadPool::Task::Task(Id id) :
+        m_id(id),
         m_started(false),
         m_running(false),
         m_canceled(false),

@@ -43,7 +43,7 @@ namespace scratch
         {
         public:
             Request(TileLL::Id id) :
-                m_id(id)
+                Task(id)
             {
                 // empty
             }
@@ -55,13 +55,10 @@ namespace scratch
 
             TileLL::Id GetTileId() const
             {
-                return m_id;
+                return this->GetId();
             }
 
             virtual std::shared_ptr<Data> GetData() const=0;
-
-        private:
-            TileLL::Id const m_id;
         };
 
         // ============================================================= //

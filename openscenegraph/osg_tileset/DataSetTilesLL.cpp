@@ -36,7 +36,7 @@ namespace scratch
                         1,
                         1,
                         image_path_gen,
-                        2));
+                        4));
 
 
         // TileVisibility
@@ -49,6 +49,7 @@ namespace scratch
 
         // TileSet
         TileSetLL::Options options;
+        options.max_tile_data = 64;
         m_tileset.reset(new TileSetLL(std::move(tile_data_source),
                                       std::move(tile_visibility),
                                       options));

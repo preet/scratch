@@ -25,7 +25,7 @@
 #include <cassert>
 #include <map>
 #include <functional>
-
+#include <iostream>
 
 
 namespace scratch
@@ -125,12 +125,13 @@ namespace scratch
     private:
         typedef typename std::list<K>::iterator key_list_it;
 
-        size_t const m_capacity;
         std::list<K> m_lru;
         map_type<K,std::pair<V,key_list_it>>  m_lkup;
 
         K m_null_key;
         V m_null_value;
+
+        std::function<void(K&,V&)> m_deleter;
 
         key_list_it m_it_mark; // TODO initialize to tail
 
@@ -146,19 +147,15 @@ namespace scratch
 
     public:
         LRUCacheMap() :
-            m_capacity(std::numeric_limits<uint32_t>::max()/2),
             m_it_mark(m_lru.end())
           // Basically init with unlimited capacity,
           // its expected the user will manually trim
         {
-            // empty
-        }
-
-        LRUCacheMap(size_t capacity) :
-            m_capacity(capacity),
-            m_it_mark(m_lru.end())
-        {
-            // empty
+            // Define a deleter that doesn't do anything
+            m_deleter = [](K &key, V &val) {
+                (void)key;
+                (void)val;
+            };
         }
 
         // copy insert
@@ -179,7 +176,7 @@ namespace scratch
             }
 
             // make room if required
-            trim_against_capacity();
+//            trim_against_capacity();
 
             // add to lru
             m_lru.push_front(key);
@@ -211,7 +208,7 @@ namespace scratch
             }
 
             // make room if required
-            trim_against_capacity();
+//            trim_against_capacity();
 
             // add to lru
             m_lru.push_front(key);
@@ -295,9 +292,9 @@ namespace scratch
             }
         }
 
-        void trim_against_capacity()
+        void trim_against_capacity(size_t capacity)
         {
-            while(size() >= capacity()) {
+            while(size() > capacity) {
                 if(m_it_mark != m_lru.end()) {
                     auto it_lru = m_lru.end();
                     std::advance(it_lru,-1);
@@ -333,17 +330,14 @@ namespace scratch
                 list_keys.push_back(it);
             }
 
+            std::cout << "//" << m_lru.size() << std::endl;
+
             return list_keys;
         }
 
         size_t size() const
         {
             return m_lkup.size();
-        }
-
-        size_t capacity() const
-        {
-            return m_capacity;
         }
     };
 

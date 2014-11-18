@@ -18,12 +18,13 @@
 #define SCRATCH_THREAD_POOL_H
 
 #include <vector>
-#include <deque>
+#include <list>
 #include <atomic>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <future>
+#include <set>
 
 namespace scratch
 {
@@ -38,12 +39,19 @@ namespace scratch
             friend class ThreadPool;
 
         public:
-            Task();
+            typedef uint64_t Id;
+
+            Task(Task::Id id);
             virtual ~Task();
 
             // No copying allowed
             Task(Task const &)              = delete;
             Task & operator=(Task const &)  = delete;
+
+            Id GetId() const
+            {
+                return m_id;
+            }
 
             bool IsStarted() const;
             bool IsRunning() const;
@@ -61,6 +69,8 @@ namespace scratch
 
         private:
             virtual void process() = 0;
+
+            Id const m_id;
 
             std::atomic<bool> m_started;
             std::atomic<bool> m_running;
@@ -87,20 +97,20 @@ namespace scratch
         void PushBack(std::vector<std::shared_ptr<Task>> const &list_tasks);
         void Stop();
         void Resume();
-		
+
     private:
         void loop();
 
         size_t m_thread_count;
         std::vector<std::thread> m_list_threads;
-        std::deque<std::shared_ptr<Task>> m_queue_tasks;
+        std::list<std::shared_ptr<Task>> m_queue_tasks;
 
         std::atomic<bool> m_running;
         mutable std::mutex m_mutex;
         std::condition_variable m_wait_cond;
 
         // ============================================================= //
-	};
+    };
 
 } // scratch
 
