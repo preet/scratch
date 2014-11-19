@@ -49,7 +49,7 @@ namespace scratch
 
         // TileSet
         TileSetLL::Options options;
-        options.max_tile_data = 64;
+//        options.max_tile_data = 64;
         m_tileset.reset(new TileSetLL(std::move(tile_data_source),
                                       std::move(tile_visibility),
                                       options));

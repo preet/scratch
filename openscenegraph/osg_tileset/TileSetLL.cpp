@@ -245,7 +245,10 @@ namespace scratch
 
         // Mark the start of this update/tile traversal in
         // the view data LRU cache.
-//        m_lru_view_data.mark_head();
+        auto it_mark_upd_start = m_ll_view_data.insert(
+                    m_ll_view_data.begin(),
+                    std::make_pair(TileLL::GetIdFromLevelXY(255,0,0),
+                                   nullptr));
 
         // Enqueue all root tiles first, this ensures
         // a contiguous tileset
@@ -303,7 +306,7 @@ namespace scratch
             r_it != queue_bfs.rend(); ++r_it)
         {
             TileMetaData * meta = (*r_it);
-            meta->request = getOrCreateDataRequest(meta->tile);
+            meta->request = getOrCreateDataRequest(meta->tile,true);
             meta->ready = meta->request->IsFinished();
         }
 
@@ -347,13 +350,19 @@ namespace scratch
             }
         }
 
-        m_lru_view_data.trim_against_capacity(m_max_view_data);
-//        m_lru_view_data.trim_against_mark(m_opts.cache_size_hint);
+        // Trim the tile data cache according to the cache_size_hint.
+        // Only data inserted before the data requests made before
+        // @it_mark_upd_start was inserted will be trimmed (even if
+        // the total size of the cache exceeds the size hint
+        m_ll_view_data.trim(it_mark_upd_start,m_opts.cache_size_hint);
 
+        // Remove the update start marker if its still in the list
+        m_ll_view_data.erase(TileLL::GetIdFromLevelXY(255,0,0));
 
+        // Trim against the strict tile data limit, this will remove
+        // tail elements until size == @max_view_data
+        m_ll_view_data.trim(m_max_view_data);
 
-
-//        std::cout << "lru sz: " << m_lru_view_data.size() << std::endl;
 
         std::cout << "." << std::endl;
         std::cout << "bfs (" << queue_bfs.size() << "): ";
@@ -372,16 +381,19 @@ namespace scratch
         }
         std::cout << std::endl;
 
-        auto list_keys = m_lru_view_data.get_keys();
-        std::cout << "lks (" << list_keys.size() << "): ";
-        for(auto key : list_keys) {
+
+        std::cout << "lks (" << m_ll_view_data.size() << "): ";
+        for(auto it = m_ll_view_data.begin();
+            it != m_ll_view_data.end(); ++it)
+        {
             uint8_t level;
             uint32_t x;
             uint32_t y;
-            TileLL::GetLevelXYFromId(key,level,x,y);
+            TileLL::GetLevelXYFromId(it->first,level,x,y);
             std::cout << int(level) << "_,";
         }
         std::cout << std::endl;
+
 
         std::cout << "tms (" << list_tile_items.size() << "): ";
         for(auto & item : list_tile_items) {
@@ -504,50 +516,35 @@ namespace scratch
 
 
 
-    std::vector<TileSetLL::TileMetaData>
-    TileSetLL::getOrCreateChildDataRequests(TileLL * tile,
-                                            bool & child_data_ready)
+
+
+    TileDataSourceLL::Request const *
+    TileSetLL::getDataRequest(TileLL const * tile, bool reuse)
     {
-        // create children first if required
-        createChildren(tile);
-
-        std::vector<TileMetaData> list_children {
-            TileMetaData(tile->tile_LT.get()),
-            TileMetaData(tile->tile_LB.get()),
-            TileMetaData(tile->tile_RB.get()),
-            TileMetaData(tile->tile_RT.get())
-        };
-
-        // Check if the data for each child tile is ready
-        child_data_ready = true;
-        for(auto & meta_child : list_children) {
-            // create the request if it doesnt already exist
-            meta_child.request =
-                    getOrCreateDataRequest(meta_child.tile);
-
-            if(!meta_child.request->IsFinished()) {
-                child_data_ready = child_data_ready && false;
-            }
+        // check preloaded tile data
+        if(m_list_level_is_preloaded[tile->level]) {
+            auto it = m_lkup_preloaded_data.find(tile->id);
+            return it->second.get();
         }
 
-        // If the child data is ready, calculate its
-        // visibility as well
-        if(child_data_ready) {
-            for(auto & meta_child : list_children) {
-                m_tile_visibility->GetVisibility(
-                            meta_child.tile,
-                            meta_child.is_visible,
-                            meta_child.exceeds_err);
-            }
+        // check dynamic tile data
+        auto it = m_ll_view_data.find(tile->id);
+        if(it == m_ll_view_data.end()) {
+            return nullptr;
         }
 
-        return list_children;
+        if(reuse) {
+            // move to the front of the lru
+            m_ll_view_data.move(it,m_ll_view_data.begin());
+        }
+
+        return it->second.get();
     }
 
     TileDataSourceLL::Request const *
-    TileSetLL::getOrCreateDataRequest(TileLL const * tile, bool * existed)
+    TileSetLL::getOrCreateDataRequest(TileLL const * tile, bool reuse, bool * existed)
     {
-        // Check if this tile data has been preloaded
+        // check preloaded tile data
         if(m_list_level_is_preloaded[tile->level]) {
             auto it = m_lkup_preloaded_data.find(tile->id);
             if(existed) {
@@ -556,49 +553,72 @@ namespace scratch
             return it->second.get();
         }
 
-        // Create the request if it doesn't exist in cache
-        bool exists;
-        TileDataSourceLL::Request * data_req =
-                m_lru_view_data.get(tile->id,true,exists).get();
+        // check dynamic tile data
+        auto it = m_ll_view_data.find(tile->id);
+        if(it == m_ll_view_data.end()) {
+            // create request if it doesn't exist
+            it = m_ll_view_data.insert(
+                        m_ll_view_data.begin(),
+                        std::make_pair(
+                            tile->id,
+                            m_tile_data_source->RequestData(tile->id)));
 
-        if(!exists) {
-            m_lru_view_data.insert(
-                        tile->id,
-                        m_tile_data_source->RequestData(tile->id),
-                        false);
-
-            data_req = m_lru_view_data.get(
-                        tile->id,false,exists).get();
-
-//            m_lru_view_data.trim_against_capacity();
+            if(existed) {
+                *existed = false;
+            }
+        }
+        else {
+            if(reuse) {
+                // move to the front of the lru
+                m_ll_view_data.move(it,m_ll_view_data.begin());
+            }
+            if(existed) {
+                *existed = true;
+            }
         }
 
-        if(existed) {
-            *existed = exists;
-        }
-
-        return data_req;
+        return it->second.get();
     }
 
-    TileDataSourceLL::Request const *
-    TileSetLL::getDataRequest(TileLL const * tile, bool reuse)
-    {
-        // Check if this tile data has been preloaded
-        if(m_list_level_is_preloaded[tile->level]) {
-            auto it = m_lkup_preloaded_data.find(tile->id);
-            return it->second.get();
-        }
+//    std::vector<TileSetLL::TileMetaData>
+//    TileSetLL::getOrCreateChildDataRequests(TileLL * tile,
+//                                            bool & child_data_ready)
+//    {
+//        // create children first if required
+//        createChildren(tile);
 
-        bool exists;
-        TileDataSourceLL::Request * data_req =
-                m_lru_view_data.get(tile->id,reuse,exists).get();
+//        std::vector<TileMetaData> list_children {
+//            TileMetaData(tile->tile_LT.get()),
+//            TileMetaData(tile->tile_LB.get()),
+//            TileMetaData(tile->tile_RB.get()),
+//            TileMetaData(tile->tile_RT.get())
+//        };
 
-        if(!exists) {
-            data_req = nullptr;
-        }
+//        // Check if the data for each child tile is ready
+//        child_data_ready = true;
+//        for(auto & meta_child : list_children) {
+//            // create the request if it doesnt already exist
+//            meta_child.request =
+//                    getOrCreateDataRequest(meta_child.tile);
 
-        return data_req;
-    }
+//            if(!meta_child.request->IsFinished()) {
+//                child_data_ready = child_data_ready && false;
+//            }
+//        }
+
+//        // If the child data is ready, calculate its
+//        // visibility as well
+//        if(child_data_ready) {
+//            for(auto & meta_child : list_children) {
+//                m_tile_visibility->GetVisibility(
+//                            meta_child.tile,
+//                            meta_child.is_visible,
+//                            meta_child.exceeds_err);
+//            }
+//        }
+
+//        return list_children;
+//    }
 
     void TileSetLL::createChildren(TileLL *tile) const
     {

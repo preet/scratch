@@ -139,46 +139,32 @@ namespace scratch
             bool ready;
         };
 
-        // strict load order where all requested
-        // tile data in the same level must be loaded
-        // before higher levels are loaded
+        // TODO desc
         std::vector<TileItem> buildTileSetBFS();
+
+        //
         std::vector<TileItem> buildTileSetBFS_czm(); // TODO test
 
-        std::vector<TileMetaData>
-        getOrCreateChildDataRequests(TileLL * tile,
-                                     bool & child_data_ready);
+
 
 
         TileDataSourceLL::Request const *
-        getOrCreateDataRequest(TileLL const * tile, bool * existed=nullptr);
+        getDataRequest(TileLL const * tile,
+                       bool reuse=false);
 
         TileDataSourceLL::Request const *
-        getDataRequest(TileLL const * tile, bool reuse=false);
+        getOrCreateDataRequest(TileLL const * tile,
+                               bool reuse=false,
+                               bool * existed=nullptr);
+
+//        std::vector<TileMetaData>
+//        getOrCreateChildDataRequests(TileLL * tile,
+//                                     bool & child_data_ready);
 
         void createChildren(TileLL * tile) const; // TODO inline
+
         void destroyChildren(TileLL * tile) const; // TODO inline
 
-
-        TileMetaData * getOrCreateMetaData(TileLL * tile)
-        {
-            if(tile->data == nullptr) {
-                tile->data.reset(new TileMetaData(tile));
-
-//                // set tile
-//                TileMetaData * meta =
-//                        static_cast<TileMetaData*>(
-//                            tile->data.get());
-
-//                meta->tile = tile;
-            }
-
-            return static_cast<TileMetaData*>(tile->data.get());
-        }
-
-        // TODO
-        // should be getMetaData and createMetaData
-        // no need to combine
         TileMetaData * createMetaData(TileLL * tile)
         {
             tile->data.reset(new TileMetaData(tile));
@@ -191,7 +177,7 @@ namespace scratch
         }
 
 
-        //
+        // init helpers
         Options initOptions(Options opts) const;
         uint64_t initNumPreloadData() const;
         uint64_t initMaxViewData() const;
@@ -216,17 +202,11 @@ namespace scratch
             > m_lkup_preloaded_data;
 
         // lru_view_data
-        LRUCacheMap<
+        LookupList<
             TileLL::Id,
             std::shared_ptr<TileDataSourceLL::Request>,
             std::map
-            > m_lru_view_data;
-
-//        LookupList<
-//            TileLL::Id,
-//            std::shared_ptr<TileDataSourceLL::Request>,
-//            std::map
-//            > m_ll_view_data;
+            > m_ll_view_data;
 
 
         bool m_preloaded_data_ready;

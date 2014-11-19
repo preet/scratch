@@ -125,7 +125,10 @@ namespace scratch
                 return m_list.end();
             }
 
-            return m_list.erase(lkup_it->second);
+            auto it = m_list.erase(lkup_it->second);
+            m_lkup.erase(lkup_it);
+
+            return it;
         }
 
         void move(list_it from, list_it to)
