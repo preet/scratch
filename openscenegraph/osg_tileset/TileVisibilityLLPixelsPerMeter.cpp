@@ -175,8 +175,11 @@ namespace scratch
                             tile->id,
                             std::move(new_eval)));
 
-            m_lru_eval.move(eval_it,m_lru_eval.begin());
             m_lru_eval.trim(m_eval_cache_size);
+        }
+        else {
+            // reuse
+            m_lru_eval.move(eval_it,m_lru_eval.begin());
         }
         eval = eval_it->second.get();
 

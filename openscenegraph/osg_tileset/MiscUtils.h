@@ -329,7 +329,7 @@ namespace scratch
                 list_keys.push_back(it);
             }
 
-            std::cout << "//" << m_lru.size() << std::endl;
+//            std::cout << "//" << m_lru.size() << std::endl;
 
             return list_keys;
         }

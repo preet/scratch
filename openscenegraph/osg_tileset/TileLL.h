@@ -43,7 +43,8 @@ namespace scratch
             y(y),
             bounds(bounds),
             parent(nullptr),
-            clip(k_clip_NONE)
+            clip(k_clip_NONE),
+            data(nullptr)
 
         {
             // empty
@@ -59,7 +60,8 @@ namespace scratch
             y(y),
             bounds(GetBounds(parent,x,y)),
             parent(parent),
-            clip(k_clip_NONE)
+            clip(k_clip_NONE),
+            data(nullptr)
         {
             // empty
         }
@@ -100,7 +102,7 @@ namespace scratch
         class Data
         {
         public:
-            virtual ~Data() = 0;
+            virtual ~Data() {}
         };
         std::unique_ptr<Data> data;
 

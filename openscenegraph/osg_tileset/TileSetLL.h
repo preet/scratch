@@ -117,43 +117,25 @@ namespace scratch
         }
 
     private:
-        // todo make POD?
-        struct TileMetaData
+        struct TileMetaData : public TileLL::Data
         {
-            TileMetaData() :
-                tile(nullptr),
-                is_visible(false),
-                exceeds_err(false),
-                request(nullptr)
-            {
-                // empty
-            }
-
             TileMetaData(TileLL * tile) :
                 tile(tile),
+                request(nullptr),
                 is_visible(false),
                 exceeds_err(false),
-                request(nullptr)
+                ready(false)
             {
                 // empty
             }
 
-            TileMetaData(TileLL * tile,
-                         bool is_visible,
-                         bool exceeds_err,
-                         TileDataSourceLL::Request const * request) :
-                tile(tile),
-                is_visible(is_visible),
-                exceeds_err(exceeds_err),
-                request(request)
-            {
-
-            }
+            ~TileMetaData() {}
 
             TileLL * tile;
+            TileDataSourceLL::Request const * request;
+
             bool is_visible;
             bool exceeds_err;
-            TileDataSourceLL::Request const * request;
             bool ready;
         };
 
@@ -176,6 +158,37 @@ namespace scratch
 
         void createChildren(TileLL * tile) const; // TODO inline
         void destroyChildren(TileLL * tile) const; // TODO inline
+
+
+        TileMetaData * getOrCreateMetaData(TileLL * tile)
+        {
+            if(tile->data == nullptr) {
+                tile->data.reset(new TileMetaData(tile));
+
+//                // set tile
+//                TileMetaData * meta =
+//                        static_cast<TileMetaData*>(
+//                            tile->data.get());
+
+//                meta->tile = tile;
+            }
+
+            return static_cast<TileMetaData*>(tile->data.get());
+        }
+
+        // TODO
+        // should be getMetaData and createMetaData
+        // no need to combine
+        TileMetaData * createMetaData(TileLL * tile)
+        {
+            tile->data.reset(new TileMetaData(tile));
+            return static_cast<TileMetaData*>(tile->data.get());
+        }
+
+        TileMetaData * getMetaData(TileLL * tile)
+        {
+            return static_cast<TileMetaData*>(tile->data.get());
+        }
 
 
         //

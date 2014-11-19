@@ -85,6 +85,7 @@ int main()
     }
 
     std::cout << "[starting render loop...]" << std::endl;
+    size_t frame_count=0;
 
     while(!viewer.done())
     {
@@ -94,7 +95,9 @@ int main()
         camera->getViewMatrixAsLookAt(eye,vpt,up);
 
         //
-        dataset->Update(camera);
+        if(frame_count % 10 == 0) {
+            dataset->Update(camera);
+        }
 
         double far_dist,near_dist;
         if(!CalcCameraNearFarDist(eye,vpt-eye,20000.0,near_dist,far_dist)) {
@@ -167,6 +170,7 @@ int main()
 
         //
         viewer.frame();
+        frame_count++;
     }
 
     std::cout << "[exit...]" << std::endl;
