@@ -17,8 +17,6 @@
 #ifndef SCRATCH_TILE_DATA_SOURCE_LL_H
 #define SCRATCH_TILE_DATA_SOURCE_LL_H
 
-#include <functional>
-
 #include <ThreadPool.h>
 #include <TileLL.h>
 
@@ -30,8 +28,6 @@ namespace scratch
 
         // ============================================================= //
 
-        // TODO the tile id should be attached
-        // to Data as well..? (maybe)
         struct Data
         {
             virtual ~Data() {}

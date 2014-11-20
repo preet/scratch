@@ -19,7 +19,7 @@
 
 #include <osg/Camera>
 
-#include <TileLL.h>
+#include <TileDataSourceLL.h>
 
 namespace scratch
 {
@@ -33,9 +33,32 @@ namespace scratch
 
         virtual void Update(osg::Camera const * cam) = 0;
 
+        // TODO desc
+        // @tile:
+        // * pointer to tile, *must* be valid
+        //
+        // @data:
+        // * pointer to specific tile data (may be terrain geometry
+        //   or height data) that can be used by the TileVisibility
+        //   implementation.
+        // * @data may be null, and the implementation must handle
+        //   that case (ie use only @tile to provide meaningful results)
+        //
+        // @is_visible:
+        // * if the tile is visible wrt the current camera
+        //
+        // @norm_error:
+        // * normalized error, exceeds threshold if > 1.0
+        // * invalid if is_visible==false
+        //
+        // @closest_point:
+        // * the approximate closest point on the tile with respect
+        //   to the camera eye
         virtual void GetVisibility(TileLL const * tile,
+                                   TileDataSourceLL::Data const * data,
                                    bool & is_visible,
-                                   bool & exceeds_err_threshold) = 0;
+                                   double & norm_error,
+                                   osg::Vec3d & closest_point) = 0;
     };
 
 

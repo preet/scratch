@@ -157,9 +157,15 @@ namespace scratch
 
     void TileVisibilityLLPixelsPerMeter::
     GetVisibility(TileLL const * tile,
+                  TileDataSourceLL::Data const * data,
                   bool & is_visible,
-                  bool & exceeds_err_threshold)
+                  double & norm_error,
+                  osg::Vec3d & closest_point)
     {
+        // Ignore extra @data; this implementation of TileVisibility
+        // only considers the geometry described in @tile
+        (void)data;
+
         // Get the eval for this tile
         Eval const * eval;
         auto eval_it = m_lru_eval.find(tile->id);
@@ -193,7 +199,7 @@ namespace scratch
                     tile->bounds);
 
         if(!is_visible) {
-            exceeds_err_threshold = false;
+            norm_error = -1.0;
             return;
         }
 
@@ -202,24 +208,25 @@ namespace scratch
         // tile by using the tile's surface area, and the
         // number of pixels per meter at the closest
         // point on the tile wrt to the camera eye
-        osg::Vec3d const closest =
+        closest_point =
                 calcTileClosestPoint(m_lla_eye,
                                      m_eye,
                                      tile->bounds,
                                      (*eval));
 
         double const px_m =
-                calcPixelsPerMeterForDist((m_eye-closest).length(),
-                                          m_view_height,
-                                          m_cam);
+                calcPixelsPerMeterForDist(
+                    (m_eye-closest_point).length(),
+                    m_view_height,
+                    m_cam);
 
         // Estimated pixel area = (pix/m)*(pix/m)*(m^2)
         double const tile_px_area =
                 px_m*px_m*(eval->surf_area_m2);
 
-        // Set true if the current view's tile pixel area
-        // exceeds its texture pixel area
-        exceeds_err_threshold = (tile_px_area > m_texture_px_area);
+        // Greater than 1.0 if the current view's tile
+        // pixel area exceeds its texture pixel area
+        norm_error = tile_px_area/m_texture_px_area;
     }
 
 

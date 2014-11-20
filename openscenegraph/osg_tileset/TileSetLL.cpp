@@ -262,8 +262,10 @@ namespace scratch
             // get visibility
             m_tile_visibility->GetVisibility(
                         meta->tile,
+                        getData(meta->tile),
                         meta->is_visible,
-                        meta->exceeds_err);
+                        meta->norm_error,
+                        meta->closest_point);
 
             queue_bfs.push_back(meta);
         }
@@ -275,9 +277,9 @@ namespace scratch
             TileMetaData * meta = queue_bfs[i];
             TileLL * tile = meta->tile;
 
-            if(meta->exceeds_err &&
-              (tile->level < m_opts.max_level) &&
-              (queue_bfs.size()+4 <= m_opts.max_tile_data))
+            if((meta->norm_error > 1.0) &&
+               (tile->level < m_opts.max_level) &&
+               (queue_bfs.size()+4 <= m_opts.max_tile_data))
             {
                 // Enqueue children for traversal
                 // Note: make sure children don't already exist!
@@ -293,8 +295,10 @@ namespace scratch
                 for(auto &child : list_children) {
                     m_tile_visibility->GetVisibility(
                                 child->tile,
+                                getData(meta->tile),
                                 child->is_visible,
-                                child->exceeds_err);
+                                child->norm_error,
+                                child->closest_point);
 
                     queue_bfs.push_back(child);
                 }
@@ -515,7 +519,18 @@ namespace scratch
     }
 
 
+    TileDataSourceLL::Data const *
+    TileSetLL::getData(TileLL const * tile)
+    {
+        TileDataSourceLL::Request const * req =
+                getDataRequest(tile,false);
 
+        if(req && req->IsFinished()) {
+            return req->GetData().get();
+        }
+
+        return nullptr;
+    }
 
 
     TileDataSourceLL::Request const *

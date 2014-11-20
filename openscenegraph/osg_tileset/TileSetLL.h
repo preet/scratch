@@ -122,9 +122,9 @@ namespace scratch
             TileMetaData(TileLL * tile) :
                 tile(tile),
                 request(nullptr),
+                ready(false),
                 is_visible(false),
-                exceeds_err(false),
-                ready(false)
+                norm_error(-1.0)
             {
                 // empty
             }
@@ -134,9 +134,10 @@ namespace scratch
             TileLL * tile;
             TileDataSourceLL::Request const * request;
 
-            bool is_visible;
-            bool exceeds_err;
             bool ready;
+            bool is_visible;
+            double norm_error;
+            osg::Vec3d closest_point;
         };
 
         // TODO desc
@@ -146,7 +147,8 @@ namespace scratch
         std::vector<TileItem> buildTileSetBFS_czm(); // TODO test
 
 
-
+        TileDataSourceLL::Data const *
+        getData(TileLL const *tile);
 
         TileDataSourceLL::Request const *
         getDataRequest(TileLL const * tile,

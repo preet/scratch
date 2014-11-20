@@ -37,8 +37,10 @@ namespace scratch
         void Update(osg::Camera const * cam);
 
         virtual void GetVisibility(TileLL const * tile,
+                                   TileDataSourceLL::Data const * data,
                                    bool & is_visible,
-                                   bool & exceeds_err_threshold);
+                                   double & norm_error,
+                                   osg::Vec3d & closest_point);
 
     private:
         struct Eval
@@ -129,13 +131,6 @@ namespace scratch
 
         //
         size_t const m_eval_cache_size;
-
-        //
-//        LRUCacheMap<
-//                TileLL::Id,
-//                std::unique_ptr<Eval>,
-//                std::map
-//                > m_lru_eval;
 
         LookupList<
                 TileLL::Id,
