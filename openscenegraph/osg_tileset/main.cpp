@@ -95,9 +95,9 @@ int main()
         camera->getViewMatrixAsLookAt(eye,vpt,up);
 
         //
-        if(frame_count % 10 == 0) {
+//        if(frame_count % 10 == 0) {
             dataset->Update(camera);
-        }
+//        }
 
         double far_dist,near_dist;
         if(!CalcCameraNearFarDist(eye,vpt-eye,20000.0,near_dist,far_dist)) {

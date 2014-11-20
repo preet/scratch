@@ -143,10 +143,6 @@ namespace scratch
         // TODO desc
         std::vector<TileItem> buildTileSetBFS();
 
-        //
-        std::vector<TileItem> buildTileSetBFS_czm(); // TODO test
-
-
         TileDataSourceLL::Data const *
         getData(TileLL const *tile);
 
@@ -167,13 +163,21 @@ namespace scratch
 
         void destroyChildren(TileLL * tile) const; // TODO inline
 
-        TileMetaData * createMetaData(TileLL * tile)
+        // * create and attach TileMetaData for all
+        //   children of @tile and return references
+        // * returned list is organized by rough
+        //   distance from @lla
+        std::vector<TileMetaData*>
+        createChildrenMetaData(TileLL const * tile,
+                               LLA const &lla) const;
+
+        TileMetaData * createMetaData(TileLL * tile) const
         {
             tile->data.reset(new TileMetaData(tile));
             return static_cast<TileMetaData*>(tile->data.get());
         }
 
-        TileMetaData * getMetaData(TileLL * tile)
+        TileMetaData * getMetaData(TileLL * tile) const
         {
             return static_cast<TileMetaData*>(tile->data.get());
         }
@@ -210,11 +214,12 @@ namespace scratch
             std::map
             > m_ll_view_data;
 
-
         bool m_preloaded_data_ready;
 
-        std::vector<TileItem> m_list_tiles;
+        // camera eye LLA
+        LLA m_lla_cam_eye;
 
+        std::vector<TileItem> m_list_tiles;
         std::vector<TileItem> m_list_tiles_prev;
         std::vector<TileItem> m_list_tiles_next;
     };
