@@ -139,7 +139,7 @@ namespace scratch
 
         // Build tile set
         std::vector<TileItem> list_tiles_new =
-                buildTileSetBFS();
+                buildTileSetRanked();
 
         // We need to sort by tile_id before we can
         // split into tiles added/removed
@@ -418,6 +418,199 @@ namespace scratch
         return list_tile_items;
     }
 
+    std::vector<TileSetLL::TileItem> TileSetLL::buildTileSetRanked()
+    {
+        // In this method, tiles don't necessarily have
+        // a unique associated TileData.
+
+        // The entire tileset is built, and TileData with
+        // the highest ranking is requested first
+
+        // For tiles where the corresponding TileData isn't
+        // immediately available, TileData is substituted
+        // in by sampling from TileData that is available
+
+        std::vector<TileItem> list_tile_items;
+
+
+        // Mark the start of this update/tile traversal in
+        // the view data LRU cache.
+        auto it_mark_upd_start = m_ll_view_data.insert(
+                    m_ll_view_data.begin(),
+                    std::make_pair(TileLL::GetIdFromLevelXY(255,0,0),
+                                   nullptr));
+
+        std::vector<TileMetaData*> queue_bfs;
+
+        // Root tiles
+        for(auto & tile : m_list_root_tiles) {
+            TileMetaData * meta = createMetaData(tile.get());
+
+            // All root tiles must always be available
+            meta->request = getOrCreateDataRequest(tile.get(),true);
+            if(!meta->request->IsFinished()) {
+                return list_tile_items;
+            }
+
+            // start with an empty quadtree
+            destroyChildren(tile.get());
+
+            // get visibility
+            m_tile_visibility->GetVisibility(
+                        meta->tile,
+                        getData(meta->tile),
+                        meta->is_visible,
+                        meta->norm_error,
+                        meta->closest_point);
+
+            queue_bfs.push_back(meta);
+        }
+
+        // Create a list of tiles according to tile visibility
+        for(size_t i=0; i < queue_bfs.size(); i++)
+        {
+            TileMetaData * meta = queue_bfs[i];
+            TileLL * tile = meta->tile;
+
+            if((meta->norm_error > 1.0) &&
+               (tile->level < m_opts.max_level) &&
+               (queue_bfs.size()+4 <= m_opts.max_tile_data))
+            {
+                // Enqueue children for traversal
+                createChildren(tile);
+
+                std::vector<TileMetaData*> list_children {
+                    createMetaData(tile->tile_LT.get()),
+                    createMetaData(tile->tile_LB.get()),
+                    createMetaData(tile->tile_RB.get()),
+                    createMetaData(tile->tile_RT.get())
+                };
+
+                for(auto &child : list_children) {
+                    m_tile_visibility->GetVisibility(
+                                child->tile,
+                                getData(meta->tile),
+                                child->is_visible,
+                                child->norm_error,
+                                child->closest_point);
+
+                    queue_bfs.push_back(child);
+                }
+            }
+        }
+
+        // Split into root and ranked tiles
+        auto it_tmd = queue_bfs.begin();
+        std::advance(it_tmd,m_list_root_tiles.size());
+
+        std::vector<TileMetaData*> list_root_tiles;
+        list_root_tiles.reserve(m_list_root_tiles.size());
+        list_root_tiles.insert(list_root_tiles.end(),
+                               queue_bfs.begin(),
+                               it_tmd);
+
+        std::vector<TileMetaData*> list_ranked_tiles;
+        list_ranked_tiles.reserve(queue_bfs.size());
+        list_ranked_tiles.insert(list_ranked_tiles.end(),
+                                 it_tmd,
+                                 queue_bfs.end());
+
+        // Sort non root tiles with a ranking function
+        // that factors in tile level and distance
+        std::sort(list_ranked_tiles.begin(),
+                  list_ranked_tiles.end(),
+                  [](TileMetaData const * a, TileMetaData const * b) {
+                        // TODO
+                        // Should tiles with clip==k_clip_ALL have
+                        // a rank of 0?
+
+                        double rank_a =
+                                double(a->tile->level)*
+                                double(a->is_visible)* // should work, false==0.0,true==1.0
+                                a->norm_error;
+
+                        double rank_b =
+                                double(b->tile->level)*
+                                double(b->is_visible)*
+                                b->norm_error;
+
+                        return (rank_a > rank_b);
+                    }
+                );
+
+        // Request as much data as there is space: @max_view_data
+        // and use substitution for everything else
+        size_t const num_requests =
+                std::min(list_ranked_tiles.size(),
+                         static_cast<size_t>(m_max_view_data));
+
+        for(size_t i=0; i < num_requests; i++) {
+            TileMetaData * meta = list_ranked_tiles[i];
+            meta->request = getOrCreateDataRequest(meta->tile,true);
+        }
+
+
+        //
+        for(auto &meta : list_root_tiles) {
+            if(meta->tile->clip == TileLL::k_clip_NONE) {
+                TileItem item;
+                item.id = meta->tile->id;
+                item.tile = meta->tile;
+                item.data = meta->request->GetData().get();
+                list_tile_items.push_back(item);
+            }
+        }
+
+        for(auto &meta : list_ranked_tiles) {
+            if(meta->tile->clip == TileLL::k_clip_ALL) {
+                continue;
+            }
+
+            // determine sample if required
+            TileLL * sample_tile = meta->tile;
+            TileMetaData * sample_meta;
+
+            bool search_data = true;
+            while(search_data) {
+                sample_meta = getMetaData(sample_tile);
+                if(sample_meta->request &&
+                   sample_meta->request->IsFinished()) {
+                    search_data = false;
+                }
+                else {
+                    sample_tile = sample_tile->parent;
+                }
+            }
+
+            // save
+            TileItem item;
+            item.id = meta->tile->id;
+            item.tile = meta->tile;
+
+            if(sample_tile != meta->tile) {
+                item.uses_sample = true;
+                item.sample_id = sample_tile->id;
+                item.sample_tile = sample_tile;
+                item.data = sample_meta->request->GetData().get();
+            }
+            else {
+                item.data = meta->request->GetData().get();
+            }
+
+            list_tile_items.push_back(item);
+        }
+
+        // trim cache
+        m_ll_view_data.trim(it_mark_upd_start,m_opts.cache_size_hint);
+        m_ll_view_data.erase(TileLL::GetIdFromLevelXY(255,0,0));
+        m_ll_view_data.trim(m_max_view_data);
+
+        //
+        std::cout << "#: sz ll view data: " << m_ll_view_data.size() << std::endl;
+
+        return list_tile_items;
+    }
+
     TileDataSourceLL::Data const *
     TileSetLL::getData(TileLL const * tile)
     {
@@ -433,7 +626,8 @@ namespace scratch
 
 
     TileDataSourceLL::Request const *
-    TileSetLL::getDataRequest(TileLL const * tile, bool reuse)
+    TileSetLL::getDataRequest(TileLL const * tile,
+                              bool reuse)
     {
         // check preloaded tile data
         if(m_list_level_is_preloaded[tile->level]) {
@@ -456,7 +650,9 @@ namespace scratch
     }
 
     TileDataSourceLL::Request const *
-    TileSetLL::getOrCreateDataRequest(TileLL const * tile, bool reuse, bool * existed)
+    TileSetLL::getOrCreateDataRequest(TileLL const * tile,
+                                      bool reuse,
+                                      bool * existed)
     {
         // check preloaded tile data
         if(m_list_level_is_preloaded[tile->level]) {
@@ -645,7 +841,11 @@ namespace scratch
             opts.max_tile_data = num_base_data;
         }
 
-        // TODO check upsampling hint
+        // check upsampling hint
+        if(opts.upsample_hint &&
+           (!m_tile_data_source->CanBeSampled())) {
+            opts.upsample_hint = false;
+        }
 
         return opts;
     }

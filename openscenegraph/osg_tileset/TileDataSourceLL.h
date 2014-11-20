@@ -96,6 +96,8 @@ namespace scratch
             return m_num_root_tiles_y;
         }
 
+        virtual bool CanBeSampled() const = 0;
+
         virtual std::shared_ptr<Request> RequestData(TileLL::Id id) = 0;
 
     private:

@@ -60,6 +60,8 @@ namespace scratch
                           uint8_t num_threads=2);
         ~TileImageSourceLL();
 
+        bool CanBeSampled() const;
+
         std::shared_ptr<Request> RequestData(TileLL::Id id);
 
     private:

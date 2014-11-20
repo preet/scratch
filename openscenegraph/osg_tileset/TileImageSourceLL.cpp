@@ -62,6 +62,11 @@ namespace scratch
         this->onFinished();
     }
 
+    bool TileImageSourceLL::CanBeSampled() const
+    {
+        return true;
+    }
+
     std::shared_ptr<TileDataSourceLL::Data>
     TileImageSourceLL::ImageRequest::GetData() const
     {
@@ -91,7 +96,8 @@ namespace scratch
         // empty
     }
 
-    std::shared_ptr<TileDataSourceLL::Request> TileImageSourceLL::RequestData(TileLL::Id id)
+    std::shared_ptr<TileDataSourceLL::Request>
+    TileImageSourceLL::RequestData(TileLL::Id id)
     {
 //        std::cout << "###: task_count " << m_thread_pool.GetTaskCount() << std::endl;
 

@@ -29,15 +29,26 @@ namespace scratch
     class TileSetLL
     {
     public:
+        // TODO rearrange for opt packing
+        // 5x8 bytes + 1x1 byte: 41 bytes -> 48 bytes good?
         struct TileItem
         {
+            TileItem() :
+                tile(nullptr),
+                uses_sample(false),
+                sample_tile(nullptr),
+                data(nullptr)
+            {}
+
             TileLL::Id id;
-
             TileLL const * tile;
-            TileDataSourceLL::Data const * data;
 
-            // sample data (s_start,s_delta,t_start,t_delta)
-            // also needs to go here
+            // sample
+            bool uses_sample;
+            TileLL::Id sample_id;
+            TileLL const * sample_tile;
+
+            TileDataSourceLL::Data const * data;
         };
 
         struct Options
@@ -114,6 +125,22 @@ namespace scratch
             return (a.id < b.id);
         }
 
+        static void GenerateSampleTexCoords(TileItem const * item,
+                                            TileItem const * sample,
+                                            double &s_start,
+                                            double &s_delta,
+                                            double &t_start,
+                                            double &t_delta)
+        {
+            //
+            (void)item;
+            (void)sample;
+            (void)s_start;
+            (void)s_delta;
+            (void)t_start;
+            (void)t_delta;
+        }
+
     private:
         struct TileMetaData : public TileLL::Data
         {
@@ -140,6 +167,11 @@ namespace scratch
 
         // TODO desc
         std::vector<TileItem> buildTileSetBFS();
+
+        std::vector<TileItem> buildTileSetRanked();
+
+        static bool compareMetaDataRankIncreasing(TileMetaData const * a,
+                                                  TileMetaData const * b);
 
         TileDataSourceLL::Data const *
         getData(TileLL const *tile);
