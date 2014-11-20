@@ -53,7 +53,6 @@ namespace scratch
 
     public:
         TileImageSourceLL(GeoBounds const &bounds,
-                          uint8_t min_level,
                           uint8_t max_level,
                           uint8_t num_root_tiles_x,
                           uint8_t num_root_tiles_y,

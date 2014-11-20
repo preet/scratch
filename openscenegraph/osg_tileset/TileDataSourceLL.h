@@ -60,12 +60,10 @@ namespace scratch
         // ============================================================= //
 
         TileDataSourceLL(GeoBounds const &bounds,
-                         uint8_t min_level,
                          uint8_t max_level,
                          uint8_t num_root_tiles_x,
                          uint8_t num_root_tiles_y) :
             m_bounds(bounds),
-            m_min_level(min_level),
             m_max_level(max_level),
             m_num_root_tiles_x(num_root_tiles_x),
             m_num_root_tiles_y(num_root_tiles_y)
@@ -81,11 +79,6 @@ namespace scratch
         GeoBounds const & GetBounds() const
         {
             return m_bounds;
-        }
-
-        uint8_t GetMinLevel() const
-        {
-            return m_min_level;
         }
 
         uint8_t GetMaxLevel() const
@@ -107,7 +100,6 @@ namespace scratch
 
     private:
         GeoBounds const m_bounds;
-        uint8_t const m_min_level;
         uint8_t const m_max_level;
         uint8_t const m_num_root_tiles_x;
         uint8_t const m_num_root_tiles_y;

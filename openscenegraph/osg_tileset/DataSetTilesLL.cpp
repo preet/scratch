@@ -31,7 +31,6 @@ namespace scratch
         std::unique_ptr<TileImageSourceLL> tile_data_source(
                     new TileImageSourceLL(
                         GeoBounds(-180,180,-90,90),
-                        0,
                         18,
                         1,
                         1,

@@ -96,11 +96,6 @@ namespace scratch
         return m_tile_data_source->GetBounds();
     }
 
-    uint8_t TileSetLL::GetMinLevel() const
-    {
-        return m_opts.min_level;
-    }
-
     uint8_t TileSetLL::GetMaxLevel() const
     {
         return m_opts.max_level;
@@ -627,22 +622,11 @@ namespace scratch
         // comparisons (ie, if(x > max_tile_data))
         assert(opts.max_tile_data < std::numeric_limits<uint64_t>::max());
 
-        // Ensure min and max levels are between
-        // corresponding source levels
-        if(opts.min_level > opts.max_level) {
-            std::swap(opts.min_level,opts.max_level);
+        // Ensure min max level is less than or equal
+        // the data source's max level
+        if(opts.max_level > m_tile_data_source->GetMaxLevel()) {
+            opts.max_level = m_tile_data_source->GetMaxLevel();
         }
-        else if(opts.min_level == opts.max_level) {
-            opts.max_level++;
-        }
-
-        opts.min_level = clamp(opts.min_level,
-                               m_tile_data_source->GetMinLevel(),
-                               m_tile_data_source->GetMaxLevel());
-
-        opts.max_level = clamp(opts.max_level,
-                               m_tile_data_source->GetMinLevel(),
-                               m_tile_data_source->GetMaxLevel());
 
         // The preload level list must be sorted
         // in increasing order

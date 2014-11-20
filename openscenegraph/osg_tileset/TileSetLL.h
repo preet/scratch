@@ -44,7 +44,6 @@ namespace scratch
         {
             // sane defaults
             Options() :
-                min_level(0),
                 max_level(18),
                 max_tile_data(std::numeric_limits<uint64_t>::max()/2),
                 cache_size_hint(128),
@@ -54,7 +53,7 @@ namespace scratch
                 // empty
             }
 
-            uint8_t min_level;
+            // The max level of tile subdivisions
             uint8_t max_level;
 
             // The max number of data associated to a tile
@@ -85,8 +84,6 @@ namespace scratch
 
         GeoBounds const & GetBounds() const;
 
-        uint8_t GetMinLevel() const;
-
         uint8_t GetMaxLevel() const;
 
         uint8_t GetNumRootTilesX() const;
@@ -104,6 +101,7 @@ namespace scratch
 
 
         // TileItem Comparators
+        // TODO why are these public
         static bool CompareTileItemPtrIdIncreasing(TileItem const * a,
                                                    TileItem const * b)
         {
