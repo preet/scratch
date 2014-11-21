@@ -3,6 +3,7 @@
 #include <TileVisibilityLLPixelsPerMeter.h>
 
 #include <OSGUtils.h>
+#include <osg/Texture2D>
 
 namespace scratch
 {
@@ -35,7 +36,7 @@ namespace scratch
                         1,
                         1,
                         image_path_gen,
-                        4));
+                        2));
 
 
         // TileVisibility
@@ -96,59 +97,18 @@ namespace scratch
 
             assert(tile_item);
 
-            osg::ref_ptr<osg::Group> gp_gm =
-                    createTileGm(tile_item);
+            // Create scene graph data
+            osg::ref_ptr<osg::Group> gp = createTileGm(tile_item);
+//            applyTileTx(tile_item,gp.get());
 
-            assert(m_lkup_sg_tiles.insert(std::make_pair(tile_item->id,gp_gm)).second);
-
-            m_gp_tiles->addChild(gp_gm);
+            m_lkup_sg_tiles.insert(std::make_pair(tile_item->id,gp));
+            m_gp_tiles->addChild(gp);
         }
 
-//        static uint8_t max_level=0;
-
-//        // remove
-//        for(auto const &tile_item : list_tiles_rem) {
-//            // Remove this tile from the scene and lookup
-//            TileLL::Id const tile_id = tile_item.tile->id;
-
-//            auto it = m_lkup_sg_tiles.find(tile_id);
-//            assert(it != m_lkup_sg_tiles.end());
-
-//            m_gp_tiles->removeChild(it->second);
-//            m_lkup_sg_tiles.erase(it);
-//        }
-
-//        // add
-//        for(auto const &tile_item : list_tiles_add) {
-
-//            max_level = std::max(tile_item.tile->level,max_level);
-
-//            // Add this tile to the scene and lookup
-
-//            TileLL::Id const tile_id = tile_item.tile->id;
-
-//            auto it = m_lkup_sg_tiles.find(tile_id);
-//            assert(it == m_lkup_sg_tiles.end());
-
-//            osg::ref_ptr<osg::Group> gp_gm =
-//                    createTileGm(tile_item);
-
-//            std::pair<TileLL::Id,osg::ref_ptr<osg::Group>> ins_data;
-//            ins_data.first = tile_id;
-//            ins_data.second = gp_gm;
-
-//            assert(m_lkup_sg_tiles.insert(ins_data).second);
-//            m_gp_tiles->addChild(gp_gm);
-//        }
-
-//        std::cout << "max_level: " << int(max_level) << std::endl;
-
-        // upd
-        // (do nothing)
     }
 
     osg::ref_ptr<osg::Group>
-    DataSetTilesLL::createTileGm(TileSetLL::TileItem const *tile_item)
+    DataSetTilesLL::createTileGm(TileSetLL::TileItem const * tile_item)
     {
         TileLL const * tile = tile_item->tile;
 
@@ -205,6 +165,7 @@ namespace scratch
         osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
         gm->setVertexArray(vx_array);
         gm->setTexCoordArray(0,tx_array,osg::Array::BIND_PER_VERTEX);
+        gm->setTexCoordArray(1,tx_array,osg::Array::BIND_PER_VERTEX);
         gm->setColorArray(cx_array,osg::Array::BIND_OVERALL);
         gm->addPrimitiveSet(ix_array);
 
@@ -217,10 +178,6 @@ namespace scratch
                     osg::StateAttribute::ON |
                     osg::StateAttribute::OVERRIDE);
 
-        // texture
-    //    gd->getOrCreateStateSet()->setTextureAttributeAndModes(
-    //                0,m_list_tile_level_tex[tile->level]);
-
         // polygon mode
         gd->getOrCreateStateSet()->setAttributeAndModes(
                     m_poly_mode,
@@ -230,5 +187,37 @@ namespace scratch
         gp->addChild(gd);
 
         return gp;
+    }
+
+    void DataSetTilesLL::applyTileTx(TileSetLL::TileItem const * tile_item,
+                                     osg::Group * gp)
+    {
+        // TileLL const * tile = tile_item->tile;
+
+        TileImageSourceLL::ImageData const * data =
+                static_cast<TileImageSourceLL::ImageData const*>(
+                    tile_item->data);
+
+        // create the texture
+        osg::ref_ptr<osg::Texture2D> texture = new osg::Texture2D;
+        texture->setImage(data->image);
+
+        texture->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
+        texture->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
+        texture->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
+        texture->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+
+        // create the texture coordinates (expect that
+        // we have two sets of texture coordinates, and
+        // the tex coords for unit 1 contain the 'full'
+        // unsampled 1:1 coordinates for the tile)
+
+        // TODO set sampled coordinates
+
+        // get the geometry and apply the texture
+        osg::Geode * gd = static_cast<osg::Geode*>(gp->getChild(0));
+        gd->getOrCreateStateSet()->setTextureAttributeAndModes(0,texture);
+
+        // osg::Geometry * gm = static_cast<osg::Geometry*>(gd->getDrawable(0));
     }
 }

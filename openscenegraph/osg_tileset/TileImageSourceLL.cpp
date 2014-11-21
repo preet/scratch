@@ -56,9 +56,9 @@ namespace scratch
         }
 
         this->onStarted();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         m_data = std::make_shared<ImageData>();
-        //m_data->image = osgDB::readImageFile(m_path);
+//        m_data->image = osgDB::readImageFile(m_path);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         this->onFinished();
     }
 
@@ -96,17 +96,50 @@ namespace scratch
         // empty
     }
 
+    void TileImageSourceLL::StartRequestBlock()
+    {
+        m_list_requests.clear();
+    }
+
+    void TileImageSourceLL::EndRequestBlock()
+    {
+        m_thread_pool.PushFront(m_list_requests);
+        m_list_requests.clear();
+
+//        std::string slist;
+//        for(auto &req : m_list_requests) {
+//            uint8_t level; uint32_t x; uint32_t y;
+//            TileLL::GetLevelXYFromId(req->GetId(),level,x,y);
+//            slist.append(std::to_string(level));
+//            slist.append(" ");
+//        }
+//        std::cout << "#: req: " << slist << std::endl;
+//        slist.clear();
+
+
+
+
+//        auto list_ids = m_thread_pool.GetTaskIdList();
+//        for(auto id : list_ids) {
+//            uint8_t level; uint32_t x; uint32_t y;
+//            TileLL::GetLevelXYFromId(id,level,x,y);
+//            slist.append(std::to_string(level));
+//            slist.append(" ");
+//        }
+//        std::cout << "#: tsk: " << slist << std::endl;
+    }
+
     std::shared_ptr<TileDataSourceLL::Request>
     TileImageSourceLL::RequestData(TileLL::Id id)
     {
-//        std::cout << "###: task_count " << m_thread_pool.GetTaskCount() << std::endl;
-
         std::shared_ptr<ImageRequest> request =
                 std::make_shared<ImageRequest>(
                     id,m_path_gen(id));
 
-        m_thread_pool.PushFront(request);
+        m_list_requests.push_back(request);
         return request;
     }
+
+
 
 } // scratch

@@ -63,6 +63,7 @@ namespace scratch
 
         m_list_level_is_preloaded.resize(m_opts.max_level,0);
 
+        m_tile_data_source->StartRequestBlock();
         for(auto level : m_opts.list_preload_levels) {
             // mark as a preload level
             m_list_level_is_preloaded[level] = 1;
@@ -83,7 +84,8 @@ namespace scratch
                                     tile_id));
                 }
             }
-        }       
+        }
+        m_tile_data_source->EndRequestBlock();
     }
 
     TileSetLL::~TileSetLL()
@@ -139,7 +141,7 @@ namespace scratch
 
         // Build tile set
         std::vector<TileItem> list_tiles_new =
-                buildTileSetRanked();
+                buildTileSetBFS_czm();
 
         // We need to sort by tile_id before we can
         // split into tiles added/removed
@@ -236,6 +238,162 @@ namespace scratch
         return (&(*it));
     }
 
+    std::vector<TileSetLL::TileItem> TileSetLL::buildTileSetBFS_czm()
+    {
+        // Build the tileset by doing a breadth first search
+        // on all of the root tiles
+        std::vector<TileMetaData*> queue_bfs;
+        std::vector<TileItem> list_tile_items;
+
+        uint64_t num_tile_data=0;
+
+        // Mark the start of this update/tile traversal in
+        // the view data LRU cache.
+        auto it_mark_upd_start = m_ll_view_data.insert(
+                    m_ll_view_data.begin(),
+                    std::make_pair(TileLL::GetIdFromLevelXY(255,0,0),
+                                   nullptr));
+
+        m_tile_data_source->StartRequestBlock();
+
+        // Enqueue all root tiles first
+        for(auto & tile : m_list_root_tiles) {
+            // start with an empty quadtree
+            destroyChildren(tile.get());
+
+            // attach meta data to tile
+            TileMetaData * meta = createMetaData(tile.get());
+
+            // get tile data
+            meta->request = getOrCreateDataRequest(tile.get(),true);
+            meta->ready = meta->request->IsFinished();
+            if(!meta->ready) {
+                // all root tiles must be ready
+                return list_tile_items;
+            }
+
+            // get visibility
+            m_tile_visibility->GetVisibility(
+                        meta->tile,
+                        getData(meta->tile),
+                        meta->is_visible,
+                        meta->norm_error,
+                        meta->closest_point);
+
+            queue_bfs.push_back(meta);
+            num_tile_data++;
+        }
+
+        // Traverse each root tile in BFS order and save
+        // tiles that are:
+        // * ready
+        // * are either leaves (wrt to the current visibility
+        //   error) or have children that aren't ready
+
+        // Parent tiles must be ready before children
+        // can be traversed
+        for(size_t i=0; i < queue_bfs.size(); i++)
+        {
+            TileMetaData * meta = queue_bfs[i];
+            TileLL * tile = meta->tile;
+
+            if(meta->request->IsFinished()) {
+                // This tile's data is ready
+                bool save_this_tile = true;
+
+                if((meta->norm_error > 1.0) &&
+                   (tile->level < m_opts.max_level) &&
+                   (num_tile_data+4 <= m_opts.max_tile_data)) {
+                    // This tile exceeds the error metric for
+                    // subdivision
+
+                    // Check if this tile's children are ready
+                    bool child_data_ready;
+                    std::vector<TileMetaData*> const list_children =
+                            getOrCreateChildData(tile,child_data_ready);
+                    num_tile_data += 4;
+
+                    if(child_data_ready) {
+                        // children are ready, so enqueue them to be
+                        // saved and do not save the parent
+                        for(auto &meta : list_children) {
+                            queue_bfs.push_back(meta);
+                        }
+                        save_this_tile = false;
+                    }
+                }
+
+                if(save_this_tile) {
+                    TileItem item;
+                    item.id = meta->tile->id;
+                    item.tile = meta->tile;
+                    item.data = meta->request->GetData().get();
+                    list_tile_items.push_back(item);
+
+                    destroyChildren(tile);
+                }
+            }
+        }
+        // commit the requests
+        m_tile_data_source->EndRequestBlock();
+
+
+//        std::cout << "qbfs (" << queue_bfs.size() << "): ";
+//        for(auto tmd : queue_bfs) {
+////                    std::string s = (tmd->ready) ? "F" : "W";
+////                    std::string c = "R";
+////                    if(tmd->tile->parent) {
+////                        if(tmd->tile->clip == TileLL::k_clip_NONE) {
+////                            c = "N";
+////                        }
+////                        else {
+////                            c = "A";
+////                        }
+////                    }
+////            if(tmd->tile->level > 1) {
+//                std::cout << int(tmd->tile->level);
+////            }
+//        }
+//        std::cout << std::endl;
+
+
+//        std::cout << "lrub (" << m_ll_view_data.size() << "): ";
+//        for(auto it = m_ll_view_data.begin();
+//            it != m_ll_view_data.end(); ++it)
+//        {
+//            uint8_t level;
+//            uint32_t x;
+//            uint32_t y;
+//            TileLL::GetLevelXYFromId(it->first,level,x,y);
+//            if(level < 255) {
+//                std::cout << int(level);
+//            }
+//            else {
+//                std::cout << "_";
+//            }
+//        }
+//        std::cout << std::endl;
+
+
+        // Trim the tile data cache according to the cache_size_hint.
+        // Only data inserted before the data requests made before
+        // @it_mark_upd_start was inserted will be trimmed (even if
+        // the total size of the cache exceeds the size hint
+        m_ll_view_data.trim(it_mark_upd_start,m_opts.cache_size_hint);
+
+        // Remove the update start marker if its still in the list
+        m_ll_view_data.erase(TileLL::GetIdFromLevelXY(255,0,0));
+
+        // Trim against the strict tile data limit, this will remove
+        // tail elements until size == @max_view_data
+        m_ll_view_data.trim(m_max_view_data);
+
+
+        return list_tile_items;
+    }
+
+
+
     std::vector<TileSetLL::TileItem> TileSetLL::buildTileSetBFS()
     {
         // Build the tileset by doing a breadth first search
@@ -315,13 +473,16 @@ namespace scratch
         }
 
         // Create data requests for each tile
-        for(auto r_it = queue_bfs.rbegin();
-            r_it != queue_bfs.rend(); ++r_it)
+        m_tile_data_source->StartRequestBlock();
+        for(auto r_it = queue_bfs.begin();
+            r_it != queue_bfs.end(); ++r_it)
         {
             TileMetaData * meta = (*r_it);
             meta->request = getOrCreateDataRequest(meta->tile,true);
             meta->ready = meta->request->IsFinished();
         }
+        m_tile_data_source->EndRequestBlock();
+
 
         // Save tiles that are ready and have no children
         // or have children that are not yet ready
@@ -447,7 +608,10 @@ namespace scratch
             TileMetaData * meta = createMetaData(tile.get());
 
             // All root tiles must always be available
+            m_tile_data_source->StartRequestBlock();
             meta->request = getOrCreateDataRequest(tile.get(),true);
+            m_tile_data_source->EndRequestBlock();
+
             if(!meta->request->IsFinished()) {
                 return list_tile_items;
             }
@@ -546,7 +710,9 @@ namespace scratch
 
         for(size_t i=0; i < num_requests; i++) {
             TileMetaData * meta = list_ranked_tiles[i];
+            m_tile_data_source->StartRequestBlock();
             meta->request = getOrCreateDataRequest(meta->tile,true);
+            m_tile_data_source->EndRequestBlock();
         }
 
 
@@ -690,45 +856,43 @@ namespace scratch
         return it->second.get();
     }
 
-//    std::vector<TileSetLL::TileMetaData>
-//    TileSetLL::getOrCreateChildDataRequests(TileLL * tile,
-//                                            bool & child_data_ready)
-//    {
-//        // create children first if required
-//        createChildren(tile);
+    std::vector<TileSetLL::TileMetaData*>
+    TileSetLL::getOrCreateChildData(TileLL * tile,
+                                    bool & child_data_ready)
+    {
+        // create children first if required
+        createChildren(tile);
 
-//        std::vector<TileMetaData> list_children {
-//            TileMetaData(tile->tile_LT.get()),
-//            TileMetaData(tile->tile_LB.get()),
-//            TileMetaData(tile->tile_RB.get()),
-//            TileMetaData(tile->tile_RT.get())
-//        };
+        // attach/get meta data for each child
+        std::vector<TileMetaData*> list_children =
+                createChildrenMetaData(tile,m_lla_cam_eye);
 
-//        // Check if the data for each child tile is ready
-//        child_data_ready = true;
-//        for(auto & meta_child : list_children) {
-//            // create the request if it doesnt already exist
-//            meta_child.request =
-//                    getOrCreateDataRequest(meta_child.tile);
+        // Check if the data for each child tile is ready
+        child_data_ready = true;
 
-//            if(!meta_child.request->IsFinished()) {
-//                child_data_ready = child_data_ready && false;
-//            }
-//        }
+        for(auto meta : list_children) {
+            meta->request = getOrCreateDataRequest(meta->tile,true);
+            meta->ready = meta->request->IsFinished();
+            if(!meta->ready) {
+                child_data_ready = false;
+            }
+        }
 
-//        // If the child data is ready, calculate its
-//        // visibility as well
-//        if(child_data_ready) {
-//            for(auto & meta_child : list_children) {
-//                m_tile_visibility->GetVisibility(
-//                            meta_child.tile,
-//                            meta_child.is_visible,
-//                            meta_child.exceeds_err);
-//            }
-//        }
+        // If the child data is ready, calculate its
+        // visibility as well
+        if(child_data_ready) {
+            for(auto meta : list_children) {
+                m_tile_visibility->GetVisibility(
+                            meta->tile,
+                            getData(meta->tile),
+                            meta->is_visible,
+                            meta->norm_error,
+                            meta->closest_point);
+            }
+        }
 
-//        return list_children;
-//    }
+        return list_children;
+    }
 
     void TileSetLL::createChildren(TileLL *tile) const
     {

@@ -34,7 +34,11 @@ namespace scratch
     private:
         //
         osg::ref_ptr<osg::Group>
-        createTileGm(TileSetLL::TileItem const *tile_item);
+        createTileGm(TileSetLL::TileItem const * tile_item);
+
+        void applyTileTx(TileSetLL::TileItem const * tile_item,
+                         osg::Group * gp);
+
 
         //
         std::unique_ptr<TileSetLL> m_tileset;

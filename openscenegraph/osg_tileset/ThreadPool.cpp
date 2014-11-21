@@ -18,6 +18,7 @@
 
 #include <iostream>
 
+
 namespace scratch
 {
     // ============================================================= //
@@ -103,6 +104,22 @@ namespace scratch
         return m_queue_tasks.size();
     }
 
+    std::vector<ThreadPool::Task::Id> ThreadPool::GetTaskIdList() const
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        std::vector<Task::Id> list_ids;
+        list_ids.reserve(m_queue_tasks.size());
+
+        for(auto it = m_queue_tasks.begin();
+            it != m_queue_tasks.end(); ++it)
+        {
+            list_ids.push_back((*it)->GetId());
+        }
+
+        return list_ids;
+    }
+
     void ThreadPool::PushFront(std::shared_ptr<Task> const &task)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -126,6 +143,8 @@ namespace scratch
     void ThreadPool::PushFront(std::vector<std::shared_ptr<Task>> const &list_tasks)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
+
+        std::string slist;
 
         // Add work to shared queue
         for(auto r_it = list_tasks.rbegin();
@@ -152,6 +171,7 @@ namespace scratch
         // Wake one thread from the pool
         m_wait_cond.notify_one();
     }
+
 
     void ThreadPool::Stop()
     {

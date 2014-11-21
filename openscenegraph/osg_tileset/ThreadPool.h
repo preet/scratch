@@ -91,10 +91,32 @@ namespace scratch
         ThreadPool & operator=(ThreadPool const &)  = delete;
 
         size_t GetTaskCount() const;
+        std::vector<Task::Id> GetTaskIdList() const;
         void PushFront(std::shared_ptr<Task> const &task);
         void PushBack(std::shared_ptr<Task> const &task);
         void PushFront(std::vector<std::shared_ptr<Task>> const &list_tasks);
         void PushBack(std::vector<std::shared_ptr<Task>> const &list_tasks);
+
+//        // TODO maybe make this into a template function that
+//        // accepts any kind of container?
+//        template<typename ForwardIterator>
+//        void PushFront(ForwardIterator tasks_begin,
+//                       ForwardIterator tasks_end)
+//        {
+//            // use static assert to ensure iterator type
+//            // is for a container that contains something that
+//            // is shared_ptr<DerivedFromTask>
+//        }
+
+//        template<typename ForwardIterator>
+//        void PushBack(ForwardIterator tasks_begin,
+//                      ForwardIterator tasks_end)
+//        {
+//            // use static assert to ensure iterator type
+//            // is for a container that contains something that
+//            // is shared_ptr<DerivedFromTask>
+//        }
+
         void Stop();
         void Resume();
 

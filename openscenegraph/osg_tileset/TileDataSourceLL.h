@@ -98,7 +98,20 @@ namespace scratch
 
         virtual bool CanBeSampled() const = 0;
 
-        virtual std::shared_ptr<Request> RequestData(TileLL::Id id) = 0;
+        virtual void StartRequestBlock() = 0;
+
+        virtual void EndRequestBlock() = 0;
+
+        // calls to RequestData must happen in between
+        // a request block:
+        // tile_data_source.StartRequestBlock();
+        // auto req0 = tile_data_source.RequestData(...);
+        // auto req1 = tile_data_source.RequestData(...);
+        // auto req2 = tile_data_source.RequestData(...);
+        // auto req3 = tile_data_source.RequestData(...);
+        // tile_data_source.EndRequestBlock(); // sends the requests
+        virtual std::shared_ptr<Request>
+        RequestData(TileLL::Id id) = 0;
 
     private:
         GeoBounds const m_bounds;

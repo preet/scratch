@@ -167,8 +167,10 @@ namespace scratch
 
         // TODO desc
         std::vector<TileItem> buildTileSetBFS();
+        std::vector<TileItem> buildTileSetBFS_czm();
 
         std::vector<TileItem> buildTileSetRanked();
+
 
         static bool compareMetaDataRankIncreasing(TileMetaData const * a,
                                                   TileMetaData const * b);
@@ -185,9 +187,9 @@ namespace scratch
                                bool reuse=false,
                                bool * existed=nullptr);
 
-//        std::vector<TileMetaData>
-//        getOrCreateChildDataRequests(TileLL * tile,
-//                                     bool & child_data_ready);
+        std::vector<TileMetaData*>
+        getOrCreateChildData(TileLL * tile,
+                             bool & child_data_ready);
 
         void createChildren(TileLL * tile) const; // TODO inline
 
@@ -197,6 +199,7 @@ namespace scratch
         //   children of @tile and return references
         // * returned list is organized by rough
         //   distance from @lla
+        // TODO rename 'createChildMetaData'...?
         std::vector<TileMetaData*>
         createChildrenMetaData(TileLL const * tile,
                                LLA const &lla) const;

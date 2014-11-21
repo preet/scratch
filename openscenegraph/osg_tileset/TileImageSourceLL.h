@@ -26,6 +26,7 @@ namespace scratch
     //
     class TileImageSourceLL : public TileDataSourceLL
     {
+    public:
         //
         struct ImageData : public Data
         {
@@ -51,7 +52,6 @@ namespace scratch
             std::shared_ptr<ImageData> m_data;
         };
 
-    public:
         TileImageSourceLL(GeoBounds const &bounds,
                           uint8_t max_level,
                           uint8_t num_root_tiles_x,
@@ -62,12 +62,17 @@ namespace scratch
 
         bool CanBeSampled() const;
 
+        void StartRequestBlock();
+
+        void EndRequestBlock();
+
         std::shared_ptr<Request> RequestData(TileLL::Id id);
 
     private:
         std::function<std::string(TileLL::Id)> m_path_gen;
         ThreadPool m_thread_pool;
 
+        std::vector<std::shared_ptr<ThreadPool::Task>> m_list_requests;
     };
 
 } // scratch
