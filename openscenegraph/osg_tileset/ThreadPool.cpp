@@ -61,7 +61,9 @@ namespace scratch
 
     void ThreadPool::Task::Wait() // TODO add duration wait
     {
-        m_future.wait();
+        if(m_running && m_future.valid()) {
+            m_future.wait();
+        }
     }
 
     void ThreadPool::Task::onStarted()
@@ -72,15 +74,17 @@ namespace scratch
 
     void ThreadPool::Task::onFinished()
     {
-        m_running = false;
         m_finished = true;
-        m_promise.set_value();
     }
 
     void ThreadPool::Task::onCanceled()
     {
-        m_running = false;
         m_canceled = true;
+    }
+
+    void ThreadPool::Task::onEnded()
+    {
+        m_running = false;
         m_promise.set_value();
     }
 

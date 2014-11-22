@@ -66,6 +66,7 @@ namespace scratch
             void onStarted();
             void onFinished();
             void onCanceled();
+            void onEnded();
 
         private:
             virtual void process() = 0;
@@ -76,9 +77,10 @@ namespace scratch
             std::atomic<bool> m_running;
             std::atomic<bool> m_canceled;
             std::atomic<bool> m_finished;
-
             std::promise<void> m_promise;
             std::future<void>  m_future;
+
+            std::mutex m_mutex_promise;
         };
 
         // ============================================================= //

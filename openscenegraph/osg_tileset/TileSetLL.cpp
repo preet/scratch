@@ -58,6 +58,17 @@ namespace scratch
         }
 
 
+        // Set an erase callback for data requests dropped from
+        // the LRU cache that cancels the request (since it may
+        // still exist in a processing queue in TileDataSource)
+        m_ll_view_data.register_on_erase(
+                    [](decltype(m_ll_view_data.end()) it) {
+                        if(it->second) {
+                            it->second->Cancel();
+                        }
+                    });
+
+
         // Preload the base textures
         m_preloaded_data_ready = false;
 

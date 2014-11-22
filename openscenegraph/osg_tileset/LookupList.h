@@ -20,6 +20,8 @@
 #include <list>
 #include <map>
 #include <unordered_map>
+#include <functional>
+#include <memory>
 
 namespace scratch
 {
@@ -28,16 +30,38 @@ namespace scratch
              template<typename...> class map_type>
     class LookupList
     {
-    private:
+    public:
         typedef typename std::list<std::pair<K,V>>::iterator list_it;
 
+    private:
         std::list<std::pair<K,V>> m_list;
         std::map<K,list_it> m_lkup;
+
+        std::function<void(list_it)> m_callback_no_op;
+        std::function<void(list_it)> m_callback_on_insert;
+        std::function<void(list_it)> m_callback_on_erase;
 
     public:
         LookupList()
         {
             // empty
+
+            // define a no-op callback
+            m_callback_no_op = [](list_it){};
+
+            // set default insert and erase callbacks to no-op
+            m_callback_on_insert = m_callback_no_op;
+            m_callback_on_erase = m_callback_no_op;
+        }
+
+        void register_on_insert(std::function<void(list_it)> on_insert)
+        {
+            m_callback_on_insert = on_insert;
+        }
+
+        void register_on_erase(std::function<void(list_it)> on_erase)
+        {
+            m_callback_on_erase = on_erase;
         }
 
         // Iterators
@@ -93,6 +117,7 @@ namespace scratch
 
             list_it inserted = m_list.insert(position,val);
             m_lkup.insert(std::make_pair(val.first,inserted));
+            m_callback_on_insert(inserted);
 
             return inserted;
         }
@@ -108,6 +133,7 @@ namespace scratch
             auto key = val.first;
             list_it inserted = m_list.insert(position,std::move(val));
             m_lkup.insert(std::make_pair(key,inserted));
+            m_callback_on_insert(inserted);
 
             return inserted;
         }
@@ -115,6 +141,8 @@ namespace scratch
         list_it erase(list_it position)
         {
             m_lkup.erase(position->first);
+            m_callback_on_erase(position);
+
             return m_list.erase(position);
         }
 
@@ -125,6 +153,7 @@ namespace scratch
                 return m_list.end();
             }
 
+            m_callback_on_erase(lkup_it->second);
             auto it = m_list.erase(lkup_it->second);
             m_lkup.erase(lkup_it);
 
@@ -139,6 +168,7 @@ namespace scratch
         void trim(size_t size)
         {
             while(m_list.size() > size) {
+                m_callback_on_erase(last());
                 m_lkup.erase(m_list.back().first);
                 m_list.pop_back();
             }
@@ -152,10 +182,12 @@ namespace scratch
             {
                 if(it != position) {
                     std::advance(it,-1);
+                    m_callback_on_erase(last());
                     m_lkup.erase(m_list.back().first);
                     m_list.pop_back();
                 }
                 else {
+                    m_callback_on_erase(last());
                     m_lkup.erase(m_list.back().first);
                     m_list.pop_back();
                     break;

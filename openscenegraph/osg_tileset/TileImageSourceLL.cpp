@@ -39,9 +39,8 @@ namespace scratch
     TileImageSourceLL::ImageRequest::~ImageRequest()
     {
         // empty
-        if(!this->IsFinished()) {
-            Cancel();
-        }
+        Cancel();
+        Wait();
     }
 
     void TileImageSourceLL::ImageRequest::Cancel()
@@ -51,15 +50,15 @@ namespace scratch
 
     void TileImageSourceLL::ImageRequest::process()
     {
-        if(this->IsCanceled()) {
-            return;
+        if(!this->IsCanceled()) {
+            this->onStarted();
+            m_data = std::make_shared<ImageData>();
+    //        m_data->image = osgDB::readImageFile(m_path);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            this->onFinished();
         }
 
-        this->onStarted();
-        m_data = std::make_shared<ImageData>();
-//        m_data->image = osgDB::readImageFile(m_path);
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        this->onFinished();
+        this->onEnded();
     }
 
     bool TileImageSourceLL::CanBeSampled() const
@@ -115,8 +114,6 @@ namespace scratch
 //        }
 //        std::cout << "#: req: " << slist << std::endl;
 //        slist.clear();
-
-
 
 
 //        auto list_ids = m_thread_pool.GetTaskIdList();
