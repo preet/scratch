@@ -49,7 +49,7 @@ namespace scratch
 
         // TileSet
         TileSetLL::Options options;
-//        options.max_tile_data = 64;
+        options.max_tile_data = 64;
         m_tileset.reset(new TileSetLL(std::move(tile_data_source),
                                       std::move(tile_visibility),
                                       options));
@@ -81,30 +81,91 @@ namespace scratch
             auto it = m_lkup_sg_tiles.find(tile_id);
             assert(it != m_lkup_sg_tiles.end());
 
-            m_gp_tiles->removeChild(it->second);
+            m_gp_tiles->removeChild(it->second.gp);
             m_lkup_sg_tiles.erase(tile_id);
         }
 
         // add
         for(auto tile_id : list_tiles_add) {
-            // Add this tile to the scene and lookup
+            //
             auto it = m_lkup_sg_tiles.find(tile_id);
             assert(it == m_lkup_sg_tiles.end());
 
-            // Get the tile
-            TileSetLL::TileItem const * tile_item =
+            //
+            TileSetLL::TileItem const * item =
                     m_tileset->GetTile(tile_id);
+            assert(item);
 
-            assert(tile_item);
+            //
+            SGData sg_data;
 
-            // Create scene graph data
-            osg::ref_ptr<osg::Group> gp = createTileGm(tile_item);
-//            applyTileTx(tile_item,gp.get());
+            // geometry
+            sg_data.gp = createTileGm(item);
 
-            m_lkup_sg_tiles.insert(std::make_pair(tile_item->id,gp));
-            m_gp_tiles->addChild(gp);
+            // texture
+            if(item->sample) {
+                sg_data.sample_id = item->sample->id;
+            }
+            applyTileTx(item,sg_data.gp.get());
+
+            // save
+            m_lkup_sg_tiles.emplace(item->id,sg_data);
+            m_gp_tiles->addChild(sg_data.gp);
         }
 
+        // update
+        for(auto tile_id : list_tiles_upd) {
+            // Get the tile
+            TileSetLL::TileItem const * item =
+                    m_tileset->GetTile(tile_id);
+            assert(item);
+
+            // Get the scene graph data
+            auto it = m_lkup_sg_tiles.find(tile_id);
+            assert(it != m_lkup_sg_tiles.end());
+
+            // update texture if required
+            SGData & sg_data = it->second;
+            if(item->sample) {
+                if(sg_data.sample_id != item->sample->id) {
+                    applyTileTx(item,sg_data.gp.get());
+                    sg_data.sample_id = item->sample->id;
+                }
+            }
+        }
+    }
+
+    void DataSetTilesLL::applyTileTx(TileSetLL::TileItem const * tile_item,
+                                     osg::Group * gp)
+    {
+        TileImageSourceLL::ImageData const * data =
+                static_cast<TileImageSourceLL::ImageData const*>(
+                    tile_item->data);
+
+        // create the texture
+        osg::ref_ptr<osg::Texture2D> texture = new osg::Texture2D;
+        texture->setImage(data->image);
+
+        texture->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
+        texture->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
+        texture->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
+        texture->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
+
+        // create the texture coordinates (expect that
+        // we have two sets of texture coordinates, and
+        // the tex coords for unit 1 contain the 'full'
+        // unsampled 1:1 coordinates for the tile)
+
+        // TODO set sampled coordinates
+        if(tile_item->sample) {
+            // ...
+        }
+
+        // get the geometry and apply the texture
+        osg::Geode * gd = static_cast<osg::Geode*>(gp->getChild(0));
+        gd->getOrCreateStateSet()->setTextureAttributeAndModes(0,texture);
+
+        // osg::Geometry * gm = static_cast<osg::Geometry*>(gd->getDrawable(0));
     }
 
     osg::ref_ptr<osg::Group>
@@ -179,9 +240,9 @@ namespace scratch
                     osg::StateAttribute::OVERRIDE);
 
         // polygon mode
-        gd->getOrCreateStateSet()->setAttributeAndModes(
-                    m_poly_mode,
-                    osg::StateAttribute::ON);
+//        gd->getOrCreateStateSet()->setAttributeAndModes(
+//                    m_poly_mode,
+//                    osg::StateAttribute::ON);
 
         osg::ref_ptr<osg::Group> gp = new osg::Group;
         gp->addChild(gd);
@@ -189,35 +250,5 @@ namespace scratch
         return gp;
     }
 
-    void DataSetTilesLL::applyTileTx(TileSetLL::TileItem const * tile_item,
-                                     osg::Group * gp)
-    {
-        // TileLL const * tile = tile_item->tile;
 
-        TileImageSourceLL::ImageData const * data =
-                static_cast<TileImageSourceLL::ImageData const*>(
-                    tile_item->data);
-
-        // create the texture
-        osg::ref_ptr<osg::Texture2D> texture = new osg::Texture2D;
-        texture->setImage(data->image);
-
-        texture->setFilter(osg::Texture2D::MIN_FILTER,osg::Texture2D::LINEAR);
-        texture->setFilter(osg::Texture2D::MAG_FILTER,osg::Texture2D::LINEAR);
-        texture->setWrap(osg::Texture2D::WRAP_S,osg::Texture2D::CLAMP_TO_EDGE);
-        texture->setWrap(osg::Texture2D::WRAP_T,osg::Texture2D::CLAMP_TO_EDGE);
-
-        // create the texture coordinates (expect that
-        // we have two sets of texture coordinates, and
-        // the tex coords for unit 1 contain the 'full'
-        // unsampled 1:1 coordinates for the tile)
-
-        // TODO set sampled coordinates
-
-        // get the geometry and apply the texture
-        osg::Geode * gd = static_cast<osg::Geode*>(gp->getChild(0));
-        gd->getOrCreateStateSet()->setTextureAttributeAndModes(0,texture);
-
-        // osg::Geometry * gm = static_cast<osg::Geometry*>(gd->getDrawable(0));
-    }
 }

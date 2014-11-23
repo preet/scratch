@@ -29,25 +29,31 @@ namespace scratch
     class TileSetLL
     {
     public:
-        // TODO rearrange for opt packing
-        // 5x8 bytes + 1x1 byte: 41 bytes -> 48 bytes good?
         struct TileItem
         {
-            TileItem() :
-                tile(nullptr),
-                uses_sample(false),
-                sample_tile(nullptr),
-                data(nullptr)
-            {}
+            TileItem(TileLL::Id id,
+                     TileLL const * tile,
+                     TileDataSourceLL::Data const * data) :
+                id(id),tile(tile),sample(nullptr),data(data)
+            {
+                // empty
+            }
+
+            TileItem(TileLL::Id id,
+                     TileLL const * tile,
+                     TileLL const * sample,
+                     TileDataSourceLL::Data const * data) :
+                id(id),tile(tile),sample(sample),data(data)
+            {
+                // empty
+            }
+
+            // If sample is null, this TileItem does not
+            // use sampling
 
             TileLL::Id id;
             TileLL const * tile;
-
-            // sample
-            bool uses_sample;
-            TileLL::Id sample_id;
-            TileLL const * sample_tile;
-
+            TileLL const * sample;
             TileDataSourceLL::Data const * data;
         };
 
@@ -125,20 +131,21 @@ namespace scratch
             return (a.id < b.id);
         }
 
-        static void GenerateSampleTexCoords(TileItem const * item,
-                                            TileItem const * sample,
+        static void GenerateSampleTexCoords(TileLL const * from,
+                                            TileLL const * to,
                                             double &s_start,
                                             double &s_delta,
                                             double &t_start,
                                             double &t_delta)
         {
-            //
-            (void)item;
-            (void)sample;
-            (void)s_start;
-            (void)s_delta;
-            (void)t_start;
-            (void)t_delta;
+            double const from_width = from->bounds.maxLon-from->bounds.minLon;
+            double const from_height= from->bounds.maxLat-from->bounds.minLat;
+
+            s_start = (to->bounds.minLon-from->bounds.minLon)/from_width;
+            s_delta = (to->bounds.maxLon-to->bounds.minLon)/from_width;
+
+            t_start = (to->bounds.minLat-from->bounds.minLat)/from_height;
+            t_delta = (to->bounds.maxLat-to->bounds.minLat)/from_height;
         }
 
     private:

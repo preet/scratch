@@ -438,7 +438,8 @@ osg::ref_ptr<osg::Group> BuildFrustumNode(std::string const &name,
     geom->setVertexArray( v );
 
     osg::ref_ptr<osg::Vec4Array> c = new osg::Vec4Array;
-    c->push_back(osg::Vec4(0.5,0.5,0.5,0.5));
+//    c->push_back(osg::Vec4(0.5,0.5,0.5,0.5));
+    c->push_back(osg::Vec4(1,1,1,1));
     geom->setColorArray( c, osg::Array::BIND_OVERALL );
 
     GLushort idxLines[8] = {

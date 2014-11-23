@@ -53,8 +53,8 @@ namespace scratch
         if(!this->IsCanceled()) {
             this->onStarted();
             m_data = std::make_shared<ImageData>();
-    //        m_data->image = osgDB::readImageFile(m_path);
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            m_data->image = osgDB::readImageFile(m_path);
+            std::this_thread::sleep_for(std::chrono::milliseconds(150));
             this->onFinished();
         }
 
@@ -102,8 +102,24 @@ namespace scratch
 
     void TileImageSourceLL::EndRequestBlock()
     {
+        // TODO
+
+        // PushFront(...) may load certain tiles out
+        // of order (ie further away), but loads tiles
+        // requested recently first. For slow load times,
+        // PushFront is better
+
+        // PushBack(...) loads tiles in the order they
+        // are requested. As the number of requests accumulate,
+        // the time taken to load the mostly recently requested
+        // tiles increases substantially. However this method
+        // doesn't load tiles out of order. For fast load times,
+        // PushBack is better
+
+        // We need to provide an option to choose
         m_thread_pool.PushFront(m_list_requests);
-        m_list_requests.clear();
+        std::cout << "task_count: "
+                  << m_thread_pool.GetTaskCount() << std::endl;
 
 //        std::string slist;
 //        for(auto &req : m_list_requests) {
@@ -124,6 +140,9 @@ namespace scratch
 //            slist.append(" ");
 //        }
 //        std::cout << "#: tsk: " << slist << std::endl;
+
+
+        m_list_requests.clear();
     }
 
     std::shared_ptr<TileDataSourceLL::Request>

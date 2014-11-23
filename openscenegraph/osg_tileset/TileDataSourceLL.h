@@ -54,6 +54,9 @@ namespace scratch
                 return this->GetId();
             }
 
+            // TODO
+            // should GetData() return a shared pointer?
+            // why not just a raw pointer?
             virtual std::shared_ptr<Data> GetData() const=0;
         };
 

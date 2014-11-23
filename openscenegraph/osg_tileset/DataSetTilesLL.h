@@ -32,6 +32,14 @@ namespace scratch
         void Update(osg::Camera const * cam);
 
     private:
+
+        // scene graph
+        struct SGData
+        {
+            osg::ref_ptr<osg::Group> gp;
+            TileLL::Id sample_id;
+        };
+
         //
         osg::ref_ptr<osg::Group>
         createTileGm(TileSetLL::TileItem const * tile_item);
@@ -43,10 +51,11 @@ namespace scratch
         //
         std::unique_ptr<TileSetLL> m_tileset;
 
-        // scene graph
+
+
         osg::Group * m_gp_tiles;
         osg::PolygonMode * m_poly_mode;
-        std::map<TileLL::Id,osg::ref_ptr<osg::Group>> m_lkup_sg_tiles;
+        std::map<TileLL::Id,SGData> m_lkup_sg_tiles;
     };
 }
 
