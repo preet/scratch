@@ -156,16 +156,44 @@ namespace scratch
         // the tex coords for unit 1 contain the 'full'
         // unsampled 1:1 coordinates for the tile)
 
-        // TODO set sampled coordinates
+        osg::Geode * gd = static_cast<osg::Geode*>(gp->getChild(0));
+        osg::Geometry * gm = static_cast<osg::Geometry*>(gd->getDrawable(0));
+
+        // set sampled coordinates
         if(tile_item->sample) {
-            // ...
+
+            double s_start;
+            double s_delta;
+            double t_start;
+            double t_delta;
+            TileSetLL::GenerateSampleTexCoords(tile_item->sample,
+                                               tile_item->tile,
+                                               s_start,
+                                               s_delta,
+                                               t_start,
+                                               t_delta);
+
+            osg::Vec2dArray const * tx_array_full =
+                    static_cast<osg::Vec2dArray const *>(
+                        gm->getTexCoordArray(1));
+
+            osg::ref_ptr<osg::Vec2dArray> tx_array_sample =
+                    new osg::Vec2dArray;
+
+            for(size_t i=0; i < tx_array_full->size(); i++) {
+                osg::Vec2d tx = tx_array_full->at(i);
+                tx.x() = (tx.x()*s_delta) + s_start;
+                tx.y() = (tx.y()*t_delta) + t_start;
+
+                tx_array_sample->push_back(tx);
+            }
+
+            gm->setTexCoordArray(0,tx_array_sample,osg::Array::BIND_PER_VERTEX);
         }
 
-        // get the geometry and apply the texture
-        osg::Geode * gd = static_cast<osg::Geode*>(gp->getChild(0));
+        // apply the texture
         gd->getOrCreateStateSet()->setTextureAttributeAndModes(0,texture);
 
-        // osg::Geometry * gm = static_cast<osg::Geometry*>(gd->getDrawable(0));
     }
 
     osg::ref_ptr<osg::Group>
