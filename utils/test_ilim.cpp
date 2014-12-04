@@ -24,6 +24,7 @@
 #include <iostream>
 #include <cassert>
 #include <limits>
+#include <cmath>
 
 // ilim
 #include <ilim.hpp>
@@ -33,6 +34,16 @@ namespace ilim
     // ============================================================= //
 
     // some additional pixel types for testing
+
+    struct R32F
+    {
+        float r;
+    };
+
+    struct R64F
+    {
+        float r;
+    };
 
     struct G8
     {
@@ -83,6 +94,34 @@ namespace ilim
 
     namespace ilim_detail
     {
+        template<>
+        struct pixel_traits<R32F>
+        {
+            static const uint8_t channel_count = 1;
+
+            static const bool is_int_type = false;
+            static const bool single_bitdepth = true;
+
+            static const uint8_t bits_r = 32;
+            static const uint8_t bits_g = 0;
+            static const uint8_t bits_b = 0;
+            static const uint8_t bits_a = 0;
+        };
+
+        template<>
+        struct pixel_traits<R64F>
+        {
+            static const uint8_t channel_count = 1;
+
+            static const bool is_int_type = false;
+            static const bool single_bitdepth = true;
+
+            static const uint8_t bits_r = 64;
+            static const uint8_t bits_g = 0;
+            static const uint8_t bits_b = 0;
+            static const uint8_t bits_a = 0;
+        };
+
         template<>
         struct pixel_traits<G8>
         {
@@ -219,26 +258,84 @@ namespace ilim
 
 using namespace ilim;
 
-//void test_channel_noop()
-//{
-//    std::vector<RGBA8> list_rgba8_src(1,{11,22,33,44});
-//    list_r8_dst.clear();
-//    std::vector<G8> list_g8_dst;
-//    std::vector<B8> list_b8_dst;
-//    std::vector<A8> list_a8_dst;
+template<typename PixelSrc,typename PixelDst>
+ilim_detail::assign_mode get_channel_r_assign_mode()
+{
+    using namespace ilim_detail;
 
-//    ilim_detail::conv_pixels(list_rgba8_src,list_r8_dst);
-//    assert(list_r8_dst[0].r == 11);
+    typedef pixel_traits<PixelSrc> src_traits;
+    typedef pixel_traits<PixelDst> dst_traits;
 
-//    ilim_detail::conv_pixels(list_rgba8_src,list_g8_dst);
-//    assert(list_g8_dst[0].g == 22);
+    assign_mode mode = (
+                (dst_traits::bits_r==0) ? assign_mode::no_op :
+                (src_traits::bits_r==0) ? assign_mode::sub :
+                (src_traits::is_int_type && !dst_traits::is_int_type) ? assign_mode::int_to_float :
+                (!src_traits::is_int_type && dst_traits::is_int_type) ? assign_mode::float_to_int :
+                (!src_traits::is_int_type && !dst_traits::is_int_type) ? assign_mode::float_to_float :
+                (dst_traits::bits_r > src_traits::bits_r) ? assign_mode::upscale : assign_mode::downscale);
 
-//    ilim_detail::conv_pixels(list_rgba8_src,list_b8_dst);
-//    assert(list_b8_dst[0].b == 33);
+    return mode;
+}
 
-//    ilim_detail::conv_pixels(list_rgba8_src,list_a8_dst);
-//    assert(list_a8_dst[0].a == 44);
-//}
+void test_channel_assign_mode()
+{
+    using namespace ilim_detail;
+
+    assign_mode mode;
+
+//    // test noop
+    mode = get_channel_r_assign_mode<R8,G8>();
+    assert(mode == assign_mode::no_op);
+
+    // test sub
+    mode = get_channel_r_assign_mode<G8,R8>();
+    assert(mode == assign_mode::sub);
+
+    // test int_to_float
+    mode = get_channel_r_assign_mode<R8,R64F>();
+    assert(mode == assign_mode::int_to_float);
+
+    // test float_to_int
+    mode = get_channel_r_assign_mode<R32F,R16>();
+    assert(mode == assign_mode::float_to_int);
+
+    // test float_to_float
+    mode = get_channel_r_assign_mode<R32F,R64F>();
+    assert(mode == assign_mode::float_to_float);
+
+    // test upscale
+    mode = get_channel_r_assign_mode<R8,R32>();
+    assert(mode == assign_mode::upscale);
+
+    // test downscale
+    mode = get_channel_r_assign_mode<R16,R8>();
+    assert(mode == assign_mode::downscale);
+
+//    if(mode == assign_mode::no_op) {
+//        std::cout << "test_channel_assign_mode: no_op" << std::endl;
+//    }
+//    else if(mode == assign_mode::sub) {
+//        std::cout << "test_channel_assign_mode: sub" << std::endl;
+//    }
+//    else if(mode == assign_mode::int_to_float) {
+//        std::cout << "test_channel_assign_mode: int_to_float" << std::endl;
+//    }
+//    else if(mode == assign_mode::float_to_int) {
+//        std::cout << "test_channel_assign_mode: float_to_int" << std::endl;
+//    }
+//    else if(mode == assign_mode::float_to_float) {
+//        std::cout << "test_channel_assign_mode: float_to_float" << std::endl;
+//    }
+//    else if(mode == assign_mode::upscale) {
+//        std::cout << "test_channel_assign_mode: upscale" << std::endl;
+//    }
+//    else if(mode == assign_mode::downscale) {
+//        std::cout << "test_channel_assign_mode: downscale" << std::endl;
+//    }
+//    else {
+//        std::cout << "test_channel_assign_mode: err: unknown mode" << std::endl;
+//    }
+}
 
 void test_channel_noop()
 {
@@ -287,6 +384,105 @@ void test_channel_sub()
     assert(list_a8_dst[0].a == 1);
 
     std::cout << "test_channel_sub... [ok]" << std::endl;
+}
+
+void test_channel_int_to_float()
+{
+    static const double k_eps = 1E-3;
+
+    // red
+    {
+        std::vector<R8> list_8_src(1);
+        std::vector<R16> list_16_src(1,{32768});
+        std::vector<R32> list_32_src(1,{std::numeric_limits<uint32_t>::max()/3});
+        std::vector<R32F> list_f_dst;
+
+
+        list_8_src[0].r = 0;
+        ilim_detail::conv_pixels(list_8_src,list_f_dst);
+        assert(fabs(list_f_dst[0].r-0.0) < k_eps);
+
+        list_8_src[0].r = 255;
+        ilim_detail::conv_pixels(list_8_src,list_f_dst);
+        assert(fabs(list_f_dst[0].r-1.0) < k_eps);
+
+        list_f_dst.clear();
+        ilim_detail::conv_pixels(list_16_src,list_f_dst);
+        assert(fabs(list_f_dst[0].r-0.5) < k_eps);
+
+        list_f_dst.clear();
+        ilim_detail::conv_pixels(list_32_src,list_f_dst);
+        assert(fabs(list_f_dst[0].r-0.333) < k_eps);
+    }
+
+    std::cout << "test_channel_int_to_float... [ok]" << std::endl;
+}
+
+void test_channel_float_to_int()
+{
+    // red
+    {
+        std::vector<R32F> list_f_src = {{0.0},{0.25},{0.33},{0.66},{0.75},{1.0}};
+
+        decltype(R32F::r) max_8;
+        max_8 = std::numeric_limits<decltype(R8::r)>::max();
+
+        decltype(R32F::r) max_16;
+        max_16 = std::numeric_limits<decltype(R16::r)>::max();
+
+        decltype(R32F::r) max_32;
+        max_32 = std::numeric_limits<decltype(R32::r)>::max();
+
+        std::vector<R8> list_8_dst;
+        ilim_detail::conv_pixels(list_f_src,list_8_dst);
+        assert(list_8_dst[0].r == static_cast<decltype(R8::r)>(list_f_src[0].r * max_8) &&
+               list_8_dst[1].r == static_cast<decltype(R8::r)>(list_f_src[1].r * max_8) &&
+               list_8_dst[2].r == static_cast<decltype(R8::r)>(list_f_src[2].r * max_8) &&
+               list_8_dst[3].r == static_cast<decltype(R8::r)>(list_f_src[3].r * max_8) &&
+               list_8_dst[4].r == static_cast<decltype(R8::r)>(list_f_src[4].r * max_8) &&
+               list_8_dst[5].r == static_cast<decltype(R8::r)>(list_f_src[5].r * max_8));
+
+        std::vector<R16> list_16_dst;
+        ilim_detail::conv_pixels(list_f_src,list_16_dst);
+        assert(list_16_dst[0].r == static_cast<decltype(R16::r)>(list_f_src[0].r * max_16) &&
+               list_16_dst[1].r == static_cast<decltype(R16::r)>(list_f_src[1].r * max_16) &&
+               list_16_dst[2].r == static_cast<decltype(R16::r)>(list_f_src[2].r * max_16) &&
+               list_16_dst[3].r == static_cast<decltype(R16::r)>(list_f_src[3].r * max_16) &&
+               list_16_dst[4].r == static_cast<decltype(R16::r)>(list_f_src[4].r * max_16) &&
+               list_16_dst[5].r == static_cast<decltype(R16::r)>(list_f_src[5].r * max_16));
+
+        std::vector<R32> list_32_dst;
+        ilim_detail::conv_pixels(list_f_src,list_32_dst);
+        assert(list_32_dst[0].r == static_cast<decltype(R32::r)>(list_f_src[0].r * max_32) &&
+               list_32_dst[1].r == static_cast<decltype(R32::r)>(list_f_src[1].r * max_32) &&
+               list_32_dst[2].r == static_cast<decltype(R32::r)>(list_f_src[2].r * max_32) &&
+               list_32_dst[3].r == static_cast<decltype(R32::r)>(list_f_src[3].r * max_32) &&
+               list_32_dst[4].r == static_cast<decltype(R32::r)>(list_f_src[4].r * max_32) &&
+               list_32_dst[5].r == static_cast<decltype(R32::r)>(list_f_src[5].r * max_32));
+    }
+
+    std::cout << "test_channel_float_to_int... [ok]" << std::endl;
+}
+
+void test_channel_float_to_float()
+{
+    static const double k_eps = 1E-5;
+
+    // red
+    {
+        std::vector<R64F> list_f32_src = {{0.0},{0.25},{0.33},{0.66},{0.75},{1.0}};
+        std::vector<R32F> list_f32_dst;
+        ilim_detail::conv_pixels(list_f32_src,list_f32_dst);
+
+        assert((fabs(list_f32_dst[0].r-list_f32_src[0].r) < k_eps) &&
+               (fabs(list_f32_dst[1].r-list_f32_src[1].r) < k_eps) &&
+               (fabs(list_f32_dst[2].r-list_f32_src[2].r) < k_eps) &&
+               (fabs(list_f32_dst[3].r-list_f32_src[3].r) < k_eps) &&
+               (fabs(list_f32_dst[4].r-list_f32_src[4].r) < k_eps) &&
+               (fabs(list_f32_dst[5].r-list_f32_src[5].r) < k_eps));
+
+        std::cout << "test_channel_float_to_float... [ok]" << std::endl;
+    }
 }
 
 void test_channel_same_bitdepth()
@@ -537,8 +733,12 @@ void test_channel_upsample()
 
 int main()
 {
+    test_channel_assign_mode();
     test_channel_noop();
     test_channel_sub();
+    test_channel_int_to_float();
+    test_channel_float_to_int();
+    test_channel_float_to_float();
     test_channel_same_bitdepth();
     test_channel_downsample();
     test_channel_upsample();

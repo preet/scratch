@@ -274,6 +274,9 @@ namespace ilim
         enum class assign_mode {
             no_op,
             sub,
+            int_to_float,
+            float_to_int,
+            float_to_float,
             upscale,
             downscale
         };
@@ -303,6 +306,32 @@ namespace ilim
         };
 
         template<>
+        struct channel_r<assign_mode::int_to_float> {
+            template <typename PixelSrc, typename PixelDst>
+            static void assign(PixelSrc const &src, PixelDst &dst) {
+                constexpr decltype(PixelDst::r) max = ct_ui_pow(2,pixel_traits<PixelSrc>::bits_r)-1;
+                dst.r = src.r/max;
+            }
+        };
+
+        template<>
+        struct channel_r<assign_mode::float_to_int> {
+            template <typename PixelSrc, typename PixelDst>
+            static void assign(PixelSrc const &src, PixelDst &dst) {
+                constexpr auto max = ct_ui_pow(2,pixel_traits<PixelDst>::bits_r)-1;
+                dst.r = src.r*max;
+            }
+        };
+
+        template<>
+        struct channel_r<assign_mode::float_to_float> {
+            template <typename PixelSrc, typename PixelDst>
+            static void assign(PixelSrc const &src, PixelDst &dst) {
+                dst.r = src.r;
+            }
+        };
+
+        template<>
         struct channel_r<assign_mode::upscale> {
             template<typename PixelSrc, typename PixelDst>
             static void assign(PixelSrc const &src, PixelDst &dst) {
@@ -327,35 +356,15 @@ namespace ilim
             typedef pixel_traits<PixelSrc> src_traits;
             typedef pixel_traits<PixelDst> dst_traits;
 
-            // We determine which version of channel__::assign()
-            // is called through the use of a specific option value:
-            // noop == 0
-            // sub == 1
-            // upscale == 2
-            // downscale == 3
+            constexpr assign_mode mode = (
+                        (dst_traits::bits_r==0) ? assign_mode::no_op :
+                        (src_traits::bits_r==0) ? assign_mode::sub :
+                        (src_traits::is_int_type && !dst_traits::is_int_type) ? assign_mode::int_to_float :
+                        (!src_traits::is_int_type && dst_traits::is_int_type) ? assign_mode::float_to_int :
+                        (!src_traits::is_int_type && !dst_traits::is_int_type) ? assign_mode::float_to_float :
+                        (dst_traits::bits_r > src_traits::bits_r) ? assign_mode::upscale : assign_mode::downscale);
 
-            // All options are mutually exclusive
-
-
-
-
-            // src channel exists, dst channel does not
-            // NOTE/TODO: cant ever get here for 'r'
-            constexpr bool no_op = (dst_traits::bits_r == 0);
-
-            // src channel dne, dst channel exists
-            constexpr bool sub = (src_traits::bits_r == 0);
-
-            // upscale if the dst channel has
-            // more bits than the src channel
-            constexpr bool upscale = (dst_traits::bits_r > src_traits::bits_r);
-
-
-
-            constexpr assign_mode mode =
-                    no_op ? assign_mode::no_op :
-                            (sub ? assign_mode::sub :
-                                   (upscale ? assign_mode::upscale : assign_mode::downscale));
+//            std::cout << "mode: " << src_traits::is_int_type << ", " << dst_traits::is_int_type << std::endl;
 
             channel_r<mode>::assign(src,dst);
         }
@@ -381,6 +390,24 @@ namespace ilim
             template<typename PixelSrc, typename PixelDst>
             static void assign(PixelSrc const &, PixelDst &dst) {
                 dst.g = 0;
+            }
+        };
+
+        template<>
+        struct channel_g<assign_mode::int_to_float> {
+            template <typename PixelSrc, typename PixelDst>
+            static void assign(PixelSrc const &src, PixelDst &dst) {
+//                constexpr decltype(PixelDst::r) max = ct_ui_pow(2,pixel_traits<PixelSrc>::bits_r)-1;
+//                dst.r = src.r/max;
+            }
+        };
+
+        template<>
+        struct channel_g<assign_mode::float_to_int> {
+            template <typename PixelSrc, typename PixelDst>
+            static void assign(PixelSrc const &src, PixelDst &dst) {
+//                constexpr auto max = ct_ui_pow(2,pixel_traits<PixelDst>::bits_r)-1;
+//                dst.r = src.r*max;
             }
         };
 
@@ -446,6 +473,24 @@ namespace ilim
         };
 
         template<>
+        struct channel_b<assign_mode::int_to_float> {
+            template <typename PixelSrc, typename PixelDst>
+            static void assign(PixelSrc const &src, PixelDst &dst) {
+//                constexpr decltype(PixelDst::r) max = ct_ui_pow(2,pixel_traits<PixelSrc>::bits_r)-1;
+//                dst.r = src.r/max;
+            }
+        };
+
+        template<>
+        struct channel_b<assign_mode::float_to_int> {
+            template <typename PixelSrc, typename PixelDst>
+            static void assign(PixelSrc const &src, PixelDst &dst) {
+//                constexpr auto max = ct_ui_pow(2,pixel_traits<PixelDst>::bits_r)-1;
+//                dst.r = src.r*max;
+            }
+        };
+
+        template<>
         struct channel_b<assign_mode::upscale> {
             template<typename PixelSrc, typename PixelDst>
             static void assign(PixelSrc const &src, PixelDst &dst) {
@@ -507,6 +552,24 @@ namespace ilim
         };
 
         template<>
+        struct channel_a<assign_mode::int_to_float> {
+            template <typename PixelSrc, typename PixelDst>
+            static void assign(PixelSrc const &src, PixelDst &dst) {
+//                constexpr decltype(PixelDst::r) max = ct_ui_pow(2,pixel_traits<PixelSrc>::bits_r)-1;
+//                dst.r = src.r/max;
+            }
+        };
+
+        template<>
+        struct channel_a<assign_mode::float_to_int> {
+            template <typename PixelSrc, typename PixelDst>
+            static void assign(PixelSrc const &src, PixelDst &dst) {
+//                constexpr auto max = ct_ui_pow(2,pixel_traits<PixelDst>::bits_r)-1;
+//                dst.r = src.r*max;
+            }
+        };
+
+        template<>
         struct channel_a<assign_mode::upscale> {
             template<typename PixelSrc, typename PixelDst>
             static void assign(PixelSrc const &src, PixelDst &dst) {
@@ -549,25 +612,18 @@ namespace ilim
         void conv_pixels(std::vector<PixelSrc> const &list_src,
                          std::vector<PixelDst> &list_dst)
         {
-            typedef pixel_traits<PixelSrc> src_traits;
-            typedef pixel_traits<PixelDst> dst_traits;
-
             list_dst.clear();
             list_dst.reserve(list_src.size());
 
-            if(src_traits::is_int_type) {
-                if(dst_traits::is_int_type) {
-                    // int -> int
-                    for(auto const &src : list_src) {
-                        PixelDst dst;
-                        assign_r(src,dst);
-                        assign_g(src,dst);
-                        assign_b(src,dst);
-                        assign_a(src,dst);
+            // int -> int
+            for(auto const &src : list_src) {
+                PixelDst dst;
+                assign_r(src,dst);
+                assign_g(src,dst);
+                assign_b(src,dst);
+                assign_a(src,dst);
 
-                        list_dst.push_back(dst);
-                    }
-                }
+                list_dst.push_back(dst);
             }
         }
     } // detail
