@@ -25,6 +25,7 @@
 #include <cassert>
 #include <limits>
 #include <cmath>
+#include <chrono>
 
 // ilim
 #include <ilim.hpp>
@@ -729,6 +730,48 @@ void test_channel_upsample()
     }
 
     std::cout << "test_channel_upsample... [ok]" << std::endl;
+}
+
+void test_speed()
+{
+    std::chrono::time_point<std::chrono::system_clock> start,end;
+
+    std::vector<RGB8> list_src;
+    list_src.reserve(500*500);
+
+    for(size_t i=0; i < 500; i++) {
+        for(size_t j=0; j < 500; j++) {
+            uint8_t val = static_cast<uint8_t>(j);
+            list_src.emplace_back(RGB8{val,val,val});
+        }
+    }
+
+    // manual
+    auto const us_div = ilim_detail::ct_ui_pow(2,8)-1;
+    auto const us_mul = ilim_detail::ct_ui_pow(2,16)-1;
+
+    start = std::chrono::system_clock::now();
+    std::vector<RGBA16> list_dst;
+    list_dst.reserve(list_src.size());
+    for(auto const &src : list_src) {
+        RGBA16 dst;
+        dst.r = (us_mul/us_div)*src.r;
+        dst.g = (us_mul/us_div)*src.g;
+        dst.b = (us_mul/us_div)*src.b;
+        dst.a = 1;
+
+        list_dst.push_back(dst);
+    }
+    end = std::chrono::system_clock::now();
+    double elapsedms_manual = std::chrono::duration<double>(end-start).count()*1000.0;
+    std::cout << "manual conv took: " << elapsedms_manual << "ms" << std::endl;
+
+    start = std::chrono::system_clock::now();
+    ilim_detail::conv_pixels(list_src,list_dst);
+    end = std::chrono::system_clock::now();
+
+    double elapsedms_auto = std::chrono::duration<double>(end-start).count()*1000.0;
+    std::cout << "auto conv took: " << elapsedms_auto << "ms" << std::endl;
 }
 
 int main()
