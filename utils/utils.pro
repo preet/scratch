@@ -12,8 +12,8 @@ CONFIG      -= qt
 
 INCLUDEPATH += $${PWD}
 
-#HEADERS += lodepng/lodepng.h
-#SOURCES += lodepng/lodepng.cpp inlineimage.cpp
+HEADERS += lodepng/lodepng.h
+SOURCES += lodepng/lodepng.cpp
 
 SOURCES += test_ilim.cpp
 

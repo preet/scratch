@@ -14,6 +14,9 @@
    limitations under the License.
 */
 
+#ifndef SCRATCH_INLINE_IMAGE_H
+#define SCRATCH_INLINE_IMAGE_H
+
 // sys
 #include <cstdint>
 
@@ -669,6 +672,44 @@ namespace ilim
                 list_dst.push_back(dst);
             }
         }
+
+        template <typename Pixel>
+        uint8_t is_single_bitdepth_int_type()
+        {
+            if(ilim_detail::pixel_traits<Pixel>::is_int_type &&
+               ilim_detail::pixel_traits<Pixel>::single_bitdepth)
+            {
+                uint8_t const bitdepth = std::max({
+                                ilim_detail::pixel_traits<Pixel>::bits_r,
+                                ilim_detail::pixel_traits<Pixel>::bits_g,
+                                ilim_detail::pixel_traits<Pixel>::bits_b,
+                                ilim_detail::pixel_traits<Pixel>::bits_a
+                            });
+                return bitdepth;
+            }
+
+            return 0;
+        }
+
+        // ref: http://stackoverflow.com/questions/105252/...
+        // ...how-do-i-convert-between-big-endian-and-little-endian-values-in-c/105297#105297
+        template <typename T>
+        T swap_endian(T u)
+        {
+            union
+            {
+                T u;
+                unsigned char u8[sizeof(T)];
+            } source, dest;
+
+            source.u = u;
+
+            for (size_t k = 0; k < sizeof(T); k++)
+                dest.u8[k] = source.u8[sizeof(T) - k - 1];
+
+            return dest.u;
+        }
+
     } // detail
 
     // ============================================================= //
@@ -680,8 +721,8 @@ namespace ilim
         typedef typename std::vector<Pixel>::iterator PixelIterator;
 
     private:
-        uint32_t const m_width;
-        uint32_t const m_height;
+        uint32_t m_width;
+        uint32_t m_height;
         std::vector<Pixel> m_data;
 
 
@@ -696,32 +737,31 @@ namespace ilim
         }
 
     public:
-        // initialize empty image
-        Image(uint32_t width,
-              uint32_t height) :
-            m_width(width),
-            m_height(height),
-            m_data(width*height)
+        // initialize null image
+        Image() :
+            m_width(0),
+            m_height(0)
         {
 
         }
 
-        Image(uint32_t width,
-              uint32_t height,
-              Pixel init_value) :
-            m_width(width),
-            m_height(height),
-            m_data(width*height,init_value)
+        // set; rename assign?
+        void set(uint32_t width,
+                 uint32_t height,
+                 std::vector<Pixel> && data)
         {
-
+            m_width = width;
+            m_height = height;
+            m_data = std::move(data);
         }
 
-        Image(Image const &image_copy) :
-            m_width(image_copy.width),
-            m_height(image_copy.height),
-            m_data(image_copy.data)
+        void set(uint32_t width,
+                 uint32_t height,
+                 std::vector<Pixel> const &data)
         {
-
+            m_width = width;
+            m_height = height;
+            m_data = data;
         }
 
         uint32_t width() const
@@ -758,9 +798,14 @@ namespace ilim
             return it_last;
         }
 
-        Pixel const * data()
+//        Pixel const * data()
+//        {
+//            return &(m_data[0]);
+//        }
+
+        std::vector<Pixel> & data()
         {
-            return &(m_data[0]);
+            return m_data;
         }
 
         //
@@ -818,3 +863,5 @@ namespace ilim
     };
 
 } // ilim
+
+#endif // SCRATCH_INLINE_IMAGE_H

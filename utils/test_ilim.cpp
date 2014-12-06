@@ -29,6 +29,7 @@
 
 // ilim
 #include <ilim.hpp>
+#include <ilim_png.hpp>
 
 namespace ilim
 {
@@ -774,17 +775,87 @@ void test_speed()
     std::cout << "auto conv took: " << elapsedms_auto << "ms" << std::endl;
 }
 
+void test_png_format()
+{
+    std::string const path = "/home/preet/Dev/scratch/utils/test_images/";
+
+    uint8_t bit_depth=0;
+    PNGColorType color_type=PNGColorType::RGBA;
+
+    assert(load_png_format(path+"1bitpaletted.png",color_type,bit_depth) &&
+           bit_depth==1 &&
+           color_type==PNGColorType::PALETTE);
+
+    assert(load_png_format(path+"2bitgrayscale.png",color_type,bit_depth) &&
+           bit_depth==2 &&
+           color_type==PNGColorType::GREY);
+
+    assert(load_png_format(path+"2bitpaletted.png",color_type,bit_depth) &&
+           bit_depth==2 &&
+           color_type==PNGColorType::PALETTE);
+
+    assert(load_png_format(path+"4bitgrayscale.png",color_type,bit_depth) &&
+           bit_depth==4 &&
+           color_type==PNGColorType::GREY);
+
+    assert(load_png_format(path+"4bitpaletted.png",color_type,bit_depth) &&
+           bit_depth==4 &&
+           color_type==PNGColorType::PALETTE);
+
+    assert(load_png_format(path+"8bitgrayscale.png",color_type,bit_depth) &&
+           bit_depth==8 &&
+           color_type==PNGColorType::GREY);
+
+    assert(load_png_format(path+"8bitgrayscale_8bitalpha.png",color_type,bit_depth) &&
+           bit_depth==8 &&
+           color_type==PNGColorType::GREY_ALPHA);
+
+    assert(load_png_format(path+"8bitpaletted.png",color_type,bit_depth) &&
+           bit_depth==8 &&
+           color_type==PNGColorType::PALETTE);
+
+    assert(load_png_format(path+"8bitrgb.png",color_type,bit_depth) &&
+           bit_depth==8 &&
+           color_type==PNGColorType::RGB);
+
+    assert(load_png_format(path+"8bitrgba.png",color_type,bit_depth) &&
+           bit_depth==8 &&
+           color_type==PNGColorType::RGBA);
+
+    assert(load_png_format(path+"16bitgrayscale.png",color_type,bit_depth) &&
+           bit_depth==16 &&
+           color_type==PNGColorType::GREY);
+
+    assert(load_png_format(path+"16bitgrayscale_16bitalpha.png",color_type,bit_depth) &&
+           bit_depth==16 &&
+           color_type==PNGColorType::GREY_ALPHA);
+
+    assert(load_png_format(path+"16bitrgb.png",color_type,bit_depth) &&
+           bit_depth==16 &&
+           color_type==PNGColorType::RGB);
+
+    assert(load_png_format(path+"16bitrgba.png",color_type,bit_depth) &&
+           bit_depth==16 &&
+           color_type==PNGColorType::RGBA);
+
+    std::cout << "test_png_format... [ok]" << std::endl;
+}
+
 int main()
 {
-    test_channel_assign_mode();
-    test_channel_noop();
-    test_channel_sub();
-    test_channel_int_to_float();
-    test_channel_float_to_int();
-    test_channel_float_to_float();
-    test_channel_same_bitdepth();
-    test_channel_downsample();
-    test_channel_upsample();
+//    test_channel_assign_mode();
+//    test_channel_noop();
+//    test_channel_sub();
+//    test_channel_int_to_float();
+//    test_channel_float_to_int();
+//    test_channel_float_to_float();
+//    test_channel_same_bitdepth();
+//    test_channel_downsample();
+//    test_channel_upsample();
+
+    test_png_format();
+
+    Image<R8> image;
 
     return 0;
 }
