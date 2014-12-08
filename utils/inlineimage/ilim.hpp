@@ -673,24 +673,6 @@ namespace ilim
             }
         }
 
-        template <typename Pixel>
-        uint8_t is_single_bitdepth_int_type()
-        {
-            if(ilim_detail::pixel_traits<Pixel>::is_int_type &&
-               ilim_detail::pixel_traits<Pixel>::single_bitdepth)
-            {
-                uint8_t const bitdepth = std::max({
-                                ilim_detail::pixel_traits<Pixel>::bits_r,
-                                ilim_detail::pixel_traits<Pixel>::bits_g,
-                                ilim_detail::pixel_traits<Pixel>::bits_b,
-                                ilim_detail::pixel_traits<Pixel>::bits_a
-                            });
-                return bitdepth;
-            }
-
-            return 0;
-        }
-
         // ref: http://stackoverflow.com/questions/105252/...
         // ...how-do-i-convert-between-big-endian-and-little-endian-values-in-c/105297#105297
         template <typename T>
