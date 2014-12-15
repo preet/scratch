@@ -26,7 +26,8 @@
 static void myImageCleanupHandler(void * info)
 {
     //qDebug() << "image cleanup";
-    uint8_t * data = static_cast<uint8_t*>(info);
+    std::vector<uint8_t> * data =
+            static_cast<std::vector<uint8_t>*>(info);
     delete data;
 }
 
@@ -67,6 +68,10 @@ QImage ImageProvider::requestImage(QString const &id,
         ilim::Image<ilim::R8> ilim_image;
         ilim::load_png((path+image_file).toStdString(),ilim_image,&format_match);
 
+        // test conv_to_image_data and set(ImageData &)
+        ilim::ImageData image_data = ilim_image.conv_to_image_data();
+        ilim_image.set(image_data);
+
         assert(ilim_image.data().size() == 32*32);
         for(size_t i=0; i < ilim_image.data().size(); i++) {
             ilim::RGBA8 pixel = { ilim_image.data()[i].r,0,0,255 };
@@ -80,6 +85,10 @@ QImage ImageProvider::requestImage(QString const &id,
         ilim::Image<ilim::RGB8> ilim_image;
         ilim::load_png((path+image_file).toStdString(),ilim_image,&format_match);
 
+        // test conv_to_image_data and set(ImageData &)
+        ilim::ImageData image_data = ilim_image.conv_to_image_data();
+        ilim_image.set(image_data);
+
         assert(ilim_image.data().size() == 32*32);
         for(size_t i=0; i < ilim_image.data().size(); i++) {
             qimage_data->push_back(ilim_image.data()[i].r);
@@ -91,6 +100,10 @@ QImage ImageProvider::requestImage(QString const &id,
     else if(pixel_type == "rgba8") {
         ilim::Image<ilim::RGBA8> ilim_image;
         ilim::load_png((path+image_file).toStdString(),ilim_image,&format_match);
+
+        // test conv_to_image_data and set(ImageData &)
+        ilim::ImageData image_data = ilim_image.conv_to_image_data();
+        ilim_image.set(image_data);
 
         assert(ilim_image.data().size() == 32*32);
         for(size_t i=0; i < ilim_image.data().size(); i++) {

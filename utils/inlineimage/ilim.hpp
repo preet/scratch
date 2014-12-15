@@ -695,6 +695,43 @@ namespace ilim
     } // detail
 
     // ============================================================= //
+    // ============================================================= //
+
+    //
+    struct PixelTraits
+    {
+        uint8_t channel_count;
+
+        bool is_int_type;
+        bool single_bitdepth;
+
+        uint8_t bits_r;
+        uint8_t bits_g;
+        uint8_t bits_b;
+        uint8_t bits_a;
+    };
+
+    // type erasure convenience struct
+    struct ImageData
+    {
+        ImageData() :
+            data(nullptr,[](void*){}) // can't initialize unique_ptr<void> w/o deleter
+        {
+            // empty
+        }
+
+        uint32_t width;
+        uint32_t height;
+        PixelTraits pixel_traits;
+
+        // <Image.data, Image.data.deleter>
+        std::unique_ptr<void,void(*)(void*)> data;
+
+        void const * data_ptr;
+    };
+
+    // ============================================================= //
+    // ============================================================= //
 
     template<typename Pixel>
     class Image
@@ -705,26 +742,55 @@ namespace ilim
     private:
         uint32_t m_width;
         uint32_t m_height;
-        std::vector<Pixel> m_data;
+        std::unique_ptr<std::vector<Pixel>> m_data;
 
 
         uint32_t col(PixelIterator it)
         {
-            return std::distance(m_data.begin(),it)%m_width;
+            return std::distance((*m_data).begin(),it)%m_width;
         }
 
         uint32_t row(PixelIterator it)
         {
-            return std::distance(m_data.begin(),it)/m_width;
+            return std::distance((*m_data).begin(),it)/m_width;
         }
 
     public:
         // initialize null image
         Image() :
             m_width(0),
-            m_height(0)
+            m_height(0),
+            m_data(new std::vector<Pixel>)
         {
+            // empty
+        }
 
+        ImageData conv_to_image_data() // leaves this Image in an invalid state
+        {
+            ImageData im_data;
+            im_data.width = m_width;
+            im_data.height = m_height;
+            im_data.data.reset(m_data.release());
+            im_data.data.get_deleter() = [](void * data) {
+                std::vector<Pixel> * p = static_cast<std::vector<Pixel>*>(data);
+                delete p;
+            };
+
+            std::vector<Pixel> * p =
+                    static_cast<std::vector<Pixel>*>(
+                        im_data.data.get());
+
+            im_data.data_ptr = &((*p)[0]);
+
+            return std::move(im_data);
+        }
+
+        void set(ImageData & image_data)
+        {
+            m_width  = image_data.width;
+            m_height = image_data.height;
+            m_data.reset(static_cast<std::vector<Pixel>*>(
+                             image_data.data.release()));
         }
 
         // set; rename assign?
@@ -734,7 +800,7 @@ namespace ilim
         {
             m_width = width;
             m_height = height;
-            m_data = std::move(data);
+            (*m_data) = std::move(data);
         }
 
         void set(uint32_t width,
@@ -743,7 +809,7 @@ namespace ilim
         {
             m_width = width;
             m_height = height;
-            m_data = data;
+            (*m_data) = data;
         }
 
         uint32_t width() const
@@ -756,38 +822,47 @@ namespace ilim
             return m_height;
         }
 
+        PixelTraits pixel_traits() const
+        {
+            PixelTraits traits;
+            traits.channel_count = ilim_detail::pixel_traits<Pixel>::channel_count;
+            traits.is_int_type = ilim_detail::pixel_traits<Pixel>::is_int_type;
+            traits.single_bitdepth = ilim_detail::pixel_traits<Pixel>::single_bitdepth;
+            traits.bits_r = ilim_detail::pixel_traits<Pixel>::bits_r;
+            traits.bits_g = ilim_detail::pixel_traits<Pixel>::bits_g;
+            traits.bits_b = ilim_detail::pixel_traits<Pixel>::bits_b;
+            traits.bits_a = ilim_detail::pixel_traits<Pixel>::bits_a;
+
+            return traits;
+        }
+
         PixelIterator at(uint32_t col, uint32_t row)
         {
-            auto it = m_data.begin();
+            auto it = (*m_data).begin();
             std::advance(it,(row*m_width)+col);
             return it;
         }
 
         PixelIterator end()
         {
-            return m_data.end();
+            return (*m_data).end();
         }
 
         PixelIterator begin()
         {
-            return m_data.begin();
+            return (*m_data).begin();
         }
 
         PixelIterator last()
         {
-            auto it_last = m_data.end();
+            auto it_last = (*m_data).end();
             std::advance(it_last,-1);
             return it_last;
         }
 
-//        Pixel const * data()
-//        {
-//            return &(m_data[0]);
-//        }
-
         std::vector<Pixel> & data()
         {
-            return m_data;
+            return (*m_data);
         }
 
         //
@@ -829,20 +904,11 @@ namespace ilim
                 std::advance(target_it,target.width());
             }
         }
-
-        void print()
-        {
-//            uint32_t pixel_index=0;
-//            for(auto &pixel : m_data) {
-//                PrintPixel(pixel);
-//                pixel_index++;
-//                if(pixel_index%m_width==0) {
-//                    std::cout << std::endl;
-//                }
-//            }
-        }
-
     };
+
+
+    // ============================================================= //
+    // ============================================================= //
 
 } // ilim
 
