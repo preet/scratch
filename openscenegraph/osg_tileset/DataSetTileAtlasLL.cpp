@@ -64,7 +64,7 @@ namespace scratch
 
         // TileSet
         TileSetLL::Options options;
-        options.max_tile_data = 512;
+        options.max_tile_data = 64;
         m_tileset.reset(new TileSetLL(std::move(tile_data_source),
                                       std::move(tile_visibility),
                                       options));
@@ -96,51 +96,118 @@ namespace scratch
 
         // remove
         for(auto const tile_id : list_tiles_rem) {
-            // remove from scene and lookup
-            auto it = m_lkup_sg_tiles.find(tile_id);
-            assert(it != m_lkup_sg_tiles.end());
-
-            m_gp_tiles->removeChild(it->second.gp);
-            m_lkup_sg_tiles.erase(tile_id);
+            // find the sg data
+            auto sg_it = m_lkup_sg_tiles.find(tile_id);
+            SGData &sg_data = sg_it->second;
 
             // remove from texture atlas
-            assert(m_tile_atlas->remove(tile_id));
+            assert(m_tile_atlas->remove(sg_data.sample_id));
+
+            // remove from scene and lookup
+            m_gp_tiles->removeChild(sg_data.gp.get());
+            m_lkup_sg_tiles.erase(tile_id);
         }
 
         // add
-        for(auto const tile_id : list_tiles_add) {
-            // get tile image
+        for(auto const tile_id : list_tiles_add)
+        {
             TileSetLL::TileItem const * item =
                     m_tileset->GetTile(tile_id);
-            assert(item);
 
             TileImageSourceLL::ImageData const * data =
                     static_cast<TileImageSourceLL::ImageData const*>(
                         item->data);
 
-            // add tile to atlas
-            assert(m_tile_atlas->add(tile_id,data->image.get()));
-
-            // get texture data from atlas
             osg::Texture2D * atlas_texture;
             osg::Vec4 atlas_region;
-            assert(m_tile_atlas->get(tile_id,atlas_texture,atlas_region));
+
+            m_tile_atlas->add(item->sample->id,
+                              data->image,
+                              atlas_texture,
+                              atlas_region);
+
+            if(item->sample != item->tile) {
+                // Adjust region against sampled tile
+                osg::Vec4 sample_region;
+                TileSetLL::GenerateSampleTexCoords(item->sample,
+                                                   item->tile,
+                                                   sample_region);
+
+                sample_region.x() = sample_region.x()*atlas_region.z() + atlas_region.x(); // s_start
+                sample_region.y() = sample_region.y()*atlas_region.w() + atlas_region.y(); // t_start
+                sample_region.z() *= atlas_region.z(); // s_delta
+                sample_region.w() *= atlas_region.w(); // t_delta
+
+                atlas_region = sample_region;
+            }
 
             // create geometry and apply texture
             SGData sg_data;
             sg_data.gp = createTileGm(item);
-            applyAtlasTx(sg_data.gp.get(),atlas_texture,atlas_region);
+            if(item->sample) {
+                sg_data.sample_id = item->sample->id;
+            }
+            applyAtlasTx(sg_data.gp.get(),
+                         atlas_texture,
+                         atlas_region);
 
             // save in scene and lookup
             m_lkup_sg_tiles.emplace(item->id,sg_data);
             m_gp_tiles->addChild(sg_data.gp);
         }
 
-        // print
-//        m_tile_atlas->print();
+        // update
+        for(auto tile_id : list_tiles_upd)
+        {
+            TileSetLL::TileItem const * item =
+                    m_tileset->GetTile(tile_id);
+
+            // find the sg data
+            auto sg_it = m_lkup_sg_tiles.find(tile_id);
+            SGData &sg_data = sg_it->second;
+
+            //
+            if(sg_data.sample_id != item->sample->id)
+            {
+                TileImageSourceLL::ImageData const * data =
+                        static_cast<TileImageSourceLL::ImageData const*>(
+                            item->data);
+
+                osg::Texture2D * atlas_texture;
+                osg::Vec4 atlas_region;
+
+                m_tile_atlas->remove(sg_data.sample_id);
+                m_tile_atlas->add(item->sample->id,
+                                  data->image,
+                                  atlas_texture,
+                                  atlas_region);
+
+                sg_data.sample_id = item->sample->id;
+
+                // Adjust region against sampled tile
+                osg::Vec4 sample_region;
+                TileSetLL::GenerateSampleTexCoords(item->sample,
+                                                   item->tile,
+                                                   sample_region);
+
+                sample_region.x() = sample_region.x()*atlas_region.z() + atlas_region.x(); // s_start
+                sample_region.y() = sample_region.y()*atlas_region.w() + atlas_region.y(); // t_start
+                sample_region.z() *= atlas_region.z(); // s_delta
+                sample_region.w() *= atlas_region.w(); // t_delta
+
+                atlas_region = sample_region;
+
+                // apply texture changes
+                applyAtlasTx(sg_data.gp.get(),
+                             atlas_texture,
+                             atlas_region);
+            }
+        }
     }
 
-//    void DataSetTilesLL::UpdateOld(osg::Camera const *cam)
+
+
+//    void DataSetTilesLL::Update(osg::Camera const *cam)
 //    {
 //        std::vector<TileLL::Id> list_tiles_add;
 //        std::vector<TileLL::Id> list_tiles_upd;
@@ -150,22 +217,6 @@ namespace scratch
 //                                 list_tiles_upd,
 //                                 list_tiles_rem);
 
-//        for(auto const tile_id : list_tiles_rem) {
-//            assert(m_tile_atlas->remove(tile_id));
-////            m_tile_atlas->Stats();
-//        }
-
-//        for(auto const tile_id : list_tiles_add) {
-////            assert(m_tile_atlas->add(tile_id));
-////            m_tile_atlas->Stats();
-//            assert(m_tile_atlas->add(tile_id,nullptr));
-
-//            osg::Texture2D * atlas_texture;
-//            osg::Vec4 atlas_region;
-//            assert(m_tile_atlas->get(tile_id,atlas_texture,atlas_region));
-//        }
-
-////        m_tile_atlas->print();
 
 //        // remove
 //        for(auto const tile_id : list_tiles_rem) {

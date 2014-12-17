@@ -30,7 +30,9 @@ namespace scratch
                       osg::Vec4 region) :
                     col(col),
                     row(row),
-                    region(region)
+                    region(region),
+                    id(0),
+                    refs(0)
                 {}
 
                 uint const col;
@@ -38,6 +40,7 @@ namespace scratch
                 osg::Vec4 const region;
 
                 u64 id;
+                uint refs;
             };
 
             Atlas(uint cols, uint rows, uint width, uint height)
@@ -102,7 +105,9 @@ namespace scratch
 
         void print()
         {
-            std::cout << "atlas_count: " << m_list_atlases.size() << std::endl;
+            std::cout << "atlas_count: " << m_list_atlases.size()
+                      << ", tile_count; " << m_tile_count
+                      << std::endl;
             for(auto const &id_space : m_lkup_id_space) {
                 u64 id = id_space.first;
                 atlas_iterator atlas_it = id_space.second.first;
@@ -112,84 +117,69 @@ namespace scratch
                 std::cout << "id: " << id
                           << ", atlas_ptr: " << &(*atlas_it)
                           << ", space_idx: " << space_idx
-                          << ", space: {" << space.col << "," << space.row << "," << space.id << "}"
+                          << ", space: {" << space.col << "," << space.row << "," << space.id << "," << space.refs <<  "}"
                           << ", avail sz: " << atlas_it->list_avail.size()
                           << std::endl;
             }
         }
 
-        bool add(u64 id, osg::Image * tile_image)
-        {
-            // create another atlas if required
-            atlas_iterator atlas_it;
-            bool space_avail=false;
-            for(atlas_it  = m_list_atlases.begin();
-                atlas_it != m_list_atlases.end(); ++atlas_it)
-            {
-                if(!(atlas_it->list_avail.empty())) {
-                    space_avail = true;
-                    break;
-                }
-            }
-
-            if(!space_avail) {
-                m_list_atlases.emplace_back(
-                            m_atlas_cols,
-                            m_atlas_rows,
-                            m_atlas_width_px,
-                            m_atlas_height_px);
-                atlas_it = m_list_atlases.end();
-                std::advance(atlas_it,-1); // last
-                std::cout << "atlas_count: " << m_list_atlases.size() << std::endl;
-            }
-
-
-            // get space
-            uint space_idx = atlas_it->list_avail.back();
-            Atlas::Space &space = atlas_it->list_spaces[space_idx];
-            atlas_it->list_avail.pop_back();
-
-
-            // save data
-            space.id = id;
-
-            // update texture
-            if(tile_image != nullptr) {              
-                uint s = space.col*m_tile_width_px;
-                uint t = space.row*m_tile_height_px;
-                uint r = 0;
-
-//                std::cout << "id: " << id
-//                          << ", s: " << s
-//                          << ", t: " << t
-//                          << ", r: " << r << std::endl;
-
-                atlas_it->image->copySubImage(s,t,r,tile_image);
-                atlas_it->image->dirty();
-            }
-
-            // save lookup
-//            std::cout << "// before: " << std::endl; print();
-            std::pair<u64,std::pair<atlas_iterator,uint>> lkup;
-            lkup.first = id;
-            lkup.second.first = atlas_it;
-            lkup.second.second = space_idx;
-            m_lkup_id_space.insert(lkup);
-//            std::cout << "// after: " << std::endl; print();
-
-            m_tile_count++;
-
-            return true;
-        }
-
-        bool get(u64 id,
+        // add or get
+        void add(u64 id,
+                 osg::Image const * tile_image,
                  osg::Texture2D * &atlas_texture,
                  osg::Vec4 &atlas_region)
         {
             // lookup id
             auto lkup_it = m_lkup_id_space.find(id);
             if(lkup_it == m_lkup_id_space.end()) {
-                return false;
+                // create another atlas if required
+                atlas_iterator atlas_it;
+                bool space_avail=false;
+                for(atlas_it  = m_list_atlases.begin();
+                    atlas_it != m_list_atlases.end(); ++atlas_it)
+                {
+                    if(!(atlas_it->list_avail.empty())) {
+                        space_avail = true;
+                        break;
+                    }
+                }
+
+                if(!space_avail) {
+                    m_list_atlases.emplace_back(
+                                m_atlas_cols,
+                                m_atlas_rows,
+                                m_atlas_width_px,
+                                m_atlas_height_px);
+                    atlas_it = m_list_atlases.end();
+                    std::advance(atlas_it,-1); // last
+                    std::cout << "atlas_count: " << m_list_atlases.size() << std::endl;
+                }
+
+                // get space
+                uint space_idx = atlas_it->list_avail.back();
+                Atlas::Space &space = atlas_it->list_spaces[space_idx];
+                atlas_it->list_avail.pop_back();
+
+                // save data
+                space.id = id;
+
+                // update texture
+                if(tile_image != nullptr) {
+                    uint s = space.col*m_tile_width_px;
+                    uint t = space.row*m_tile_height_px;
+                    uint r = 0;
+
+                    atlas_it->image->copySubImage(s,t,r,tile_image);
+                    atlas_it->image->dirty();
+                }
+
+                // save lookup
+                std::pair<u64,std::pair<atlas_iterator,uint>> lkup;
+                lkup.first = id;
+                lkup.second.first = atlas_it;
+                lkup.second.second = space_idx;
+                lkup_it = m_lkup_id_space.insert(lkup).first;
+                m_tile_count++;
             }
 
             // get data
@@ -200,7 +190,8 @@ namespace scratch
             atlas_texture = atlas_it->texture.get();
             atlas_region = space.region;
 
-            return true;
+            // increase ref count
+            space.refs++;
         }
 
         bool remove(u64 id)
@@ -216,36 +207,35 @@ namespace scratch
             uint space_idx = lkup_it->second.second;
             Atlas::Space &space = atlas_it->list_spaces[space_idx];
 
-            // update texture
-            atlas_it->image->copySubImage(
-                        space.col*m_tile_width_px,
-                        space.row*m_tile_height_px,0,
-                        m_noise_tile.get());
-            atlas_it->image->dirty();
+            // decrease ref count
+            space.refs--;
 
-            // clear space data
-            space.id = 0; // etc
+            if(space.refs == 0) {
+                // make this space available again
 
-            // indicate space is available
-//            std::cout << "// before R: " << id << std::endl; print();
-            atlas_it->list_avail.push_back(lkup_it->second.second);
+                // DEBUG update texture
+                atlas_it->image->copySubImage(
+                            space.col*m_tile_width_px,
+                            space.row*m_tile_height_px,0,
+                            m_noise_tile.get());
+                atlas_it->image->dirty();
 
-            // remove lookup
-            m_lkup_id_space.erase(lkup_it);
-//            std::cout << "// after: " << std::endl; print();
+                space.id = 0;
+                atlas_it->list_avail.push_back(lkup_it->second.second);
 
-            // remove atlas if its empty
-            if(atlas_it->list_avail.size() == atlas_it->list_spaces.size()) {
-                m_list_atlases.erase(atlas_it);
-                std::cout << "atlas_count: " << m_list_atlases.size() << std::endl;
+                // remove lookup
+                m_lkup_id_space.erase(lkup_it);
+
+                // remove atlas if its empty
+                if(atlas_it->list_avail.size() == atlas_it->list_spaces.size()) {
+                    m_list_atlases.erase(atlas_it);
+                    std::cout << "atlas_count: " << m_list_atlases.size() << std::endl;
+                }
+
+                m_tile_count--;
             }
-
-            m_tile_count--;
-
             return true;
         }
-
-
 
         uint m_tile_count;
 

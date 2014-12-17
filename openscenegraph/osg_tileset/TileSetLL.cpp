@@ -151,11 +151,11 @@ namespace scratch
         m_tile_visibility->Update(cam);
 
         // Build tile set
-        std::vector<TileItem> list_tiles_new =
-                buildTileSetBFS_czm();
-
 //        std::vector<TileItem> list_tiles_new =
-//                buildTileSetRanked();
+//                buildTileSetBFS_czm();
+
+        std::vector<TileItem> list_tiles_new =
+                buildTileSetRanked();
 
         // We need to sort by tile_id before we can
         // split into tiles added/removed
@@ -340,6 +340,7 @@ namespace scratch
                 if(save_this_tile) {                   
                     list_tile_items.emplace_back(
                                 meta->tile->id,
+                                meta->tile,
                                 meta->tile,
                                 meta->request->GetData().get());
 
@@ -733,6 +734,7 @@ namespace scratch
             if(meta->tile->clip == TileLL::k_clip_NONE) {
                 list_tile_items.emplace_back(
                             meta->tile->id,
+                            meta->tile,
                             meta->tile,
                             meta->request->GetData().get());
             }

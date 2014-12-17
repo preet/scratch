@@ -33,14 +33,6 @@ namespace scratch
         {
             TileItem(TileLL::Id id,
                      TileLL const * tile,
-                     TileDataSourceLL::Data const * data) :
-                id(id),tile(tile),sample(nullptr),data(data)
-            {
-                // empty
-            }
-
-            TileItem(TileLL::Id id,
-                     TileLL const * tile,
                      TileLL const * sample,
                      TileDataSourceLL::Data const * data) :
                 id(id),tile(tile),sample(sample),data(data)
@@ -146,6 +138,26 @@ namespace scratch
 
             t_start = (to->bounds.minLat-from->bounds.minLat)/from_height;
             t_delta = (to->bounds.maxLat-to->bounds.minLat)/from_height;
+        }
+
+        static void GenerateSampleTexCoords(TileLL const * from,
+                                            TileLL const * to,
+                                            osg::Vec4 &region)
+        {
+            double const from_width = from->bounds.maxLon-from->bounds.minLon;
+            double const from_height= from->bounds.maxLat-from->bounds.minLat;
+
+            // s_start
+            region.x() = (to->bounds.minLon-from->bounds.minLon)/from_width;
+
+            // s_delta
+            region.z() = (to->bounds.maxLon-to->bounds.minLon)/from_width;
+
+            // t_start
+            region.y() = (to->bounds.minLat-from->bounds.minLat)/from_height;
+
+            // t_delta
+            region.w() = (to->bounds.maxLat-to->bounds.minLat)/from_height;
         }
 
     private:
