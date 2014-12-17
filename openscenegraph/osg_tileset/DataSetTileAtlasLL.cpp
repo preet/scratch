@@ -1,15 +1,30 @@
-#include <DataSetTilesLL.h>
 #include <TileImageSourceLL.h>
 #include <TileVisibilityLLPixelsPerMeter.h>
+#include <DataSetTileAtlasLL.h>
 
 #include <OSGUtils.h>
 #include <osg/Texture2D>
+
+#include <TileAtlas.hpp>
 
 namespace scratch
 {
     DataSetTilesLL::DataSetTilesLL(osg::Group * gp_tiles) :
         m_gp_tiles(gp_tiles)
     {
+        m_tile_atlas.reset(new TileAtlas(1024,1024,256,256));
+
+//        m_tile_atlas->add(281474976710656);
+//        m_tile_atlas->add(281474976710657);
+//        m_tile_atlas->add(281474993487872);
+//        m_tile_atlas->add(562949986975746);
+
+//        m_tile_atlas->add(562949986975747);
+//        m_tile_atlas->add(562950003752962);
+//        m_tile_atlas->add(562950003752963);
+
+
+
         // TileDataSource
 
         // Create the TileLL::Id -> Image file path
@@ -58,6 +73,10 @@ namespace scratch
         m_poly_mode = new osg::PolygonMode;
         m_poly_mode->setMode(osg::PolygonMode::FRONT_AND_BACK,
                              osg::PolygonMode::LINE);
+
+
+
+        m_tile_count = 0;
     }
 
     DataSetTilesLL::~DataSetTilesLL()
@@ -77,62 +96,170 @@ namespace scratch
 
         // remove
         for(auto const tile_id : list_tiles_rem) {
-            // Remove this tile from the scene and lookup
+            // remove from scene and lookup
             auto it = m_lkup_sg_tiles.find(tile_id);
             assert(it != m_lkup_sg_tiles.end());
 
             m_gp_tiles->removeChild(it->second.gp);
             m_lkup_sg_tiles.erase(tile_id);
+
+            // remove from texture atlas
+            assert(m_tile_atlas->remove(tile_id));
         }
 
         // add
-        for(auto tile_id : list_tiles_add) {
-            //
-            auto it = m_lkup_sg_tiles.find(tile_id);
-            assert(it == m_lkup_sg_tiles.end());
-
-            //
+        for(auto const tile_id : list_tiles_add) {
+            // get tile image
             TileSetLL::TileItem const * item =
                     m_tileset->GetTile(tile_id);
             assert(item);
 
-            //
+            TileImageSourceLL::ImageData const * data =
+                    static_cast<TileImageSourceLL::ImageData const*>(
+                        item->data);
+
+            // add tile to atlas
+            assert(m_tile_atlas->add(tile_id,data->image.get()));
+
+            // get texture data from atlas
+            osg::Texture2D * atlas_texture;
+            osg::Vec4 atlas_region;
+            assert(m_tile_atlas->get(tile_id,atlas_texture,atlas_region));
+
+            // create geometry and apply texture
             SGData sg_data;
-
-            // geometry
             sg_data.gp = createTileGm(item);
+            applyAtlasTx(sg_data.gp.get(),atlas_texture,atlas_region);
 
-            // texture
-            if(item->sample) {
-                sg_data.sample_id = item->sample->id;
-            }
-            applyTileTx(item,sg_data.gp.get());
-
-            // save
+            // save in scene and lookup
             m_lkup_sg_tiles.emplace(item->id,sg_data);
             m_gp_tiles->addChild(sg_data.gp);
         }
 
-        // update
-        for(auto tile_id : list_tiles_upd) {
-            // Get the tile
-            TileSetLL::TileItem const * item =
-                    m_tileset->GetTile(tile_id);
-            assert(item);
+        // print
+//        m_tile_atlas->print();
+    }
 
-            // Get the scene graph data
-            auto it = m_lkup_sg_tiles.find(tile_id);
-            assert(it != m_lkup_sg_tiles.end());
+//    void DataSetTilesLL::UpdateOld(osg::Camera const *cam)
+//    {
+//        std::vector<TileLL::Id> list_tiles_add;
+//        std::vector<TileLL::Id> list_tiles_upd;
+//        std::vector<TileLL::Id> list_tiles_rem;
+//        m_tileset->UpdateTileSet(cam,
+//                                 list_tiles_add,
+//                                 list_tiles_upd,
+//                                 list_tiles_rem);
 
-            // update texture if required
-            SGData & sg_data = it->second;
-            if(item->sample) {
-                if(sg_data.sample_id != item->sample->id) {
-                    applyTileTx(item,sg_data.gp.get());
-                    sg_data.sample_id = item->sample->id;
-                }
-            }
+//        for(auto const tile_id : list_tiles_rem) {
+//            assert(m_tile_atlas->remove(tile_id));
+////            m_tile_atlas->Stats();
+//        }
+
+//        for(auto const tile_id : list_tiles_add) {
+////            assert(m_tile_atlas->add(tile_id));
+////            m_tile_atlas->Stats();
+//            assert(m_tile_atlas->add(tile_id,nullptr));
+
+//            osg::Texture2D * atlas_texture;
+//            osg::Vec4 atlas_region;
+//            assert(m_tile_atlas->get(tile_id,atlas_texture,atlas_region));
+//        }
+
+////        m_tile_atlas->print();
+
+//        // remove
+//        for(auto const tile_id : list_tiles_rem) {
+//            // Remove this tile from the scene and lookup
+//            auto it = m_lkup_sg_tiles.find(tile_id);
+//            assert(it != m_lkup_sg_tiles.end());
+
+//            m_gp_tiles->removeChild(it->second.gp);
+//            m_lkup_sg_tiles.erase(tile_id);
+//        }
+
+//        // add
+//        for(auto tile_id : list_tiles_add) {
+//            //
+//            auto it = m_lkup_sg_tiles.find(tile_id);
+//            assert(it == m_lkup_sg_tiles.end());
+
+//            //
+//            TileSetLL::TileItem const * item =
+//                    m_tileset->GetTile(tile_id);
+//            assert(item);
+
+//            //
+//            SGData sg_data;
+
+//            // geometry
+//            sg_data.gp = createTileGm(item);
+
+//            // texture
+//            if(item->sample) {
+//                sg_data.sample_id = item->sample->id;
+//            }
+//            applyTileTx(item,sg_data.gp.get());
+
+//            // save
+//            m_lkup_sg_tiles.emplace(item->id,sg_data);
+//            m_gp_tiles->addChild(sg_data.gp);
+//        }
+
+//        // update
+//        for(auto tile_id : list_tiles_upd) {
+//            // Get the tile
+//            TileSetLL::TileItem const * item =
+//                    m_tileset->GetTile(tile_id);
+//            assert(item);
+
+//            // Get the scene graph data
+//            auto it = m_lkup_sg_tiles.find(tile_id);
+//            assert(it != m_lkup_sg_tiles.end());
+
+//            // update texture if required
+//            SGData & sg_data = it->second;
+//            if(item->sample) {
+//                if(sg_data.sample_id != item->sample->id) {
+//                    applyTileTx(item,sg_data.gp.get());
+//                    sg_data.sample_id = item->sample->id;
+//                }
+//            }
+//        }
+//    }
+
+    void DataSetTilesLL::applyAtlasTx(osg::Group *gp,
+                                      osg::Texture2D *atlas_texture,
+                                      osg::Vec4 const &atlas_region)
+    {
+        // create the texture coordinates (expect that
+        // we have two sets of texture coordinates, and
+        // the tex coords for unit 1 contain the 'full'
+        // unsampled 1:1 coordinates for the tile)
+
+        osg::Geode * gd = static_cast<osg::Geode*>(gp->getChild(0));
+        osg::Geometry * gm = static_cast<osg::Geometry*>(gd->getDrawable(0));
+
+        osg::Vec2dArray const * tx_array_full =
+                static_cast<osg::Vec2dArray const *>(
+                    gm->getTexCoordArray(1));
+
+        osg::ref_ptr<osg::Vec2dArray> tx_array_sample =
+                new osg::Vec2dArray;
+
+//        std::cout << "atlas_region: " << atlas_region << std::endl;
+
+        for(size_t i=0; i < tx_array_full->size(); i++) {
+            osg::Vec2d tx = tx_array_full->at(i);
+            tx.x() = (tx.x()*atlas_region.z()) + atlas_region.x();
+            tx.y() = (tx.y()*atlas_region.w()) + atlas_region.y();
+
+            tx_array_sample->push_back(tx);
         }
+
+        gm->setTexCoordArray(0,tx_array_sample,osg::Array::BIND_PER_VERTEX);
+
+        // apply the texture
+        gd->getOrCreateStateSet()->setTextureAttributeAndModes(0,atlas_texture);
     }
 
     void DataSetTilesLL::applyTileTx(TileSetLL::TileItem const * tile_item,

@@ -4,7 +4,7 @@
 #include <ViewController.hpp>
 #include <OSGUtils.h>
 #include <TileImageSourceLL.h>
-#include <DataSetTilesLL.h>
+#include <DataSetTileAtlasLL.h>
 
 int main()
 {

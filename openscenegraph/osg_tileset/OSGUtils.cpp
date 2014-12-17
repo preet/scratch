@@ -572,29 +572,31 @@ osg::ref_ptr<osg::Group> BuildGeoBoundsNode(std::string const &name,
 
     // left edge
     for(double lat=b.maxLat; lat >= b.minLat; lat-=lat_div) {
-        LLA lla; lla.lon = b.minLon; lla.lat = lat;
+        LLA lla; lla.lon = b.minLon; lla.lat = lat; lla.alt = 0;
         list_ecef.push_back(ConvLLAToECEF(lla));
     }
 
     // bottom edge
     for(double lon=b.minLon; lon <= b.maxLon; lon+=lon_div) {
-        LLA lla; lla.lon = lon; lla.lat = b.minLat;
+        LLA lla; lla.lon = lon; lla.lat = b.minLat; lla.alt = 0;
         list_ecef.push_back(ConvLLAToECEF(lla));
     }
 
     // right edge
     for(double lat=b.minLat; lat <= b.maxLat; lat+=lat_div) {
-        LLA lla; lla.lon = b.maxLon; lla.lat = lat;
+        LLA lla; lla.lon = b.maxLon; lla.lat = lat; lla.alt = 0;
         list_ecef.push_back(ConvLLAToECEF(lla));
     }
 
     // top edge
     for(double lon=b.maxLon; lon >= b.minLon; lon-=lon_div) {
-        LLA lla; lla.lon = lon; lla.lat = b.maxLat;
+        LLA lla; lla.lon = lon; lla.lat = b.maxLat; lla.alt = 0;
         list_ecef.push_back(ConvLLAToECEF(lla));
     }
 
-    return BuildSurfacePolyNode(name,list_ecef,color,0.0,level_offset);
+    osg::ref_ptr<osg::Group> gp = BuildSurfacePolyNode(name,list_ecef,color,0.0,level_offset);
+
+    return gp;
 }
 
 // ============================================================= //

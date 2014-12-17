@@ -151,11 +151,11 @@ namespace scratch
         m_tile_visibility->Update(cam);
 
         // Build tile set
-//        std::vector<TileItem> list_tiles_new =
-//                buildTileSetBFS_czm();
-
         std::vector<TileItem> list_tiles_new =
-                buildTileSetRanked();
+                buildTileSetBFS_czm();
+
+//        std::vector<TileItem> list_tiles_new =
+//                buildTileSetRanked();
 
         // We need to sort by tile_id before we can
         // split into tiles added/removed

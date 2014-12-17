@@ -35,7 +35,7 @@ HEADERS += \
         TileVisibilityLL.h \
         TileVisibilityLLPixelsPerMeter.h \
         TileSetLL.h \
-        DataSetTilesLL.h
+        DataSetTileAtlasLL.h
 	
 SOURCES += \
         GeometryUtils.cpp \
@@ -47,7 +47,7 @@ SOURCES += \
         TileImageSourceLL.cpp \
         TileVisibilityLLPixelsPerMeter.cpp \
         TileSetLL.cpp \
-        DataSetTilesLL.cpp
+        DataSetTileAtlasLL.cpp
 
 SOURCES += main.cpp
 #SOURCES += test_surftilevxorder.cpp

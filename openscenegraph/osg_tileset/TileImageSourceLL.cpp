@@ -118,8 +118,8 @@ namespace scratch
 
         // We need to provide an option to choose
         m_thread_pool.PushFront(m_list_requests);
-        std::cout << "task_count: "
-                  << m_thread_pool.GetTaskCount() << std::endl;
+//        std::cout << "task_count: "
+//                  << m_thread_pool.GetTaskCount() << std::endl;
 
 //        std::string slist;
 //        for(auto &req : m_list_requests) {
