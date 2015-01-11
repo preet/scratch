@@ -62,13 +62,13 @@ env_dev   {
     #LIBS += -L$${OSGLIBDIR}/osgdb_freetyperd.so
     #LIBS += -L$${OSGLIBDIR}/osgdb_jpegrd.so
     #LIBS += -L$${OSGLIBDIR}/osgdb_pngrd.so
-    LIBS += -L$${OSGLIBDIR} -losgViewerrd
-    LIBS += -L$${OSGLIBDIR} -losgTextrd
-    LIBS += -L$${OSGLIBDIR} -losgGArd
-    LIBS += -L$${OSGLIBDIR} -losgUtilrd
-    LIBS += -L$${OSGLIBDIR} -losgDBrd
-    LIBS += -L$${OSGLIBDIR} -losgrd
-    LIBS += -L$${OSGLIBDIR} -lOpenThreadsrd
+    LIBS += -L$${OSGLIBDIR} -losgViewer
+    LIBS += -L$${OSGLIBDIR} -losgText
+    LIBS += -L$${OSGLIBDIR} -losgGA
+    LIBS += -L$${OSGLIBDIR} -losgUtil
+    LIBS += -L$${OSGLIBDIR} -losgDB
+    LIBS += -L$${OSGLIBDIR} -losg
+    LIBS += -L$${OSGLIBDIR} -lOpenThreads
 }
 
 env_android   {

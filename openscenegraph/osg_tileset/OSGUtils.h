@@ -32,6 +32,10 @@
 
 #include <GeometryUtils.h>
 
+osg::ref_ptr<osg::Group> BuildLines(std::string const &name,
+                                    osg::Vec4 const &color,
+                                    std::vector<osg::Vec3d> list_vx);
+
 
 osg::ref_ptr<osg::Group> BuildEarthSurfaceNode(std::string const &name,
                                                osg::Vec4 const &color,

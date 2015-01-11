@@ -19,6 +19,36 @@
 
 // ============================================================= //
 
+osg::ref_ptr<osg::Group> BuildLines(std::string const &name,
+                                    osg::Vec4 const &color,
+                                    std::vector<osg::Vec3d> list_vx)
+{
+    osg::ref_ptr<osg::Vec3dArray> vx_array =
+            new osg::Vec3dArray;
+
+    for(auto const &vx : list_vx) {
+        vx_array->push_back(vx);
+    }
+
+    osg::ref_ptr<osg::Vec4Array> cx_array = new osg::Vec4Array;
+    cx_array->push_back(color);
+
+    osg::ref_ptr<osg::Geometry> gm = new osg::Geometry;
+    gm->setVertexArray(vx_array);
+    gm->setColorArray(cx_array,osg::Array::BIND_OVERALL);
+    gm->addPrimitiveSet(new osg::DrawArrays(GL_LINES,0,vx_array->size()));
+
+    osg::ref_ptr<osg::Geode> gd = new osg::Geode;
+    gd->addDrawable(gm);
+
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->addChild(gd);
+    gp->setName(name);
+    return gp;
+}
+
+// ============================================================= //
+
 osg::ref_ptr<osg::Group> BuildEarthSurfaceNode(std::string const &name,
                                                osg::Vec4 const &color,
                                                bool auto_colorize)

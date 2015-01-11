@@ -6,6 +6,98 @@
 #include <TileImageSourceLL.h>
 #include <DataSetTileAtlasLL.h>
 
+osg::ref_ptr<osg::Group> BuildMockFrustum()
+{
+    std::vector<osg::Vec3d> list_vx;
+    list_vx.emplace_back(329175.25136537, -4973927.30436005, 8636518.52913437); // NBL
+    list_vx.emplace_back(330359.73368224, 4973848.67763741, 8636518.59180625); // NBR
+    list_vx.emplace_back(9092682.54798408, 4972805.33756442, 10182520.35489401); // NTR
+    list_vx.emplace_back(9091498.06566721, -4974970.64443304, 10182520.29222212); // NTL
+
+    list_vx.emplace_back(-2859956.27958236, -7598932.61473438, 13195107.19256288); // FBL
+    list_vx.emplace_back(-2858146.58775475, 7599613.31631614, 13195107.28831509); // FBR
+    list_vx.emplace_back(10529224.21722367, 7598019.26634459, 15557140.65620525); // FTR
+    list_vx.emplace_back(10527414.52539606, -7600526.66470592, 15557140.56045304); // FTL
+
+    // edges
+    osg::Vec3d const &NBL = list_vx[0];
+    osg::Vec3d const &NBR = list_vx[1];
+    osg::Vec3d const &NTR = list_vx[2];
+    osg::Vec3d const &NTL = list_vx[3];
+
+    osg::Vec3d const &FBL = list_vx[4];
+    osg::Vec3d const &FBR = list_vx[5];
+    osg::Vec3d const &FTR = list_vx[6];
+    osg::Vec3d const &FTL = list_vx[7];
+
+    std::vector<osg::Vec3d> list_edge_vx;
+
+    // near
+
+    // left
+    list_edge_vx.push_back(NTL);
+    list_edge_vx.push_back(NBL);
+
+    // bottom
+    list_edge_vx.push_back(NBL);
+    list_edge_vx.push_back(NBR);
+
+    // right
+    list_edge_vx.push_back(NBR);
+    list_edge_vx.push_back(NTR);
+
+    // top
+    list_edge_vx.push_back(NTR);
+    list_edge_vx.push_back(NTL);
+
+
+    // side
+    list_edge_vx.push_back(NTL);
+    list_edge_vx.push_back(FTL);
+
+    list_edge_vx.push_back(NBL);
+    list_edge_vx.push_back(FBL);
+
+    list_edge_vx.push_back(NBR);
+    list_edge_vx.push_back(FBR);
+
+    list_edge_vx.push_back(NTR);
+    list_edge_vx.push_back(FTR);
+
+
+    // far
+
+    // left
+    list_edge_vx.push_back(FTL);
+    list_edge_vx.push_back(FBL);
+
+    // bottom
+    list_edge_vx.push_back(FBL);
+    list_edge_vx.push_back(FBR);
+
+    // right
+    list_edge_vx.push_back(FBR);
+    list_edge_vx.push_back(FTR);
+
+    // top
+    list_edge_vx.push_back(FTR);
+    list_edge_vx.push_back(FTL);
+
+    osg::ref_ptr<osg::Group> gp = new osg::Group;
+    gp->setName("mock");
+    gp->addChild(BuildLines("sdfsdf",osg::Vec4(1,1,1,1),list_edge_vx));
+    gp->addChild(BuildFacingCircleNode(
+                     "Asdf",
+                     osg::Vec3d(6371101.74115835, -758.60100315, 105.34442833),
+                     100000,
+                     12,
+                     osg::Vec4(1,1,1,1)));
+
+    return gp;
+
+//    return BuildLines("mock",osg::Vec4(1,1,1,1),list_edge_vx);
+}
+
 int main()
 {
     // debug output
@@ -18,6 +110,9 @@ int main()
 
     // axes
     auto gp_axes = BuildAxesGeometry("axes",RAD_AV*1.15);
+
+    // mock
+    auto gp_mock = BuildMockFrustum();
 
     // create dataset
     osg::ref_ptr<osg::Group> gp_tiles = new osg::Group;
@@ -33,12 +128,14 @@ int main()
     gp_root0->addChild(gp_earth);
     gp_root0->addChild(gp_tiles);
     gp_root0->addChild(gp_axes);
+    gp_root0->addChild(gp_mock);
 
     // View1 root
     osg::ref_ptr<osg::Group> gp_root1 = new osg::Group;
     gp_root1->addChild(gp_earth);
     gp_root1->addChild(gp_tiles);
     gp_root1->addChild(gp_axes);
+    gp_root1->addChild(gp_mock);
 
     // disable lighting and enable blending
     gp_root0->getOrCreateStateSet()->setMode( GL_LIGHTING,osg::StateAttribute::OFF);
