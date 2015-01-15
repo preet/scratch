@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
 
     //
     int js_idx_global_obj = duk_normalize_index(ctx,-1);
-    duk_get_prop_string(ctx,js_idx_global_obj,"__private_add_msg_data");
+    duk_get_prop_string(ctx,js_idx_global_obj,"__private__add_msg_data");
     int js_idx_add_msg_data = duk_normalize_index(ctx,-1);
 
     // push global list num data
