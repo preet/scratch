@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.qml</file>
+        <file>TextButton.qml</file>
+        <file>fonts/FiraSans-Medium.ttf</file>
+    </qresource>
+</RCC>
