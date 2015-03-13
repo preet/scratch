@@ -42,13 +42,13 @@ void HelperTestKsSigSlotSpeed::runTest()
     thread_r->Wait();
 
     end = std::chrono::steady_clock::now();
-    std::chrono::microseconds elapsed_ms =
+    std::chrono::microseconds elapsed_us =
             std::chrono::duration_cast<std::chrono::microseconds>(
                 end-start);
 
     std::string message0 = "1:1 signal:slot mapping:\n"
                            "1000 signals took: " +
-            to_string(elapsed_ms.count()) + " us";
+            to_string(elapsed_us.count()) + " us";
 
     assert(r0->invoke_count == one_one_count);
 

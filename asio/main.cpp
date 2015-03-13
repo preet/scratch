@@ -3,7 +3,7 @@
 #include <mutex>
 #include <iostream>
 #include <memory>
-#include <thirdparty/asio/asio.hpp>
+#include <ks/thirdparty/asio/asio.hpp>
 
 class Thread;
 
@@ -61,6 +61,30 @@ struct DefaultHandler
     }
 
     std::string name;
+};
+
+struct NestedHandler
+{
+    NestedHandler(std::string name, asio::io_service * service) :
+        name(name),
+        service(service)
+    {
+        // empty
+    }
+
+    void operator()()
+    {
+        std::cout << " { ";
+        std::cout << name;
+
+        std::cout << " ...calling poll... ";
+        service->poll();
+        std::cout << " } ";
+
+    }
+
+    std::string name;
+    asio::io_service * service;
 };
 
 struct CleanupHandler
@@ -143,6 +167,19 @@ public:
         m_asio_work.reset(nullptr);
         m_asio_service.stop();
         m_running = false;
+    }
+
+    void ProcessEvents()
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        if(!(m_running && m_asio_work)) {
+            std::cout << "warn: called ProcessEvents "
+                         "but EventLoop is inactive" << std::endl;
+            return;
+        }
+
+        m_asio_service.poll();
     }
 
     void PostHandler(CountHandler handler)
@@ -409,22 +446,131 @@ void TestExtendedLifetime()
     assert(count == 1);
 }
 
+void TestPassiveEventLoop()
+{
+    int count = 0;
+    std::mutex m;
+    std::chrono::milliseconds sleep_ms(10);
+
+    asio::io_service service;
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.poll();
+    assert(count==3);
+
+    // try again without calling reset
+    count = 0;
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.poll();
+
+    // expect that poll() returns immediately because
+    // we didn't call reset and there was no work object
+    assert(count==0);
+
+    service.reset();
+    service.poll();
+    assert(count==3);
+
+    // this time try using a work object
+    service.reset();
+    count = 0;
+    asio::io_service::work work(service);
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.poll();
+    assert(count==3);
+
+    // shouldnt need to call reset
+    count = 0;
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.post(CountHandler(&count,&m,sleep_ms));
+    service.poll();
+    assert(count==3);
+}
+
+void Test()
+{
+    int count = 0;
+    std::mutex m;
+    std::chrono::milliseconds sleep_ms(0);
+
+    asio::io_service service;
+    // asio::io_service::work work(service);
+
+    std::cout << "asio post\n";
+    service.post(CountHandler(&count,&m,sleep_ms));
+
+    std::cout << "asio post\n";
+    service.post(CountHandler(&count,&m,sleep_ms));
+
+    std::cout << "asio post\n";
+    service.post(CountHandler(&count,&m,sleep_ms));
+
+    std::cout << "asio stop\n";
+    service.stop();
+
+    std::cout << "asio run\n";
+    service.run();
+
+    std::cout << "#: " << count << std::endl;
+}
+
+void TestNestedCallsToPoll()
+{
+    asio::io_service service;
+    service.post(NestedHandler("N",&service));
+    service.post(DefaultHandler("A"));
+    service.post(DefaultHandler("B"));
+    service.post(DefaultHandler("C"));
+    service.post(DefaultHandler("D"));
+
+    std::cout << "asio run" << std::endl;
+    service.poll();
+}
+
+void TestAsyncTimers()
+{
+    asio::io_service service;
+
+    asio::steady_timer tm0(service,std::chrono::milliseconds(11));
+    tm0.async_wait([](){ std::this_thread::sleep_for(std::chrono::milliseconds(30)) });
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    asio::steady_timer tm1(service,std::chrono::milliseconds(0));
+
+    tm1.async_wait();
+
+    asio::steady_timer tm2(service,std::chrono::milliseconds(0));
+    asio::steady_timer tm3(service,std::chrono::milliseconds(0));
+}
+
 int main()
 {
 
-    TrivialConstructionAndDestruction();
+//    TrivialConstructionAndDestruction();
 
-    PostHandlersWhenInactive();
+//    PostHandlersWhenInactive();
 
-    TestStop();
+//    TestStop();
 
-    TestWait();
+//    TestWait();
 
     // TestStartStartStartStopStopStop(); // silly
 
-    TestExtendedLifetime();
+//    TestExtendedLifetime();
 
-    std::cout << "All tests passed" << std::endl;
+//    std::cout << "All tests passed" << std::endl;
+
+//    TestPassiveEventLoop();
+
+//    Test();
+
+    TestNestedCallsToPoll();
 
     return 0;
 }
