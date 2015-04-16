@@ -9,6 +9,9 @@
 // directly based on
 // http://lazyfoo.net/tutorials/SDL/51_SDL_and_modern_opengl/index.php
 
+unsigned int g_win_width = 800;
+unsigned int g_win_height = 480;
+
 
 bool initSDL(SDL_Window * &window, SDL_GLContext &context)
 {
@@ -21,7 +24,7 @@ bool initSDL(SDL_Window * &window, SDL_GLContext &context)
 
     // create a window
     window = SDL_CreateWindow(
-                "OpenGL",100,100,800,480,SDL_WINDOW_OPENGL);
+                "OpenGL",100,100,800,480,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
 
     if(!window) {
         std::cout << "Error: Failed to create window: "
@@ -132,9 +135,9 @@ bool initGL(GLuint &prog_id,
 
     // create the vertex buffer
     GLfloat list_vx[] = {
-        -0.5, -0.5, 0.0, 1.0,
-         0.5, -0.5, 0.0, 1.0,
-         0.0,  0.5, 0.0, 1.0
+        -1.0, -1.0, 0.0, 1.0,
+         1.0, -1.0, 0.0, 1.0,
+        -1.0,  1.0, 0.0, 1.0
     };
 
     glGenBuffers(1,&vbo_id);
@@ -155,7 +158,9 @@ void render(GLuint prog_id,
             GLint attrib_loc_position)
 {
     // clear color buffer
+    glViewport(0,0,g_win_width,g_win_height);
     glClear(GL_COLOR_BUFFER_BIT);
+
 
     // render tri
     glUseProgram(prog_id);
@@ -205,6 +210,12 @@ int main()
             if(event.type == SDL_QUIT) {
                 keep_running=false;
                 break;
+            }
+            else if(event.type == SDL_WINDOWEVENT) {
+                if(event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    g_win_width = event.window.data1;
+                    g_win_height = event.window.data2;
+                }
             }
         }
 
