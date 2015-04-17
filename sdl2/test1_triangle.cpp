@@ -54,7 +54,7 @@ bool initSDL(SDL_Window * &window, SDL_GLContext &context)
     std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
 
     // set vsync
-    if(SDL_GL_SetSwapInterval(1) < 0) {
+    if(SDL_GL_SetSwapInterval(0) < 0) {
         std::cout << "Warn: Failed to set vsync: "
                   << SDL_GetError() << std::endl;
     }
@@ -227,5 +227,5 @@ int main()
     }
 
     cleanup(context,prog_id,vbo_id);
-	return 0;
+    return 0;
 }
