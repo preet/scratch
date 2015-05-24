@@ -12,3 +12,8 @@ Helper::Helper(QQuickView *qqview, QObject *parent) :
     m_view->show();
 }
 
+void Helper::runTest()
+{
+    // do nothing
+    qDebug() << "Hello World!";
+}

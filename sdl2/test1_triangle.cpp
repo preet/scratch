@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <thread>
 
 #include <glad/glad.h>
 
@@ -21,6 +22,7 @@ bool initSDL(SDL_Window * &window, SDL_GLContext &context)
     // set requested opengl context params
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
 
     // create a window
     window = SDL_CreateWindow(
@@ -51,7 +53,10 @@ bool initSDL(SDL_Window * &window, SDL_GLContext &context)
         return false;
     }
 
+    int ok;
+    SDL_GL_GetAttribute(SDL_GL_DOUBLEBUFFER,&ok);
     std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
+    std::cout << "Double buffering: " << ok << std::endl;
 
     // set vsync
     if(SDL_GL_SetSwapInterval(1) < 0) {
@@ -153,14 +158,19 @@ bool initGL(GLuint &prog_id,
     return true;
 }
 
+SDL_Window * window;
+SDL_GLContext context;
+GLuint prog_id;
+GLuint vbo_id;
+GLint attrib_loc_position;
+
 void render(GLuint prog_id,
             GLuint vbo_id,
             GLint attrib_loc_position)
 {
     // clear color buffer
     glViewport(0,0,g_win_width,g_win_height);
-    glClear(GL_COLOR_BUFFER_BIT);
-
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     // render tri
     glUseProgram(prog_id);
@@ -172,6 +182,8 @@ void render(GLuint prog_id,
     glDrawArrays(GL_TRIANGLES,0,3);
 
     glDisableVertexAttribArray(attrib_loc_position);
+
+    SDL_GL_SwapWindow(window);
 }
 
 void cleanup(SDL_GLContext &context,
@@ -185,13 +197,28 @@ void cleanup(SDL_GLContext &context,
     SDL_Quit();
 }
 
+
+
+int onResize(void* , SDL_Event* ev)
+{
+    SDL_Event& event = *ev;
+    if(event.type == SDL_WINDOWEVENT) {
+        if(event.window.event == SDL_WINDOWEVENT_RESIZED) {
+            g_win_width = event.window.data1;
+            g_win_height = event.window.data2;
+            render(prog_id,vbo_id,attrib_loc_position);
+            std::cout << "rsz (" << g_win_width << "," << g_win_height << ")" << std::endl;
+            return 0;
+        }
+    }
+    
+    return 1;
+}
+
 int main()
 {
-    SDL_Window * window;
-    SDL_GLContext context;
-    GLuint prog_id;
-    GLuint vbo_id;
-    GLint attrib_loc_position;
+
+
 
     bool init_ok =
             initSDL(window,context) &&
@@ -200,6 +227,9 @@ int main()
     if(!init_ok) {
         return -1;
     }
+
+    // SDL_AddEventWatch(onResize,nullptr);
+    SDL_SetEventFilter(onResize,nullptr);
 
     // poll for events from the window
     SDL_Event event;
@@ -223,7 +253,10 @@ int main()
 
         // update window framebuffer for double
         // buffered context (default)
-        SDL_GL_SwapWindow(window);
+//        SDL_GL_SwapWindow(window);
+//        std::cout << "swapbuf" << std::endl;
+
+        std::this_thread::sleep_for(std::chrono::microseconds(17000));
     }
 
     cleanup(context,prog_id,vbo_id);

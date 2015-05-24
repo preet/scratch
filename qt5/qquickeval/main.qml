@@ -22,6 +22,7 @@ Rectangle   {
     }
 
     Rectangle   {
+        id: main_rect;
         color: "#00000000";
         border.width: 1;
         border.color: "#444f51";
@@ -63,7 +64,7 @@ Rectangle   {
                 font.pointSize: root.fontsize;
                 verticalAlignment: Text.AlignVCenter;
                 wrapMode: Text.Wrap;
-                text: "Average ms/parse:";
+                text: "result:";
             }
         }
     }

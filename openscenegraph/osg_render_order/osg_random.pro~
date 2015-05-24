@@ -1,6 +1,0 @@
-CONFIG += link_pkgconfig debug
-PKGCONFIG += openthreads openscenegraph
-TARGET = osg_random
-SOURCES += main.cpp
-TEMPLATE = app
-LIBS += -losmscout

@@ -7,10 +7,10 @@ INCLUDEPATH += $${_PRO_FILE_PWD_}
 SOURCES += test1_triangle.cpp
 
 # sdl
-# PATH_SDL = /home/preet/Dev/env/sys/sdl2
-# INCLUDEPATH += $${PATH_SDL}/include
-# DEFINES += _REENTRANT
-# LIBS += -L$${PATH_SDL}/lib -lSDL2
+#PATH_SDL = /home/preet/Dev/env/sys/sdl2
+#INCLUDEPATH += $${PATH_SDL}/include
+#DEFINES += _REENTRANT
+#LIBS += -L$${PATH_SDL}/lib -lSDL2
 
 DEFINES += _REENTRANT
 LIBS += -lSDL2
