@@ -1,8 +1,12 @@
 #include <cstdlib>
 #include <iostream>
 #include <thread>
+#include <unistd.h>
+#include <sys/time.h>
 
 #include <glad/glad.h>
+
+
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
@@ -10,7 +14,7 @@
 // directly based on
 // http://lazyfoo.net/tutorials/SDL/51_SDL_and_modern_opengl/index.php
 
-unsigned int g_win_width = 800;
+unsigned int g_win_width = 640;
 unsigned int g_win_height = 480;
 
 
@@ -26,7 +30,10 @@ bool initSDL(SDL_Window * &window, SDL_GLContext &context)
 
     // create a window
     window = SDL_CreateWindow(
-                "OpenGL",100,100,800,480,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
+                "OpenGL",100,100,
+                g_win_width,
+                g_win_height,
+                SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
 
     if(!window) {
         std::cout << "Error: Failed to create window: "
@@ -58,7 +65,7 @@ bool initSDL(SDL_Window * &window, SDL_GLContext &context)
     std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
     std::cout << "Double buffering: " << ok << std::endl;
 
-    if(SDL_GL_SetSwapInterval(0) < 0) {
+    if(SDL_GL_SetSwapInterval(1) < 0) {
         std::cout << "Warn: Failed to set vsync: "
                   << SDL_GetError() << std::endl;
     }
@@ -87,7 +94,7 @@ static const std::string g_fsh_source =
         "\n"
         "void main()\n"
         "{\n"
-        "    gl_FragColor = vec4(1.0, 0.5, 0.0, 1.0);\n"
+        "    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n"
         "}\n";
 
 bool initGL(GLuint &prog_id,
@@ -137,22 +144,8 @@ bool initGL(GLuint &prog_id,
     // get attribute locations
     attrib_loc_position = glGetAttribLocation(prog_id,"a_v4_position");
 
-    // create the vertex buffer
-    GLfloat list_vx[] = {
-        -1.0, -1.0, 0.0, 1.0,
-         1.0, -1.0, 0.0, 1.0,
-        -1.0,  1.0, 0.0, 1.0
-    };
-
-    glGenBuffers(1,&vbo_id);
-    glBindBuffer(GL_ARRAY_BUFFER,vbo_id);
-    glBufferData(GL_ARRAY_BUFFER,
-                 4*4*sizeof(GLfloat),
-                 list_vx,
-                 GL_STATIC_DRAW);
-
     // set gl clear color
-    glClearColor(0.1, 0.1, 0.1, 1.0);
+    glClearColor(0,0,0,1);
 
     return true;
 }
@@ -160,16 +153,39 @@ bool initGL(GLuint &prog_id,
 SDL_Window * window;
 SDL_GLContext context;
 GLuint prog_id;
-GLuint vbo_id;
+GLuint vbo_id{0};
 GLint attrib_loc_position;
+float rads=0.0;
 
 void render(GLuint prog_id,
             GLuint vbo_id,
             GLint attrib_loc_position)
 {
+    if(vbo_id != 0)
+    {
+        glDeleteBuffers(1,&vbo_id);
+    }
+
+    // create buffers
+    float disp = sin(rads);
+    GLfloat list_vx[] = {
+        -0.6f+disp, -0.4, 0.0, 1.0,
+         0.6f+disp, -0.4, 0.0, 1.0,
+         0.0f+disp,  0.6, 0.0, 1.0
+    };
+
+    rads += (6.28f/300.0f)*1.25;
+
+    glGenBuffers(1,&vbo_id);
+    glBindBuffer(GL_ARRAY_BUFFER,vbo_id);
+    glBufferData(GL_ARRAY_BUFFER,
+                 4*4*sizeof(GLfloat),
+                 list_vx,
+                 GL_STREAM_DRAW);
+
     // clear color buffer
     glViewport(0,0,g_win_width,g_win_height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT);
 
     // render tri
     glUseProgram(prog_id);
@@ -183,6 +199,10 @@ void render(GLuint prog_id,
     glDisableVertexAttribArray(attrib_loc_position);
 
     SDL_GL_SwapWindow(window);
+
+    // why does this make a difference with
+    // compositing on? 
+    glFinish();
 }
 
 void cleanup(SDL_GLContext &context,
@@ -210,15 +230,12 @@ int onResize(void* , SDL_Event* ev)
             return 0;
         }
     }
-    
+
     return 1;
 }
 
 int main()
 {
-
-
-
     bool init_ok =
             initSDL(window,context) &&
             initGL(prog_id,vbo_id,attrib_loc_position);
@@ -233,7 +250,19 @@ int main()
     // poll for events from the window
     SDL_Event event;
     bool keep_running=true;
-    while(keep_running) {
+
+    struct timeval before,after;
+    gettimeofday(&before,NULL);
+
+    while(keep_running)
+    {
+        gettimeofday(&after,NULL);
+        long int seconds_us = (after.tv_sec-before.tv_sec)*1000000;
+        long int us_us = after.tv_usec-before.tv_usec;
+        before = after;
+
+        std::cout << "us: " << (seconds_us+us_us) << "\n";
+
         // drain all available events
         while(SDL_PollEvent(&event) != 0) {
             if(event.type == SDL_QUIT) {
@@ -250,7 +279,7 @@ int main()
 
         render(prog_id,vbo_id,attrib_loc_position);
 
-        std::this_thread::sleep_for(std::chrono::microseconds(8000));
+        //usleep(8100);
     }
 
     cleanup(context,prog_id,vbo_id);
